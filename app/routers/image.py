@@ -40,20 +40,30 @@ async def generate_image(
     - **reference_image**: 参考图片 (可选)
     """
     # 处理参考图上传
+    reference_image_url = None
     reference_image_id = None
+    
     if reference_image:
         file_url, file_id = await upload_file_helper(reference_image, "reference")
+        reference_image_url = file_url
         reference_image_id = file_id
+        print(f"[DEBUG] 参考图已上传到 OSS: {reference_image_url}")
+    else:
+        print(f"[DEBUG] 未提供参考图")
 
-    # 创建任务
+    # 创建任务请求数据
     request_data = {
         "prompt": prompt,
         "negative_prompt": negative_prompt,
         "width": width,
         "height": height,
         "num_images": num_images,
-        "reference_image_id": reference_image_id
+        "reference_image_id": reference_image_id,
+        "reference_image_url": reference_image_url  # 新增：传递参考图 URL
     }
+    
+    print(f"[DEBUG] 图片生成请求 - prompt: {prompt[:50]}...")
+    print(f"[DEBUG] 参考图 URL: {reference_image_url}")
 
     # 临时使用固定用户 ID 1
     user_id = 1

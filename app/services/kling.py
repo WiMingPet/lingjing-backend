@@ -44,11 +44,26 @@ class KlingService:
         return base_url
     
     def generate_image(self, prompt: str, negative_prompt: str = "", 
-                       width: int = 512, height: int = 512) -> str:
-        """文生图，返回 task_id"""
-        base_url = self._get_base_url()
-        url = f"{base_url}/images/generations"
+                       width: int = 512, height: int = 512, 
+                       num_images: int = 1,
+                       reference_image_url: str = None) -> str:
+        """
+        生成图片（支持参考图）
         
+        Args:
+            prompt: 提示词
+            negative_prompt: 负面提示词
+            width: 图片宽度
+            height: 图片高度
+            num_images: 生成数量
+            reference_image_url: 参考图 URL（可选）
+        
+        Returns:
+            task_id
+        """
+        base_url = self._get_base_url()
+        
+        # 计算宽高比
         if width > height:
             aspect_ratio = "16:9"
         elif height > width:
@@ -56,13 +71,29 @@ class KlingService:
         else:
             aspect_ratio = "1:1"
         
-        payload = {
-            "model_name": "kling-v1",
-            "prompt": prompt,
-            "negative_prompt": negative_prompt,
-            "aspect_ratio": aspect_ratio,
-            "n": 1
-        }
+        # 如果有参考图，使用图生图 API
+        if reference_image_url:
+            url = f"{base_url}/images/image2image"
+            payload = {
+                "model_name": "kling-v1",
+                "prompt": prompt,
+                "negative_prompt": negative_prompt,
+                "image": reference_image_url,  # 参考图 URL
+                "aspect_ratio": aspect_ratio,
+                "n": num_images
+            }
+            print(f"[DEBUG] 使用图生图API，参考图: {reference_image_url}")
+        else:
+            # 无参考图，使用文生图 API
+            url = f"{base_url}/images/generations"
+            payload = {
+                "model_name": "kling-v1",
+                "prompt": prompt,
+                "negative_prompt": negative_prompt,
+                "aspect_ratio": aspect_ratio,
+                "n": num_images
+            }
+            print(f"[DEBUG] 使用文生图API")
         
         print(f"[DEBUG] 请求URL: {url}")
         print(f"[DEBUG] 请求参数: {payload}")
@@ -233,6 +264,7 @@ class KlingService:
             time.sleep(poll_interval)
         
         raise Exception(f"虚拟试穿任务超时，task_id: {task_id}")
+    
     # ========== 多角度试穿方法（多图参考合成统一角色） ==========
     
     def multi_image_to_image(self, subject_images: List[str], 

@@ -18,7 +18,7 @@ class ImageService:
         Args:
             db: 数据库会话
             user_id: 用户ID
-            request_data: 请求数据 {prompt, negative_prompt, width, height, num_images, reference_image_id}
+            request_data: 请求数据 {prompt, negative_prompt, width, height, num_images, reference_image_id, reference_image_url}
 
         Returns:
             Task: 创建的任务
@@ -42,22 +42,28 @@ class ImageService:
         print(f"[DEBUG] 任务创建成功，ID: {task.id}")
         
         try:
-            # 调用可灵API
+            # 提取请求参数
             prompt = request_data.get("prompt", "")
             negative_prompt = request_data.get("negative_prompt", "")
             width = request_data.get("width", 512)
             height = request_data.get("height", 512)
+            num_images = request_data.get("num_images", 1)
+            reference_image_url = request_data.get("reference_image_url", None)  # 新增：获取参考图 URL
             
             print(f"[DEBUG] 调用可灵API生成图片...")
             print(f"[DEBUG] prompt: {prompt}")
             print(f"[DEBUG] negative_prompt: {negative_prompt}")
             print(f"[DEBUG] width: {width}, height: {height}")
+            print(f"[DEBUG] 参考图 URL: {reference_image_url}")
             
+            # 调用可灵API（支持参考图）
             api_task_id = kling_service.generate_image(
                 prompt=prompt,
                 negative_prompt=negative_prompt,
                 width=width,
-                height=height
+                height=height,
+                num_images=num_images,
+                reference_image_url=reference_image_url  # 新增：传递参考图 URL
             )
             print(f"[DEBUG] 可灵API返回任务ID: {api_task_id}")
             
@@ -95,6 +101,8 @@ class ImageService:
             
         except Exception as e:
             print(f"[DEBUG] 错误: {e}")
+            import traceback
+            traceback.print_exc()
             task.status = "failed"
             task.error_message = str(e)
             db.commit()
