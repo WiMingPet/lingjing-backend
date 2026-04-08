@@ -66,9 +66,11 @@ class KlingService:
         
         # 构建请求参数
         payload = {
-            "model_name": "kling-v2-1",  # 推荐使用 v2.1，支持参考图
+            "model_name": "kling-v2-1",
             "prompt": prompt,
             "negative_prompt": negative_prompt,
+            "image": reference_image_url,  # 参考图
+            "human_fidelity": 80,  # ← 新增：人像相似度 0-100
             "aspect_ratio": aspect_ratio,
             "n": num_images
         }
