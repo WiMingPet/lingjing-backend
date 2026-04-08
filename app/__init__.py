@@ -1,0 +1,1 @@
+# AI Creative Platform Application
