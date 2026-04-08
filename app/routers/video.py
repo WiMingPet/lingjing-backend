@@ -11,7 +11,8 @@ from app.database import get_db
 from app.schemas.task import APIResponse, TaskResponse
 from app.services.video_service import VideoService
 from app.config import settings
-from app.models.user import User  # ← 新增这一行导入
+from app.models.user import User
+from app.utils.file_utils import upload_file_helper  # 新增：导入 OSS 上传工具
 
 router = APIRouter(prefix="/video", tags=["视频生成"])
 
@@ -27,20 +28,24 @@ async def generate_video(
     """
     图生视频
     """
-    # 临时使用公网测试图片
-    image_url = "https://picsum.photos/id/104/512/512"
-    print(f"[DEBUG] 使用测试图片 URL: {image_url}")
+    # ========== 1. 上传用户图片到 OSS ==========
+    # 将用户上传的图片保存到 OSS，获取公网 URL
+    image_url, image_id = await upload_file_helper(image, "video")
+    print(f"[DEBUG] 用户图片已上传到 OSS: {image_url}")
+    # ========== OSS 上传结束 ==========
     
+    # ========== 2. 构建请求数据 ==========
     request_data = {
-        "image_url": image_url,
+        "image_url": image_url,  # 使用 OSS URL
         "prompt": prompt,
         "duration": duration,
         "mode": mode
     }
     
+    # ========== 3. 用户 ID（临时固定） ==========
     user_id = 1
     
-    # 确保用户存在，如果不存在则自动创建
+    # ========== 4. 确保用户存在 ==========
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         from datetime import datetime
@@ -53,8 +58,8 @@ async def generate_video(
         db.add(user)
         db.commit()
         print(f"[DEBUG] 自动创建了用户: id={user.id}")
-    # ========== 新增代码结束 ==========
     
+    # ========== 5. 调用视频生成服务 ==========
     task = await VideoService.generate_video(db, user_id, request_data)
     
     return APIResponse(
