@@ -70,7 +70,7 @@ class KlingService:
             "prompt": prompt,
             "negative_prompt": negative_prompt,
             "image": reference_image_url,  # 参考图
-            "human_fidelity": 80,  # ← 新增：人像相似度 0-100
+            "human_fidelity": 0.8,  # ← 新增：人像相似度 0-100
             "aspect_ratio": aspect_ratio,
             "n": num_images
         }
