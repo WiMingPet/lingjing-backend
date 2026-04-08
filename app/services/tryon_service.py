@@ -43,8 +43,8 @@ class TryonService:
             
             # 调用可灵API
             api_task_id = kling_service.generate_tryon(
-                model_image_url=model_image_url,
-                garment_image_url=garment_image_url,
+                human_image_url=model_image_url,
+                cloth_image_url=garment_image_url
                 digital_human_id=digital_human_id
             )
             print(f"[DEBUG] 可灵虚拟试穿API返回任务ID: {api_task_id}")

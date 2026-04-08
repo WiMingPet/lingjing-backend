@@ -1,10 +1,9 @@
 """
-可灵AI API 调用服务
+可灵AI API 调用服务 - 基于官方文档一次性修复
 """
 import requests
 import jwt
 import time
-from datetime import datetime, timedelta
 from typing import Dict, Optional, List
 from app.config import settings
 
@@ -43,25 +42,19 @@ class KlingService:
             base_url = f"{base_url}/v1"
         return base_url
     
+    # ========== 图片生成（文生图 + 图生图）==========
     def generate_image(self, prompt: str, negative_prompt: str = "", 
                        width: int = 512, height: int = 512, 
                        num_images: int = 1,
                        reference_image_url: str = None) -> str:
         """
-        生成图片（支持参考图）
-        
-        Args:
-            prompt: 提示词
-            negative_prompt: 负面提示词
-            width: 图片宽度
-            height: 图片高度
-            num_images: 生成数量
-            reference_image_url: 参考图 URL（可选）
-        
-        Returns:
-            task_id
+        生成图片
+        - 有 reference_image_url: 图生图（通过 image 参数）
+        - 无 reference_image_url: 文生图
+        返回 task_id
         """
         base_url = self._get_base_url()
+        url = f"{base_url}/images/generations"
         
         # 计算宽高比
         if width > height:
@@ -71,29 +64,21 @@ class KlingService:
         else:
             aspect_ratio = "1:1"
         
-        # 如果有参考图，使用图生图 API
+        # 构建请求参数
+        payload = {
+            "model_name": "kling-v2-1",  # 推荐使用 v2.1，支持参考图
+            "prompt": prompt,
+            "negative_prompt": negative_prompt,
+            "aspect_ratio": aspect_ratio,
+            "n": num_images
+        }
+        
+        # 如果有参考图，添加 image 参数实现图生图
         if reference_image_url:
-            url = f"{base_url}/images/image2image"
-            payload = {
-                "model_name": "kling-v1",
-                "prompt": prompt,
-                "negative_prompt": negative_prompt,
-                "image": reference_image_url,  # 参考图 URL
-                "aspect_ratio": aspect_ratio,
-                "n": num_images
-            }
-            print(f"[DEBUG] 使用图生图API，参考图: {reference_image_url}")
+            payload["image"] = reference_image_url
+            print(f"[DEBUG] 使用图生图模式，参考图: {reference_image_url}")
         else:
-            # 无参考图，使用文生图 API
-            url = f"{base_url}/images/generations"
-            payload = {
-                "model_name": "kling-v1",
-                "prompt": prompt,
-                "negative_prompt": negative_prompt,
-                "aspect_ratio": aspect_ratio,
-                "n": num_images
-            }
-            print(f"[DEBUG] 使用文生图API")
+            print(f"[DEBUG] 使用文生图模式")
         
         print(f"[DEBUG] 请求URL: {url}")
         print(f"[DEBUG] 请求参数: {payload}")
@@ -138,21 +123,31 @@ class KlingService:
         
         raise Exception(f"任务超时，task_id: {task_id}")
     
-    # ========== 视频生成方法 ==========
-    
-    def generate_video(self, image_url: str, prompt: str = "", 
+    # ========== 视频生成（图生视频 + 文生视频）==========
+    def generate_video(self, image_url: str = None, prompt: str = "", 
                        duration: int = 5, mode: str = "std") -> str:
-        """图生视频，返回 task_id"""
+        """
+        生成视频
+        - 有 image_url: 图生视频
+        - 无 image_url: 文生视频
+        返回 task_id
+        """
         base_url = self._get_base_url()
         url = f"{base_url}/videos/image2video"
         
         payload = {
-            "model_name": "kling-v2-5-turbo",
-            "image": image_url,
+            "model_name": "kling-v2-6",  # 推荐使用 v2.6
             "prompt": prompt,
             "duration": str(duration),
             "mode": mode
         }
+        
+        # 如果有图片，添加 image 参数实现图生视频
+        if image_url:
+            payload["image"] = image_url
+            print(f"[DEBUG] 使用图生视频模式，参考图: {image_url}")
+        else:
+            print(f"[DEBUG] 使用文生视频模式")
         
         print(f"[DEBUG] 视频生成请求URL: {url}")
         print(f"[DEBUG] 视频生成请求参数: {payload}")
@@ -201,25 +196,20 @@ class KlingService:
         
         raise Exception(f"视频任务超时，task_id: {task_id}")
     
-    # ========== 虚拟试穿方法 ==========
-    
-    def generate_tryon(self, model_image_url: str, garment_image_url: str, 
-                       digital_human_id: str = None) -> str:
+    # ========== 虚拟试穿（独立API）==========
+    def generate_tryon(self, human_image_url: str, cloth_image_url: str) -> str:
         """
-        虚拟试穿 - 使用 kling-v1 模型
+        虚拟试穿 - 使用独立API
+        参数名严格按照官方文档: human_image, cloth_image
+        返回 task_id
         """
         base_url = self._get_base_url()
-        url = f"{base_url}/images/generations"
-        
-        prompt = "Virtual tryon: wear the garment from the second image on the person in the first image. Make the clothing fit naturally on the person."
+        url = f"{base_url}/images/kolors-virtual-try-on"
         
         payload = {
-            "model_name": "kling-v1",
-            "prompt": prompt,
-            "model_image": model_image_url,
-            "garment_image": garment_image_url,
-            "aspect_ratio": "1:1",
-            "n": 1
+            "model_name": "kolors-virtual-try-on-v1-5",
+            "human_image": human_image_url,
+            "cloth_image": cloth_image_url
         }
         
         print(f"[DEBUG] 虚拟试穿请求URL: {url}")
@@ -236,7 +226,7 @@ class KlingService:
     def get_tryon_task_status(self, task_id: str) -> Dict:
         """查询虚拟试穿任务状态"""
         base_url = self._get_base_url()
-        url = f"{base_url}/images/generations/{task_id}"
+        url = f"{base_url}/images/kolors-virtual-try-on/{task_id}"
         response = requests.get(url, headers=self._get_headers())
         result = response.json()
         
@@ -265,80 +255,66 @@ class KlingService:
         
         raise Exception(f"虚拟试穿任务超时，task_id: {task_id}")
     
-    # ========== 多角度试穿方法（多图参考合成统一角色） ==========
-    
-    def multi_image_to_image(self, subject_images: List[str], 
-                              prompt: str = "",
-                              scene_image: str = None,
-                              style_image: str = None) -> str:
+    # ========== 数字人分身 ==========
+    def generate_digital_human(self, image_url: str, audio_url: str, 
+                                duration: int = 10, mode: str = "std") -> str:
         """
-        多图参考生图（用于多角度合成统一角色）
-        - subject_images: 用户上传的多张照片 URL 列表（2-4张）
-        - prompt: 提示词
-        - scene_image: 场景图片 URL（可选）
-        - style_image: 风格图片 URL（可选）
-        返回: task_id
+        数字人分身 - 单张照片+音频生成视频
+        返回 task_id
         """
         base_url = self._get_base_url()
-        url = f"{base_url}/images/multi-image2image"
-        
-        # 构建主体图片列表
-        subject_list = [{"subject_image": img} for img in subject_images]
+        url = f"{base_url}/digital-human/video/generations"
         
         payload = {
-            "model_name": "kling-v2-1",
-            "subject_image_list": subject_list,
-            "prompt": prompt,
-            "aspect_ratio": "1:1"
+            "model_name": "digital-human-v2",
+            "image": image_url,
+            "audio": audio_url,
+            "duration": duration,
+            "mode": mode
         }
         
-        if scene_image:
-            payload["scene_image"] = scene_image
-        if style_image:
-            payload["style_image"] = style_image
-        
-        print(f"[DEBUG] 多图参考请求URL: {url}")
-        print(f"[DEBUG] 多图参考请求参数: {payload}")
+        print(f"[DEBUG] 数字人请求URL: {url}")
+        print(f"[DEBUG] 数字人请求参数: {payload}")
         response = requests.post(url, json=payload, headers=self._get_headers())
         result = response.json()
-        print(f"[DEBUG] 多图参考响应: {result}")
+        print(f"[DEBUG] 数字人响应: {result}")
         
         if result.get("code") != 0:
-            raise Exception(f"可灵多图参考API错误: {result.get('message')}")
+            raise Exception(f"可灵数字人API错误: {result.get('message')}")
         
         return result["data"]["task_id"]
     
-    def get_multi_image_task_status(self, task_id: str) -> Dict:
-        """查询多图参考任务状态"""
+    def get_digital_human_task_status(self, task_id: str) -> Dict:
+        """查询数字人任务状态"""
         base_url = self._get_base_url()
-        url = f"{base_url}/images/multi-image2image/{task_id}"
+        url = f"{base_url}/digital-human/video/generations/{task_id}"
         response = requests.get(url, headers=self._get_headers())
         result = response.json()
         
         if result.get("code") != 0:
-            raise Exception(f"查询多图参考任务失败: {result.get('message')}")
+            raise Exception(f"查询数字人任务失败: {result.get('message')}")
         
         return result["data"]
     
-    def wait_for_multi_image_result(self, task_id: str, max_wait: int = 120, 
-                                     poll_interval: int = 3) -> Dict:
-        """轮询等待多图参考任务完成"""
+    def wait_for_digital_human_result(self, task_id: str, max_wait: int = 300, 
+                                       poll_interval: int = 5) -> Dict:
+        """轮询等待数字人任务完成"""
         start_time = time.time()
         
         while time.time() - start_time < max_wait:
-            status_data = self.get_multi_image_task_status(task_id)
+            status_data = self.get_digital_human_task_status(task_id)
             task_status = status_data.get("task_status")
-            print(f"[DEBUG] 多图参考任务状态: {task_status}")
+            print(f"[DEBUG] 数字人任务状态: {task_status}")
             
             if task_status == "succeed":
                 return status_data
             elif task_status == "failed":
                 error_msg = status_data.get("task_status_msg", "未知错误")
-                raise Exception(f"多图参考任务失败: {error_msg}")
+                raise Exception(f"数字人任务失败: {error_msg}")
             
             time.sleep(poll_interval)
         
-        raise Exception(f"多图参考任务超时，task_id: {task_id}")
+        raise Exception(f"数字人任务超时，task_id: {task_id}")
 
 
 # 单例实例
