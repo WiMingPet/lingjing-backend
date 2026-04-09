@@ -190,7 +190,7 @@ async def generate_digital_human(
     voice: Optional[str] = Form("温柔女声"),
     name: Optional[str] = Form(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    # current_user: User = Depends(get_current_user)   # ← 注释掉这一行
 ):
     """
     数字人分身 - 单张照片+文字/音频生成说话视频
