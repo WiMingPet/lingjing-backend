@@ -185,11 +185,11 @@ def delete_digital_human(
 @router.post("/generate", response_model=APIResponse)
 async def generate_digital_human(
     image: UploadFile = File(...),
-    audio: UploadFile = File(...),
+    text: Optional[str] = Form(None),   # ← 添加这一行
+    audio: Optional[UploadFile] = File(None),
     prompt: Optional[str] = Form(None),
     name: Optional[str] = Form(None),
     db: Session = Depends(get_db),
-    # current_user: User = Depends(get_current_user)   # ← 临时注释
 ):
     """
     数字人分身 - 照片+音频生成说话视频
@@ -207,11 +207,22 @@ async def generate_digital_human(
     image_url, image_id = await upload_file_helper(image, "digital_human/images")
     print(f"[DEBUG] 图片已上传: {image_url}")
     
-    # 2. 上传音频到 OSS
-    audio_content = await audio.read()
-    audio_ext = audio.filename.split('.')[-1] if audio.filename else 'mp3'
-    audio_url = await oss_service.upload_file(audio_content, audio_ext, "digital_human/audio")
-    print(f"[DEBUG] 音频已上传: {audio_url}")
+    # 2. 获取音频（文字转语音 或 用户上传）
+    audio_url = None
+    if text:
+        # 文字转语音
+        from app.services.tts_service import tts_service
+        audio_data = tts_service.text_to_speech(text)
+        audio_url = await oss_service.upload_file(audio_data, "mp3", "digital_human/audio")
+        print(f"[DEBUG] TTS 生成音频成功: {text[:50]}...")
+    elif audio:
+        # 用户上传音频
+        audio_content = await audio.read()
+        audio_ext = audio.filename.split('.')[-1] if audio.filename else 'mp3'
+        audio_url = await oss_service.upload_file(audio_content, audio_ext, "digital_human/audio")
+        print(f"[DEBUG] 使用用户上传音频")
+    else:
+        raise HTTPException(status_code=400, detail="请提供文字内容或音频文件")
     
     # 3. 调用可灵虚拟形象 API
     task_id = kling_service.generate_digital_human(
