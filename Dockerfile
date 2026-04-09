@@ -4,15 +4,17 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# 安装 OpenCV 需要的系统依赖
+# 安装 OpenCV 需要的系统依赖（更新包名）
 RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
+    libgl1-mesa-dri \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
-    libxrender-dev \
+    libxrender1 \
     libgomp1 \
     wget \
+    ffmpeg \
+    libavcodec-extra \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
