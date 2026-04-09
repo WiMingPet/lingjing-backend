@@ -259,53 +259,31 @@ class KlingService:
         raise Exception(f"虚拟试穿任务超时，task_id: {task_id}")
     
     # ========== 数字人分身 ==========
-    def generate_digital_human(self, image_url: str, text: str = None, audio_url: str = None, 
-                               voice: str = None, name: str = None) -> str:
+    def generate_digital_human(self, image_url: str, audio_url: str, prompt: str = None) -> str:
         """
-        数字人分身 - 单张照片+文字/音频生成视频
-        使用可灵虚拟形象 API
-        
-        Args:
-            image_url: 人物照片 URL
-            text: 说话内容文字（优先使用）
-            audio_url: 音频文件 URL（备选）
-            voice: 音色选择
-            name: 数字人名称
-        
-        Returns:
-            task_id
+        数字人分身 - 照片+音频生成视频
         """
         base_url = self._get_base_url()
-        url = f"{base_url}/avatar/generations"
-        
+        # 使用正确的接口路径
+        url = f"{base_url}/videos/avatar/image2video"
+    
         payload = {
             "image": image_url,
+            "sound_file": audio_url,
+            "mode": "std"
         }
-        
-        # 优先使用文字输入（自动配音）
-        if text:
-            payload["text"] = text
-            if voice:
-                payload["voice"] = voice
-            print(f"[DEBUG] 使用文字输入，内容: {text[:50]}...")
-        elif audio_url:
-            payload["audio"] = audio_url
-            print(f"[DEBUG] 使用音频文件: {audio_url}")
-        else:
-            raise Exception("请提供文字内容或音频文件")
-        
-        if name:
-            payload["name"] = name
-        
+        if prompt:
+            payload["prompt"] = prompt
+    
         print(f"[DEBUG] 数字人请求URL: {url}")
         print(f"[DEBUG] 数字人请求参数: {payload}")
         response = requests.post(url, json=payload, headers=self._get_headers())
         result = response.json()
         print(f"[DEBUG] 数字人响应: {result}")
-        
+    
         if result.get("code") != 0:
             raise Exception(f"可灵数字人API错误: {result.get('message')}")
-        
+    
         return result["data"]["task_id"]
     
     def get_digital_human_task_status(self, task_id: str) -> Dict:
