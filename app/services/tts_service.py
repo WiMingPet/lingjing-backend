@@ -2,43 +2,70 @@
 阿里云 DashScope TTS 服务
 """
 import base64
+import os
+import threading
 import dashscope
+from dashscope.audio.qwen_tts_realtime import *
 from app.config import settings
+
+
+class MyCallback(QwenTtsRealtimeCallback):
+    def __init__(self):
+        super().__init__()
+        self.audio_data = b''
+        self.complete_event = threading.Event()
+    
+    def on_open(self) -> None:
+        print('TTS connection opened')
+    
+    def on_close(self, close_status_code, close_msg) -> None:
+        print(f'TTS connection closed: {close_status_code}, {close_msg}')
+    
+    def on_event(self, response: str) -> None:
+        try:
+            type = response['type']
+            if 'response.audio.delta' == type:
+                recv_audio_b64 = response['delta']
+                self.audio_data += base64.b64decode(recv_audio_b64)
+            if 'response.done' == type:
+                self.complete_event.set()
+        except Exception as e:
+            print(f'TTS error: {e}')
+    
+    def wait_for_finished(self):
+        self.complete_event.wait()
 
 
 class TTSService:
     def __init__(self):
-        # 设置 API Key
         dashscope.api_key = settings.DASHSCOPE_API_KEY
+        # 国内地域使用 wss://dashscope.aliyuncs.com/api-ws/v1/realtime
+        # 国际地域使用 wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime
+        self.url = 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime'
     
     def text_to_speech(self, text: str, voice: str = "Cherry") -> bytes:
-        """
-        将文字转换为语音
+        """将文字转换为语音，返回 MP3 音频二进制数据"""
+        callback = MyCallback()
         
-        Args:
-            text: 要转换的文字
-            voice: 音色，可选: Cherry(女声), Stella(女声), Luna(女声), 
-                   Celine(女声), 或参考官方文档
+        qwen_tts = QwenTtsRealtime(
+            model='qwen3-tts-flash-realtime',
+            callback=callback,
+            url=self.url
+        )
         
-        Returns:
-            MP3 音频二进制数据
-        """
         try:
-            response = dashscope.MultiModalConversation.call(
-                model="qwen3-tts-flash-realtime",
-                text=text,
-                voice=voice
+            qwen_tts.connect()
+            qwen_tts.update_session(
+                voice=voice,
+                response_format=AudioFormat.PCM_24000HZ_MONO_16BIT
             )
+            qwen_tts.append_text(text)
+            qwen_tts.finish()
+            callback.wait_for_finished()
             
-            if response.status_code == 200:
-                # 解码 Base64 音频数据
-                audio_data = base64.b64decode(response.output.audio)
-                return audio_data
-            else:
-                raise Exception(f"TTS 调用失败: {response.message}")
-        except Exception as e:
-            raise Exception(f"TTS 错误: {str(e)}")
+            return callback.audio_data
+        finally:
+            qwen_tts.close()
 
 
-# 创建全局实例
 tts_service = TTSService()
