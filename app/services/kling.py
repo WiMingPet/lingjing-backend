@@ -300,8 +300,8 @@ class KlingService:
         
         return result["data"]
     
-    def wait_for_digital_human_result(self, task_id: str, max_wait: int = 300, 
-                                       poll_interval: int = 5) -> Dict:
+    def wait_for_digital_human_result(self, task_id: str, max_wait: int = 600, 
+                                       poll_interval: int = 10) -> Dict:
         """轮询等待数字人任务完成"""
         start_time = time.time()
         
