@@ -1,30 +1,38 @@
 """
-Edge TTS 服务 - 独立线程版本
+腾讯云 TTS 服务
 """
-import edge_tts
-import asyncio
-import concurrent.futures
+import base64
+from tencentcloud.common import credential
+from tencentcloud.common.exception.tencent_cloud_sdk_exception import TencentCloudSDKException
+from tencentcloud.tts.v20190823 import tts_client, models
+from app.config import settings
 
 
 class TTSService:
     def __init__(self):
-        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        self.cred = credential.Credential(
+            settings.TENCENT_SECRET_ID,
+            settings.TENCENT_SECRET_KEY
+        )
+        self.client = tts_client.TtsClient(self.cred, "ap-guangzhou")
     
-    def text_to_speech(self, text: str, voice: str = "zh-CN-XiaoxiaoNeural") -> bytes:
-        """
-        将文字转换为语音，返回 MP3 音频二进制数据
-        """
-        async def _tts():
-            communicate = edge_tts.Communicate(text, voice)
-            audio_data = b""
-            async for chunk in communicate.stream():
-                if chunk["type"] == "audio":
-                    audio_data += chunk["data"]
-            return audio_data
+    def text_to_speech(self, text: str, voice_type: int = 1001) -> bytes:
+        if len(text) > 150:
+            text = text[:150]
         
-        # 在新线程中运行 asyncio.run，避免事件循环冲突
-        future = self.executor.submit(asyncio.run, _tts())
-        return future.result()
+        req = models.TextToVoiceRequest()
+        req.Text = text
+        req.SessionId = str(hash(text))[:32]
+        req.VoiceType = voice_type
+        req.Codec = "mp3"
+        req.Speed = 0
+        req.Volume = 0
+        req.PrimaryLanguage = 1
+        
+        resp = self.client.TextToVoice(req)
+        audio_data = base64.b64decode(resp.Audio)
+        print(f"[DEBUG] 腾讯云TTS成功，音频大小: {len(audio_data)} bytes")
+        return audio_data
 
 
 tts_service = TTSService()

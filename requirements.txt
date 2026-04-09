@@ -20,3 +20,4 @@ mediapipe==0.10.14
 numpy>=2
 scikit-learn==1.5.2
 PyJWT==2.10.1
+tencentcloud-sdk-python-tts==3.0.0 
