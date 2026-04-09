@@ -2,7 +2,9 @@
 阿里云 DashScope TTS 服务
 """
 import base64
+import io
 import dashscope
+from pydub import AudioSegment
 from app.config import settings
 
 
@@ -14,21 +16,34 @@ class TTSService:
         """
         将文字转换为语音，返回 MP3 音频二进制数据
         """
-        # 使用 dashscope 的 audio 模块生成 MP3 格式
-        from dashscope.audio.tts_v2 import SpeechSynthesizer
-        
-        result = SpeechSynthesizer.call(
+        response = dashscope.MultiModalConversation.call(
             model="qwen3-tts-flash-realtime",
             text=text,
-            voice=voice,
-            format="mp3",  # 指定输出 MP3 格式
-            sample_rate=24000
+            voice=voice
         )
         
-        if result.get_audio_data() is not None:
-            return result.get_audio_data()
+        if response.status_code == 200:
+            # 获取 PCM 音频数据
+            audio_b64 = response.output.audio
+            pcm_data = base64.b64decode(audio_b64)
+            
+            # 将 PCM 转换为 MP3
+            audio = AudioSegment.from_raw(
+                io.BytesIO(pcm_data),
+                sample_width=2,      # 16-bit
+                frame_rate=24000,    # 24kHz
+                channels=1           # 单声道
+            )
+            
+            # 导出为 MP3
+            mp3_buffer = io.BytesIO()
+            audio.export(mp3_buffer, format="mp3", bitrate="128k")
+            mp3_data = mp3_buffer.getvalue()
+            
+            print(f"[DEBUG] TTS 成功，MP3 大小: {len(mp3_data)} bytes")
+            return mp3_data
         else:
-            raise Exception(f"TTS 失败: {result.get_message()}")
+            raise Exception(f"TTS 失败: {response.message}")
 
 
 tts_service = TTSService()

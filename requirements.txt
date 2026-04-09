@@ -69,6 +69,7 @@ pydantic==2.12.5
 pydantic-settings==2.13.1
 pydantic_core==2.41.5
 pydeck==0.9.1
+pydub==0.25.1
 PyJWT==2.10.1
 pyparsing==3.3.2
 python-dateutil==2.9.0.post0
