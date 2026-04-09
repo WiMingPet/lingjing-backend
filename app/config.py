@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     # DashScope TTS
     DASHSCOPE_API_KEY: str = ""
 
+    # 腾讯云 TTS ← 加在这里
+    TENCENT_SECRET_ID: str = ""
+    TENCENT_SECRET_KEY: str = ""
+
     # OSS 配置
     OSS_ACCESS_KEY_ID: str = ""
     OSS_ACCESS_KEY_SECRET: str = ""
