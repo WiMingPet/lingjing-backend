@@ -16,12 +16,12 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
+# 先单独安装 opencv（利用缓存，避免超时）
 COPY requirements.txt .
+RUN pip install --no-cache-dir opencv-python-headless -i https://mirrors.aliyun.com/pypi/simple/ --default-timeout=100
 
-# 使用阿里云镜像源，增加超时时间
-RUN pip install --no-cache-dir -r requirements.txt \
-    -i https://mirrors.aliyun.com/pypi/simple/ \
-    --default-timeout=100
+# 再安装其他依赖
+RUN pip install --no-cache-dir -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/ --default-timeout=100
 
 COPY . .
 
