@@ -69,6 +69,7 @@ pydantic==2.12.5
 pydantic-settings==2.13.1
 pydantic_core==2.41.5
 pydeck==0.9.1
+PyJWT==2.10.1
 pyparsing==3.3.2
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
@@ -102,4 +103,3 @@ watchfiles==1.1.1
 websocket-client==1.9.0
 websockets==16.0
 yarl==1.23.0
-opencv-python-headless==4.13.0.92 
