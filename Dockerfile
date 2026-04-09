@@ -3,13 +3,13 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# 安装系统依赖和 OpenCV
+# 安装系统依赖（使用正确的包名）
 RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
-    libxrender-dev \
+    libxrender1 \
     libgomp1 \
     wget \
     && rm -rf /var/lib/apt/lists/*
@@ -18,7 +18,6 @@ WORKDIR /app
 
 COPY requirements.txt .
 
-# 使用国内镜像源加速安装
 RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 COPY . .
