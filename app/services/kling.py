@@ -259,12 +259,12 @@ class KlingService:
         raise Exception(f"虚拟试穿任务超时，task_id: {task_id}")
     
     # ========== 数字人分身 ==========
-    def generate_digital_human(self, image_url: str, audio_url: str, prompt: str = None) -> str:
+    def generate_digital_human(self, image_url: str, audio_url: str, prompt: str = None, name: str = None) -> str:
         """
         数字人分身 - 照片+音频生成视频
+        使用可灵官方 API: /v1/videos/avatar/image2video
         """
         base_url = self._get_base_url()
-        # 使用正确的接口路径
         url = f"{base_url}/videos/avatar/image2video"
     
         payload = {
@@ -274,6 +274,8 @@ class KlingService:
         }
         if prompt:
             payload["prompt"] = prompt
+        if name:
+            payload["external_task_id"] = name  # 可灵 API 用 external_task_id 作为自定义 ID
     
         print(f"[DEBUG] 数字人请求URL: {url}")
         print(f"[DEBUG] 数字人请求参数: {payload}")
