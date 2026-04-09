@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     KLING_API_KEY: str = ""
     KLING_API_SECRET: str = ""
     KLING_API_URL: str = "https://api-beijing.klingai.com/v1"
+    
+    # DashScope TTS
+    DASHSCOPE_API_KEY: str = ""
 
     # OSS 配置
     OSS_ACCESS_KEY_ID: str = ""
