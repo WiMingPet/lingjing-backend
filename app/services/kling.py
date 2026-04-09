@@ -266,28 +266,34 @@ class KlingService:
         """
         base_url = self._get_base_url()
         url = f"{base_url}/videos/avatar/image2video"
-    
+        
+        # 基础参数（只传必要的）
         payload = {
             "image": image_url,
             "sound_file": audio_url,
             "mode": "std"
         }
-        # 只有当 prompt 有值且不是默认字符串时才添加
+        
+        # 只有当 prompt 有实际值时才添加
         if prompt and prompt != "string":
             payload["prompt"] = prompt
-        # 只有当 name 有值且不是默认字符串时才添加
+        
+        # 只有当 name 有实际值时才添加
         if name and name != "string":
-            payload["external_task_id"] = name  # 可灵 API 用 external_task_id 作为自定义 ID
-    
+            payload["external_task_id"] = name
+        
+        # 移除 None 值，避免传给 API
+        payload = {k: v for k, v in payload.items() if v is not None}
+        
         print(f"[DEBUG] 数字人请求URL: {url}")
         print(f"[DEBUG] 数字人请求参数: {payload}")
         response = requests.post(url, json=payload, headers=self._get_headers())
         result = response.json()
         print(f"[DEBUG] 数字人响应: {result}")
-    
+        
         if result.get("code") != 0:
             raise Exception(f"可灵数字人API错误: {result.get('message')}")
-    
+        
         return result["data"]["task_id"]
     
     def get_digital_human_task_status(self, task_id: str) -> Dict:
