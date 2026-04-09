@@ -185,10 +185,10 @@ def delete_digital_human(
 @router.post("/generate", response_model=APIResponse)
 async def generate_digital_human(
     image: UploadFile = File(...),
-    text: Optional[str] = Form(None),   # ← 添加这一行
+    text: Optional[str] = Form(None),
     audio: Optional[UploadFile] = File(None),
-    prompt: Optional[str] = Form(None),
-    name: Optional[str] = Form(None),
+    prompt: Optional[str] = Form(None),  # 默认 None，不是 "string"
+    name: Optional[str] = Form(None),    # 默认 None，不是 "string"
     db: Session = Depends(get_db),
 ):
     """

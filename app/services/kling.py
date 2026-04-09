@@ -272,9 +272,11 @@ class KlingService:
             "sound_file": audio_url,
             "mode": "std"
         }
-        if prompt:
+        # 只有当 prompt 有值且不是默认字符串时才添加
+        if prompt and prompt != "string":
             payload["prompt"] = prompt
-        if name:
+        # 只有当 name 有值且不是默认字符串时才添加
+        if name and name != "string":
             payload["external_task_id"] = name  # 可灵 API 用 external_task_id 作为自定义 ID
     
         print(f"[DEBUG] 数字人请求URL: {url}")
