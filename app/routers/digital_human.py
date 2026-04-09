@@ -180,23 +180,25 @@ def delete_digital_human(
     )
 
 
-# ========== 新增：数字人分身（照片+音频生成视频）==========
+# ========== 新增：数字人分身（照片+文字/音频生成视频）==========
 
 @router.post("/generate", response_model=APIResponse)
 async def generate_digital_human(
     image: UploadFile = File(...),
-    audio: UploadFile = File(...),
-    prompt: Optional[str] = Form(None),
+    text: Optional[str] = Form(None),
+    audio: Optional[UploadFile] = File(None),
+    voice: Optional[str] = Form("温柔女声"),
     name: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    数字人分身 - 单张照片+音频生成说话视频
+    数字人分身 - 单张照片+文字/音频生成说话视频
 
     - **image**: 人物照片 (必填)
-    - **audio**: 音频文件 (必填)
-    - **prompt**: 提示词，控制情绪、表情、语速 (可选)
+    - **text**: 说话内容文字 (可选，优先使用)
+    - **audio**: 音频文件 (可选)
+    - **voice**: 音色选择 (可选，默认温柔女声)
     - **name**: 数字人名称 (可选)
     """
     import uuid
@@ -207,21 +209,20 @@ async def generate_digital_human(
     image_url, image_id = await upload_file_helper(image, "digital_human/images")
     print(f"[DEBUG] 图片已上传: {image_url}")
     
-    # 2. 上传音频到 OSS
-    audio_content = await audio.read()
-    audio_ext = audio.filename.split('.')[-1] if audio.filename else 'mp3'
-    audio_url = await oss_service.upload_file(
-        audio_content, 
-        audio_ext, 
-        "digital_human/audio"
-    )
-    print(f"[DEBUG] 音频已上传: {audio_url}")
+    # 2. 处理音频（如果有上传）
+    audio_url = None
+    if audio:
+        audio_content = await audio.read()
+        audio_ext = audio.filename.split('.')[-1] if audio.filename else 'mp3'
+        audio_url = await oss_service.upload_file(audio_content, audio_ext, "digital_human/audio")
+        print(f"[DEBUG] 音频已上传: {audio_url}")
     
     # 3. 调用可灵虚拟形象 API
     task_id = kling_service.generate_digital_human(
         image_url=image_url,
+        text=text,
         audio_url=audio_url,
-        prompt=prompt,
+        voice=voice,
         name=name
     )
     print(f"[DEBUG] 数字人任务ID: {task_id}")

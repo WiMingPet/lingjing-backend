@@ -259,15 +259,17 @@ class KlingService:
         raise Exception(f"虚拟试穿任务超时，task_id: {task_id}")
     
     # ========== 数字人分身 ==========
-    def generate_digital_human(self, image_url: str, audio_url: str, prompt: str = None, name: str = None) -> str:
+    def generate_digital_human(self, image_url: str, text: str = None, audio_url: str = None, 
+                               voice: str = None, name: str = None) -> str:
         """
-        数字人分身 - 单张照片+音频生成视频
+        数字人分身 - 单张照片+文字/音频生成视频
         使用可灵虚拟形象 API
         
         Args:
             image_url: 人物照片 URL
-            audio_url: 音频文件 URL
-            prompt: 提示词，控制情绪、表情、语速
+            text: 说话内容文字（优先使用）
+            audio_url: 音频文件 URL（备选）
+            voice: 音色选择
             name: 数字人名称
         
         Returns:
@@ -278,10 +280,20 @@ class KlingService:
         
         payload = {
             "image": image_url,
-            "audio": audio_url
         }
-        if prompt:
-            payload["prompt"] = prompt
+        
+        # 优先使用文字输入（自动配音）
+        if text:
+            payload["text"] = text
+            if voice:
+                payload["voice"] = voice
+            print(f"[DEBUG] 使用文字输入，内容: {text[:50]}...")
+        elif audio_url:
+            payload["audio"] = audio_url
+            print(f"[DEBUG] 使用音频文件: {audio_url}")
+        else:
+            raise Exception("请提供文字内容或音频文件")
+        
         if name:
             payload["name"] = name
         
