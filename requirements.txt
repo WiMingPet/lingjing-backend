@@ -17,5 +17,5 @@ requests==2.31.0
 edge-tts==6.1.9
 opencv-python-headless==4.13.0.92
 mediapipe==0.10.14
-numpy==1.26.4
+numpy>=2
 scikit-learn==1.5.2
