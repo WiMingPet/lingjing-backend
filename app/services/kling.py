@@ -291,7 +291,7 @@ class KlingService:
     def get_digital_human_task_status(self, task_id: str) -> Dict:
         """查询数字人任务状态"""
         base_url = self._get_base_url()
-        url = f"{base_url}/avatar/generations/{task_id}"
+        url = f"{base_url}/videos/avatar/image2video/{task_id}"
         response = requests.get(url, headers=self._get_headers())
         result = response.json()
         
