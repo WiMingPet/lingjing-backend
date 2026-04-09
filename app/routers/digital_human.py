@@ -17,7 +17,7 @@ from app.schemas.digital_human import (
 from app.services.digital_human_service import DigitalHumanService
 from app.utils.file_utils import upload_file_helper
 
-router = APIRouter(prefix="/digital_human", tags=["数字人定制"])
+router = APIRouter(prefix="/digital-human", tags=["数字人定制"])
 
 
 @router.post("/", response_model=APIResponse)
