@@ -32,6 +32,10 @@ class OSSService:
             "png": "image/png",
             "webp": "image/webp",
             "gif": "image/gif",
+            "mp3": "audio/mpeg",
+            "wav": "audio/wav",
+            "m4a": "audio/mp4",
+            "aac": "audio/aac",
         }
         return content_type_map.get(file_extension.lower(), "application/octet-stream")
     
@@ -53,9 +57,8 @@ class OSSService:
         headers = {
             'Content-Type': content_type,
             'x-oss-object-acl': 'public-read',
-            'Content-Disposition': 'inline'   # 加这一行
+            'Content-Disposition': 'inline'
         }
-        
         
         # 上传文件（带上 headers）
         self.bucket.put_object(filename, file_content, headers=headers)

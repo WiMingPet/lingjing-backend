@@ -69,8 +69,6 @@ class KlingService:
             "model_name": "kling-v2-1",
             "prompt": prompt,
             "negative_prompt": negative_prompt,
-            "image": reference_image_url,  # 参考图
-            "human_fidelity": 0.8,  # ← 新增：人像相似度 0-100
             "aspect_ratio": aspect_ratio,
             "n": num_images
         }
@@ -138,7 +136,7 @@ class KlingService:
         url = f"{base_url}/videos/image2video"
         
         payload = {
-            "model_name": "kling-v2-6",  # 推荐使用 v2.6
+            "model_name": "kling-v2-6",
             "prompt": prompt,
             "duration": str(duration),
             "mode": mode
@@ -261,22 +259,31 @@ class KlingService:
         raise Exception(f"虚拟试穿任务超时，task_id: {task_id}")
     
     # ========== 数字人分身 ==========
-    def generate_digital_human(self, image_url: str, audio_url: str, 
-                                duration: int = 10, mode: str = "std") -> str:
+    def generate_digital_human(self, image_url: str, audio_url: str, prompt: str = None, name: str = None) -> str:
         """
         数字人分身 - 单张照片+音频生成视频
-        返回 task_id
+        使用可灵虚拟形象 API
+        
+        Args:
+            image_url: 人物照片 URL
+            audio_url: 音频文件 URL
+            prompt: 提示词，控制情绪、表情、语速
+            name: 数字人名称
+        
+        Returns:
+            task_id
         """
         base_url = self._get_base_url()
-        url = f"{base_url}/digital-human/video/generations"
+        url = f"{base_url}/avatar/generations"
         
         payload = {
-            "model_name": "digital-human-v2",
             "image": image_url,
-            "audio": audio_url,
-            "duration": duration,
-            "mode": mode
+            "audio": audio_url
         }
+        if prompt:
+            payload["prompt"] = prompt
+        if name:
+            payload["name"] = name
         
         print(f"[DEBUG] 数字人请求URL: {url}")
         print(f"[DEBUG] 数字人请求参数: {payload}")
@@ -292,7 +299,7 @@ class KlingService:
     def get_digital_human_task_status(self, task_id: str) -> Dict:
         """查询数字人任务状态"""
         base_url = self._get_base_url()
-        url = f"{base_url}/digital-human/video/generations/{task_id}"
+        url = f"{base_url}/avatar/generations/{task_id}"
         response = requests.get(url, headers=self._get_headers())
         result = response.json()
         
@@ -312,6 +319,11 @@ class KlingService:
             print(f"[DEBUG] 数字人任务状态: {task_status}")
             
             if task_status == "succeed":
+                # 提取视频 URL
+                task_result = status_data.get("task_result", {})
+                videos = task_result.get("videos", [])
+                if videos:
+                    status_data["task_result"]["video_url"] = videos[0].get("url", "")
                 return status_data
             elif task_status == "failed":
                 error_msg = status_data.get("task_status_msg", "未知错误")

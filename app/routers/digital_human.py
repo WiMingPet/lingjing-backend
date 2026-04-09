@@ -177,3 +177,61 @@ def delete_digital_human(
         message="删除成功",
         data=None
     )
+
+
+# ========== 新增：数字人分身（照片+音频生成视频）==========
+
+@router.post("/generate", response_model=APIResponse)
+async def generate_digital_human(
+    image: UploadFile = File(...),
+    audio: UploadFile = File(...),
+    prompt: Optional[str] = Form(None),
+    name: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    数字人分身 - 单张照片+音频生成说话视频
+
+    - **image**: 人物照片 (必填)
+    - **audio**: 音频文件 (必填)
+    - **prompt**: 提示词，控制情绪、表情、语速 (可选)
+    - **name**: 数字人名称 (可选)
+    """
+    import uuid
+    from app.services.oss_service import oss_service
+    from app.services.kling import kling_service
+    
+    # 1. 上传图片到 OSS
+    image_url, image_id = await upload_file_helper(image, "digital_human/images")
+    print(f"[DEBUG] 图片已上传: {image_url}")
+    
+    # 2. 上传音频到 OSS
+    audio_content = await audio.read()
+    audio_ext = audio.filename.split('.')[-1] if audio.filename else 'mp3'
+    audio_url = await oss_service.upload_file(
+        audio_content, 
+        audio_ext, 
+        "digital_human/audio"
+    )
+    print(f"[DEBUG] 音频已上传: {audio_url}")
+    
+    # 3. 调用可灵虚拟形象 API
+    task_id = kling_service.generate_digital_human(
+        image_url=image_url,
+        audio_url=audio_url,
+        prompt=prompt,
+        name=name
+    )
+    print(f"[DEBUG] 数字人任务ID: {task_id}")
+    
+    # 4. 轮询等待结果
+    result = kling_service.wait_for_digital_human_result(task_id)
+    video_url = result.get("task_result", {}).get("video_url", "")
+    print(f"[DEBUG] 数字人视频URL: {video_url}")
+    
+    return APIResponse(
+        code=200,
+        message="数字人视频生成成功",
+        data={"video_url": video_url, "task_id": task_id}
+    )
