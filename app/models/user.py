@@ -14,6 +14,7 @@ class User(Base):
     is_verified = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    credits = Column(Integer, default=0, comment="灵境点余额")
 
     def __repr__(self):
         return f"<User(id={self.id}, phone={self.phone})>"
