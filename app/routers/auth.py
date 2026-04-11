@@ -21,8 +21,8 @@ from app.config import settings
 
 router = APIRouter(prefix="/auth", tags=["认证"])
 
-# 密码加密
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# 使用 pbkdf2_sha256，无密码长度限制
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 # JWT配置
 SECRET_KEY = settings.SECRET_KEY
@@ -109,7 +109,7 @@ def register(
         username=request.username or request.phone,
         is_active=True,
         is_verified=True,
-        credits=20  # 新用户赠送20灵境点
+        credits=20
     )
     db.add(user)
     db.commit()
@@ -133,7 +133,7 @@ def register(
 @router.get("/me", response_model=APIResponse)
 def get_current_user(
     db: Session = Depends(get_db),
-    current_user: User = Depends(lambda: None)  # 待实现
+    current_user: User = Depends(lambda: None)
 ):
     """获取当前用户信息"""
     return APIResponse(
