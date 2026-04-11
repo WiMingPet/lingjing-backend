@@ -65,14 +65,22 @@ def login(
     db: Session = Depends(get_db)
 ):
     """
-    密码登录
+    登录（支持密码登录和验证码登录）
     """
     user = db.query(User).filter(User.phone == request.phone).first()
     if not user:
         raise HTTPException(status_code=400, detail="手机号未注册")
     
-    if not verify_password(request.password, user.password_hash):
-        raise HTTPException(status_code=400, detail="密码错误")
+    # 支持密码登录
+    if request.password:
+        if not verify_password(request.password, user.password_hash):
+            raise HTTPException(status_code=400, detail="密码错误")
+    # 支持验证码登录（验证码固定为 123456）
+    elif request.code:
+        if request.code != "123456":
+            raise HTTPException(status_code=400, detail="验证码错误")
+    else:
+        raise HTTPException(status_code=400, detail="请提供密码或验证码")
     
     token = create_access_token(data={"sub": str(user.id), "phone": user.phone})
     

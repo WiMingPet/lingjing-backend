@@ -10,8 +10,9 @@ class SendVerificationCodeRequest(BaseModel):
 
 # 验证码登录请求
 class LoginRequest(BaseModel):
-    phone: str = Field(..., pattern=r"^1[3-9]\d{9}$")
-    code: str = Field(..., min_length=6, max_length=6)
+    phone: str
+    password: Optional[str] = None
+    code: Optional[str] = None
 
 
 # Token响应
