@@ -36,8 +36,8 @@ async def create_digital_human(
     - **source_video**: 模特视频 (必填)
     """
     # 上传视频
-    file_info = await upload_file_helper(source_video, "digital_human_videos")
-    source_video_id = file_info["file_id"]
+    file_url, file_id = await upload_file_helper(source_video, "digital_human_videos")
+    source_video_id = file_id
 
     # 创建数字人
     digital_human = await DigitalHumanService.create_digital_human(
@@ -187,21 +187,29 @@ async def generate_digital_human(
     image: UploadFile = File(...),
     text: Optional[str] = Form(None),
     audio: Optional[UploadFile] = File(None),
-    prompt: Optional[str] = Form(None),  # 默认 None，不是 "string"
-    name: Optional[str] = Form(None),    # 默认 None，不是 "string"
+    prompt: Optional[str] = Form(None),
+    name: Optional[str] = Form(None),
     db: Session = Depends(get_db),
 ):
     """
-    数字人分身 - 照片+音频生成说话视频
+    数字人分身 - 照片+文字/音频生成说话视频
 
     - **image**: 人物照片 (必填)
-    - **audio**: 音频文件 (必填，MP3/WAV，时长2-300秒)
+    - **text**: 说话内容文字 (可选，优先使用)
+    - **audio**: 音频文件 (可选)
     - **prompt**: 提示词，控制动作、情绪、运镜 (可选)
     - **name**: 数字人名称 (可选)
     """
     import uuid
     from app.services.oss_service import oss_service
     from app.services.kling import kling_service
+    from app.services.tts_service import tts_service
+    
+    # 强制清空无意义的默认值（修复 external_task_id 重复问题）
+    if prompt == "string":
+        prompt = None
+    if name == "string":
+        name = None
     
     # 1. 上传图片到 OSS
     image_url, image_id = await upload_file_helper(image, "digital_human/images")
@@ -211,7 +219,6 @@ async def generate_digital_human(
     audio_url = None
     if text:
         # 文字转语音
-        from app.services.tts_service import tts_service
         audio_data = tts_service.text_to_speech(text)
         audio_url = await oss_service.upload_file(audio_data, "mp3", "digital_human/audio")
         print(f"[DEBUG] TTS 生成音频成功: {text[:50]}...")
