@@ -57,6 +57,34 @@ def send_verification_code(
         message=result["message"],
         data=result
     )
+@router.post("/verify_code", response_model=APIResponse)
+def verify_code(
+    phone: str,
+    code: str,
+    db: Session = Depends(get_db)
+):
+    """
+    验证短信验证码
+    """
+    import redis
+    import os
+    r = redis.Redis(
+        host=os.environ.get('REDIS_HOST', 'localhost'),
+        port=int(os.environ.get('REDIS_PORT', 6379)),
+        decode_responses=True
+    )
+    stored_code = r.get(f"sms_code:{phone}")
+    
+    if not stored_code:
+        raise HTTPException(status_code=400, detail="验证码已过期，请重新获取")
+    
+    if stored_code != code:
+        raise HTTPException(status_code=400, detail="验证码错误")
+    
+    # 验证成功，删除验证码（可选）
+    r.delete(f"sms_code:{phone}")
+    
+    return APIResponse(code=200, message="验证成功")
 
 
 @router.post("/login", response_model=APIResponse)
@@ -103,13 +131,28 @@ def register(
     db: Session = Depends(get_db)
 ):
     """
-    密码注册
+    短信验证码注册
     """
-    # 检查手机号是否已存在
+    # 1. 检查手机号是否已存在
     existing_user = db.query(User).filter(User.phone == request.phone).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="手机号已注册")
     
+    # 2. 验证短信验证码（从Redis获取）
+    import redis
+    r = redis.Redis(host='localhost', port=6379, decode_responses=True)
+    stored_code = r.get(f"sms_code:{request.phone}")
+    
+    if not stored_code:
+        raise HTTPException(status_code=400, detail="验证码已过期，请重新获取")
+    
+    if stored_code != request.code:
+        raise HTTPException(status_code=400, detail="验证码错误")
+    
+    # 3. 验证通过，删除验证码
+    r.delete(f"sms_code:{request.phone}")
+    
+    # 4. 创建用户
     hashed_pwd = hash_password(request.password)
     user = User(
         phone=request.phone,
@@ -123,6 +166,7 @@ def register(
     db.commit()
     db.refresh(user)
     
+    # 5. 生成token
     token = create_access_token(data={"sub": str(user.id), "phone": user.phone})
     
     return APIResponse(
@@ -136,7 +180,6 @@ def register(
             "credits": user.credits
         }
     )
-
 
 @router.get("/me", response_model=APIResponse)
 def get_current_user(

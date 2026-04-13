@@ -37,6 +37,7 @@ class UserResponse(BaseModel):
 
 # 注册请求
 class RegisterRequest(BaseModel):
-    phone: str = Field(..., pattern=r"^1[3-9]\d{9}$")
-    password: str = Field(..., min_length=6)
+    phone: str
+    password: str
+    code: str  # 新增验证码字段
     username: Optional[str] = None
