@@ -16,9 +16,23 @@ class AuthService:
     @staticmethod
     def _get_redis_client():
         """获取Redis连接"""
+        import os
+        import redis
+    
+        # 优先使用 REDIS_URL
+        redis_url = os.environ.get('REDIS_URL')
+        if redis_url:
+            return redis.Redis.from_url(redis_url, decode_responses=True)
+    
+        # 备用：使用分离的配置
+        host = os.environ.get('REDIS_HOST', 'localhost')
+        port = int(os.environ.get('REDIS_PORT', 6379))
+        password = os.environ.get('REDIS_PASSWORD', None)
+    
         return redis.Redis(
-            host=os.environ.get('REDIS_HOST', 'localhost'),
-            port=int(os.environ.get('REDIS_PORT', 6379)),
+            host=host,
+            port=port,
+            password=password,
             decode_responses=True
         )
 
