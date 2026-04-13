@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
 
     # JWT
-    SECRET_KEY: str = "your-secret-key-here-change-in-production"
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-here-change-in-production")
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     # DashScope TTS
     DASHSCOPE_API_KEY: str = ""
 
-    # 腾讯云 TTS ← 加在这里
+    # 腾讯云 TTS
     TENCENT_SECRET_ID: str = ""
     TENCENT_SECRET_KEY: str = ""
 
@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     OSS_BUCKET_NAME: str = "lingjing-media"
     OSS_ENDPOINT: str = "oss-cn-shenzhen.aliyuncs.com"
     OSS_INTERNAL_ENDPOINT: str = "oss-cn-shenzhen-internal.aliyuncs.com"
+
+    # 阿里云短信配置
+    ALIBABA_CLOUD_ACCESS_KEY_ID: str = os.getenv("ALIBABA_CLOUD_ACCESS_KEY_ID", "")
+    ALIBABA_CLOUD_ACCESS_KEY_SECRET: str = os.getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET", "")
+    SMS_SIGN_NAME: str = os.getenv("SMS_SIGN_NAME", "")
+    SMS_TEMPLATE_CODE: str = os.getenv("SMS_TEMPLATE_CODE", "")
 
     # File Storage
     UPLOAD_DIR: str = "./uploads"

@@ -37,38 +37,3 @@ def decode_access_token(token: str) -> Optional[dict]:
         return payload
     except JWTError:
         return None
-
-
-# 验证码模拟存储 (生产环境应使用Redis)
-VERIFICATION_CODES = {}
-
-
-def generate_verification_code(phone: str) -> str:
-    """
-    生成验证码
-    模拟模式：固定返回 123456
-    """
-    # 生产环境应该生成随机6位数字
-    code = "123456"
-    VERIFICATION_CODES[phone] = {
-        "code": code,
-        "expires": datetime.utcnow() + timedelta(minutes=5)
-    }
-    return code
-
-
-def verify_verification_code(phone: str, code: str) -> bool:
-    """
-    验证验证码
-    模拟模式：接受 123456
-    """
-    if phone not in VERIFICATION_CODES:
-        return code == "123456"  # 模拟模式也接受123456
-
-    stored = VERIFICATION_CODES[phone]
-    if datetime.utcnow() > stored["expires"]:
-        del VERIFICATION_CODES[phone]
-        return False
-
-    # 模拟模式接受任意正确格式的验证码
-    return stored["code"] == code or code == "123456"

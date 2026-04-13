@@ -140,7 +140,12 @@ def register(
     
     # 2. 验证短信验证码（从Redis获取）
     import redis
-    r = redis.Redis(host='localhost', port=6379, decode_responses=True)
+    import os
+    r = redis.Redis(
+        host=os.environ.get('REDIS_HOST', 'localhost'),
+        port=int(os.environ.get('REDIS_PORT', 6379)),
+        decode_responses=True
+    )
     stored_code = r.get(f"sms_code:{request.phone}")
     
     if not stored_code:
