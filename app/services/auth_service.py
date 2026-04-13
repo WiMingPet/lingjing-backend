@@ -18,19 +18,13 @@ class AuthService:
         import os
         import redis
     
-        host = os.environ.get('REDIS_HOST')
-        port = os.environ.get('REDIS_PORT')
-        password = os.environ.get('REDIS_PASSWORD')
+        host = os.environ.get('REDIS_HOST', 'localhost')
+        port = int(os.environ.get('REDIS_PORT', 6379))
     
-        print(f"Connecting to Redis: host={host}, port={port}")
-    
-        if not host:
-            raise Exception("REDIS_HOST not configured")
-    
+        # 不传 password，因为 Redis 没有设置密码
         return redis.Redis(
             host=host,
-            port=int(port),
-            password=password,
+            port=port,
             decode_responses=True
         )
 
