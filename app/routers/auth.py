@@ -101,6 +101,11 @@ def login(
     """
     登录（支持密码登录和验证码登录）
     """
+    import redis
+    import os
+    import logging
+    logger = logging.getLogger(__name__)
+    
     user = db.query(User).filter(User.phone == request.phone).first()
     if not user:
         raise HTTPException(status_code=400, detail="手机号未注册")
@@ -109,22 +114,27 @@ def login(
     if request.password:
         if not verify_password(request.password, user.password_hash):
             raise HTTPException(status_code=400, detail="密码错误")
-    # 验证码登录 - 验证 Redis 中的真实验证码
+        logger.info(f"密码登录成功: {request.phone}")
+    
+    # 验证码登录
     elif request.code:
-        import redis
-        import os
         r = redis.Redis(
             host=os.environ.get('REDIS_HOST', 'localhost'),
             port=int(os.environ.get('REDIS_PORT', 6379)),
             decode_responses=True
         )
         stored_code = r.get(f"sms_code:{request.phone}")
+        logger.info(f"验证码登录 - 手机号: {request.phone}, 输入验证码: {request.code}, Redis中的验证码: {stored_code}")
+        
         if not stored_code:
             raise HTTPException(status_code=400, detail="验证码已过期，请重新获取")
         if stored_code != request.code:
             raise HTTPException(status_code=400, detail="验证码错误")
-        # 验证成功，删除验证码
+        
+        # 验证成功，删除验证码（一次性使用）
         r.delete(f"sms_code:{request.phone}")
+        logger.info(f"验证码登录成功: {request.phone}")
+    
     else:
         raise HTTPException(status_code=400, detail="请提供密码或验证码")
     
@@ -141,7 +151,6 @@ def login(
             "credits": user.credits if hasattr(user, 'credits') else 0
         }
     )
-
 
 @router.post("/register", response_model=APIResponse)
 def register(
