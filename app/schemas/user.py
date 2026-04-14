@@ -39,5 +39,11 @@ class UserResponse(BaseModel):
 class RegisterRequest(BaseModel):
     phone: str
     password: str
-    code: str  # 新增验证码字段
+    code: str
     username: Optional[str] = None
+
+
+# 验证验证码请求（新增）
+class VerifyCodeRequest(BaseModel):
+    phone: str = Field(..., pattern=r"^1[3-9]\d{9}$")
+    code: str = Field(..., min_length=6, max_length=6)

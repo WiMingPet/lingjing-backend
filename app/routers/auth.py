@@ -10,7 +10,8 @@ from app.schemas.user import (
     LoginRequest,
     TokenResponse,
     UserResponse,
-    RegisterRequest
+    RegisterRequest,
+    VerifyCodeRequest
 )
 from app.schemas.task import APIResponse
 from app.services.auth_service import AuthService
@@ -57,15 +58,19 @@ def send_verification_code(
         message=result["message"],
         data=result
     )
+
+
 @router.post("/verify_code", response_model=APIResponse)
 def verify_code(
-    phone: str,
-    code: str,
+    request: VerifyCodeRequest,
     db: Session = Depends(get_db)
 ):
     """
     验证短信验证码
     """
+    phone = request.phone
+    code = request.code
+    
     import redis
     import os
     r = redis.Redis(
@@ -73,6 +78,7 @@ def verify_code(
         port=int(os.environ.get('REDIS_PORT', 6379)),
         decode_responses=True
     )
+    
     stored_code = r.get(f"sms_code:{phone}")
     
     if not stored_code:
@@ -81,7 +87,7 @@ def verify_code(
     if stored_code != code:
         raise HTTPException(status_code=400, detail="验证码错误")
     
-    # 验证成功，删除验证码（可选）
+    # 验证成功，删除验证码
     r.delete(f"sms_code:{phone}")
     
     return APIResponse(code=200, message="验证成功")
@@ -185,6 +191,7 @@ def register(
             "credits": user.credits
         }
     )
+
 
 @router.get("/me", response_model=APIResponse)
 def get_current_user(
