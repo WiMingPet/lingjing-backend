@@ -1,12 +1,11 @@
 from pydantic import BaseModel
-from typing import Optional
 
 class CreateOrderRequest(BaseModel):
-    package_id: int  # 套餐ID
-    amount: float    # 金额
-    credits: int     # 灵境点数量
+    package_id: int
+    amount: float
+    credits: int
 
 class CreateOrderResponse(BaseModel):
-    order_id: str           # 商户订单号
-    qr_code: str            # 二维码内容（二维码链接）
+    order_id: str
+    pay_url: str
     amount: float

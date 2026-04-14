@@ -33,29 +33,31 @@ class PaymentService:
         )
     
     def generate_order_no(self) -> str:
+        """生成商户订单号"""
         timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
         random_str = ''.join(random.choices(string.digits, k=6))
         return f"{timestamp}{random_str}"
     
-    def create_qr_code_order(self, out_trade_no: str, total_amount: float, 
-                              subject: str, body: str) -> dict:
-        order = self.alipay.api_alipay_trade_precreate(
+    def create_page_pay_order(self, out_trade_no: str, total_amount: float, 
+                               subject: str, body: str, return_url: str) -> str:
+        """
+        创建电脑网站支付订单
+        返回支付页面 URL，前端跳转到该 URL 即可
+        """
+        order_string = self.alipay.api_alipay_trade_page_pay(
             out_trade_no=out_trade_no,
             total_amount=total_amount,
             subject=subject,
             body=body,
-            timeout_express="30m"
+            return_url=return_url,
+            notify_url=os.environ.get("ALIPAY_NOTIFY_URL")
         )
         
-        if order.get("code") == "10000":
-            return {
-                "out_trade_no": out_trade_no,
-                "qr_code": order.get("qr_code"),
-                "success": True
-            }
-        else:
-            raise Exception(f"Create order failed: {order.get('msg')}")
+        # 构建完整的支付 URL
+        pay_url = f"https://openapi.alipay.com/gateway.do?{order_string}"
+        return pay_url
     
     def query_order(self, out_trade_no: str) -> dict:
+        """查询订单状态"""
         result = self.alipay.api_alipay_trade_query(out_trade_no=out_trade_no)
         return result

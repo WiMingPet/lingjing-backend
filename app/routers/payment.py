@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from datetime import datetime
 from app.database import get_db
-from app.schemas.payment import CreateOrderRequest, CreateOrderResponse
+from app.schemas.payment import CreateOrderRequest
 from app.models.user import User
 from app.services.payment_service import PaymentService
 from app.utils.auth import get_current_user
@@ -19,18 +19,23 @@ def create_order(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Create Alipay payment order"""
+    """Create Alipay payment order (PC website payment)"""
     service = PaymentService()
-    result = service.create_qr_code_order(
+    
+    # 构建前端支付成功后的跳转地址
+    return_url = os.environ.get("ALIPAY_RETURN_URL", "https://lingji.preview.aliyun-zeabur.cn/payment/result")
+    
+    pay_url = service.create_page_pay_order(
         out_trade_no=service.generate_order_no(),
         total_amount=request.amount,
         subject=f"Credits Recharge - {request.credits} credits",
-        body=f"Purchase {request.credits} credits"
+        body=f"Purchase {request.credits} credits",
+        return_url=return_url
     )
     
     return {
-        "order_id": result["out_trade_no"],
-        "qr_code": result["qr_code"],
+        "order_id": out_trade_no,
+        "pay_url": pay_url,
         "amount": request.amount
     }
 
