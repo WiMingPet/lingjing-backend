@@ -10,8 +10,6 @@ from app.config import settings
 from app.database import init_db, SessionLocal
 from app.models.digital_human import DigitalHuman
 from app.routers import auth, image, video, size, tryon, digital_human, multi_angle, proxy
-from app.routers import payment
-app.include_router(payment.router, prefix="/api")
 
 
 @asynccontextmanager
@@ -84,6 +82,10 @@ app.include_router(size.router, prefix="/api")
 app.include_router(tryon.router, prefix="/api")
 app.include_router(digital_human.router, prefix="/api")
 app.include_router(multi_angle.router, prefix="/api")
+
+# 注册支付路由（必须在 app 创建之后）
+from app.routers import payment
+app.include_router(payment.router, prefix="/api")
 
 
 @app.get("/")
