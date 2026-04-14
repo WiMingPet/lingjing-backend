@@ -87,8 +87,8 @@ def verify_code(
     if stored_code != code:
         raise HTTPException(status_code=400, detail="验证码错误")
     
-    # 验证成功，删除验证码
-    r.delete(f"sms_code:{phone}")
+    # ❌ 注释掉这行，不要删除验证码
+    # r.delete(f"sms_code:{phone}")
     
     return APIResponse(code=200, message="验证成功")
 
@@ -105,14 +105,26 @@ def login(
     if not user:
         raise HTTPException(status_code=400, detail="手机号未注册")
     
-    # 支持密码登录
+    # 密码登录
     if request.password:
         if not verify_password(request.password, user.password_hash):
             raise HTTPException(status_code=400, detail="密码错误")
-    # 支持验证码登录（验证码固定为 123456）
+    # 验证码登录 - 验证 Redis 中的真实验证码
     elif request.code:
-        if request.code != "123456":
+        import redis
+        import os
+        r = redis.Redis(
+            host=os.environ.get('REDIS_HOST', 'localhost'),
+            port=int(os.environ.get('REDIS_PORT', 6379)),
+            decode_responses=True
+        )
+        stored_code = r.get(f"sms_code:{request.phone}")
+        if not stored_code:
+            raise HTTPException(status_code=400, detail="验证码已过期，请重新获取")
+        if stored_code != request.code:
             raise HTTPException(status_code=400, detail="验证码错误")
+        # 验证成功，删除验证码
+        r.delete(f"sms_code:{request.phone}")
     else:
         raise HTTPException(status_code=400, detail="请提供密码或验证码")
     
