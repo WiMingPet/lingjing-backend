@@ -10,6 +10,8 @@ from app.config import settings
 from app.database import init_db, SessionLocal
 from app.models.digital_human import DigitalHuman
 from app.routers import auth, image, video, size, tryon, digital_human, multi_angle, proxy
+from app.routers import payment
+app.include_router(payment.router, prefix="/api")
 
 
 @asynccontextmanager
