@@ -9,7 +9,7 @@ from app.utils.auth import get_current_user
 import logging
 import os
 
-router = APIRouter(prefix="/payment", tags=["支付"])
+router = APIRouter(prefix="/payment", tags=["payment"])
 logger = logging.getLogger(__name__)
 
 
@@ -19,13 +19,13 @@ def create_order(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """创建支付宝支付订单"""
+    """Create Alipay payment order"""
     service = PaymentService()
     result = service.create_qr_code_order(
         out_trade_no=service.generate_order_no(),
         total_amount=request.amount,
-        subject=f"灵境点充值 - {request.credits}点",
-        body=f"购买{request.credits}灵境点"
+        subject=f"Credits Recharge - {request.credits} credits",
+        body=f"Purchase {request.credits} credits"
     )
     
     return {
@@ -41,7 +41,7 @@ def get_order_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """查询订单支付状态"""
+    """Query order payment status"""
     service = PaymentService()
     result = service.query_order(order_id)
     
@@ -59,15 +59,15 @@ def get_order_status(
 
 @router.post("/notify")
 async def alipay_notify(request: Request, db: Session = Depends(get_db)):
-    """支付宝异步通知回调"""
+    """Alipay async notification callback"""
     from alipay import AliPay
     
     form_data = await request.form()
     data = dict(form_data)
     
-    logger.info(f"收到支付宝回调: {data}")
+    logger.info(f"Alipay callback received: {data}")
     
-    # 初始化支付宝客户端
+    # Initialize Alipay client
     alipay = AliPay(
         appid=os.environ.get("ALIPAY_APP_ID"),
         app_notify_url=os.environ.get("ALIPAY_NOTIFY_URL"),
@@ -77,18 +77,18 @@ async def alipay_notify(request: Request, db: Session = Depends(get_db)):
         debug=False
     )
     
-    # 验证签名
+    # Verify signature
     sign = data.pop('sign', None)
     if not alipay.verify(data, sign):
-        logger.error("签名验证失败")
+        logger.error("Signature verification failed")
         return "fail"
     
-    # 检查交易状态
+    # Check trade status
     trade_status = data.get('trade_status')
     out_trade_no = data.get('out_trade_no')
     
     if trade_status == 'TRADE_SUCCESS':
-        logger.info(f"订单 {out_trade_no} 支付成功")
-        # TODO: 根据订单号查找订单，更新用户灵境点余额
+        logger.info(f"Order {out_trade_no} paid successfully")
+        # TODO: Update user credits based on order
         
     return "success"
