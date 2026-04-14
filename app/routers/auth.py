@@ -100,31 +100,32 @@ def login(
 ):
     """
     登录（支持密码登录和验证码登录）
+    验证码登录：如果用户不存在，自动创建账号
     """
     import redis
     import os
     import logging
     logger = logging.getLogger(__name__)
     
-    user = db.query(User).filter(User.phone == request.phone).first()
-    if not user:
-        raise HTTPException(status_code=400, detail="手机号未注册")
-    
     # 密码登录
     if request.password:
+        user = db.query(User).filter(User.phone == request.phone).first()
+        if not user:
+            raise HTTPException(status_code=400, detail="手机号未注册")
         if not verify_password(request.password, user.password_hash):
             raise HTTPException(status_code=400, detail="密码错误")
         logger.info(f"密码登录成功: {request.phone}")
     
-    # 验证码登录
+    # 验证码登录（支持免注册）
     elif request.code:
+        # 1. 验证验证码
         r = redis.Redis(
             host=os.environ.get('REDIS_HOST', 'localhost'),
             port=int(os.environ.get('REDIS_PORT', 6379)),
             decode_responses=True
         )
         stored_code = r.get(f"sms_code:{request.phone}")
-        logger.info(f"验证码登录 - 手机号: {request.phone}, 输入验证码: {request.code}, Redis中的验证码: {stored_code}")
+        logger.info(f"验证码登录 - 手机号: {request.phone}, 输入: {request.code}, Redis: {stored_code}")
         
         if not stored_code:
             raise HTTPException(status_code=400, detail="验证码已过期，请重新获取")
@@ -133,11 +134,36 @@ def login(
         
         # 验证成功，删除验证码（一次性使用）
         r.delete(f"sms_code:{request.phone}")
+        
+        # 2. 查找或创建用户
+        user = db.query(User).filter(User.phone == request.phone).first()
+        if not user:
+            # 自动创建用户（免注册）
+            from passlib.context import CryptContext
+            pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
+            # 生成一个随机密码（用户不会使用密码登录）
+            random_password = os.urandom(16).hex()
+            hashed_pwd = pwd_context.hash(random_password)
+            
+            user = User(
+                phone=request.phone,
+                password_hash=hashed_pwd,
+                username=request.phone,  # 默认用户名用手机号
+                is_active=True,
+                is_verified=True,
+                credits=20  # 新用户送20灵境点
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+            logger.info(f"验证码登录自动创建用户: {request.phone}")
+        
         logger.info(f"验证码登录成功: {request.phone}")
     
     else:
         raise HTTPException(status_code=400, detail="请提供密码或验证码")
     
+    # 生成token
     token = create_access_token(data={"sub": str(user.id), "phone": user.phone})
     
     return APIResponse(
@@ -158,12 +184,14 @@ def register(
     db: Session = Depends(get_db)
 ):
     """
-    短信验证码注册
+    注册（如果用户已存在，返回错误）
     """
-    # 1. 检查手机号是否已存在
+    # 检查手机号是否已存在
     existing_user = db.query(User).filter(User.phone == request.phone).first()
     if existing_user:
-        raise HTTPException(status_code=400, detail="手机号已注册")
+        # 如果用户已存在，可以选择直接登录
+        # 这里为了安全，仍然返回错误，让用户使用登录接口
+        raise HTTPException(status_code=400, detail="手机号已注册，请直接登录")
     
     # 2. 验证短信验证码（从Redis获取）
     import redis
