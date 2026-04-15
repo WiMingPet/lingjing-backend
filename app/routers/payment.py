@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
+from datetime import datetime
 from app.database import get_db
 from app.schemas.payment import CreateOrderRequest
 from app.models.user import User
 from app.services.payment_service import PaymentService
 from app.utils.auth import get_current_user
+from app.models.order import RechargeOrder
 import logging
 import os
 
@@ -23,6 +25,16 @@ def create_order(
     
     # 先生成订单号
     out_trade_no = service.generate_order_no()
+    # 保存订单到数据库
+    order = RechargeOrder(
+        order_no=out_trade_no,
+        user_id=current_user.id,
+        amount=request.amount,
+        credits=request.credits,
+        status="pending"
+    )
+    db.add(order)
+    db.commit()
     
     pay_url = service.create_wap_pay_order(
         out_trade_no=out_trade_no,  # 使用生成的订单号
@@ -63,32 +75,52 @@ def get_order_status(
 
 @router.post("/notify")
 async def alipay_notify(request: Request, db: Session = Depends(get_db)):
-    """Alipay async notification callback"""
+    """支付宝异步通知回调"""
     from alipay import AliPay
     
     form_data = await request.form()
     data = dict(form_data)
     
-    logger.info(f"Alipay callback received: {data}")
+    logger.info(f"收到支付宝回调: {data}")
     
-    alipay = AliPay(
-        appid=os.environ.get("ALIPAY_APP_ID"),
-        app_notify_url=os.environ.get("ALIPAY_NOTIFY_URL"),
-        app_private_key_string=os.environ.get("ALIPAY_PRIVATE_KEY", ""),
-        alipay_public_key_string=os.environ.get("ALIPAY_PUBLIC_KEY", ""),
-        sign_type="RSA2",
-        debug=False
-    )
+    # 初始化支付宝客户端
+    alipay = AliPay(...)
     
+    # 验证签名
     sign = data.pop('sign', None)
     if not alipay.verify(data, sign):
-        logger.error("Signature verification failed")
+        logger.error("签名验证失败")
         return "fail"
     
+    # 检查交易状态
     trade_status = data.get('trade_status')
     out_trade_no = data.get('out_trade_no')
     
     if trade_status == 'TRADE_SUCCESS':
-        logger.info(f"Order {out_trade_no} paid successfully")
+        # 查询订单
+        order = db.query(RechargeOrder).filter(RechargeOrder.order_no == out_trade_no).first()
+        if not order:
+            logger.error(f"订单 {out_trade_no} 不存在")
+            return "fail"
+        
+        if order.status == 'paid':
+            logger.info(f"订单 {out_trade_no} 已处理过")
+            return "success"
+        
+        # 更新用户灵境点
+        user = db.query(User).filter(User.id == order.user_id).first()
+        if user:
+            user.credits += order.credits
+            logger.info(f"用户 {user.id} 灵境点增加 {order.credits}，当前余额: {user.credits}")
+        else:
+            logger.error(f"用户 {order.user_id} 不存在")
+            return "fail"
+        
+        # 更新订单状态
+        order.status = 'paid'
+        order.paid_at = datetime.utcnow()
+        db.commit()
+        
+        logger.info(f"订单 {out_trade_no} 处理完成")
         
     return "success"

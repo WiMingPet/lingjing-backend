@@ -19,6 +19,7 @@ from app.models.user import User
 from passlib.context import CryptContext
 import jwt
 from app.config import settings
+from app.utils.auth import get_current_user as get_current_user_from_token
 
 router = APIRouter(prefix="/auth", tags=["认证"])
 
@@ -245,11 +246,26 @@ def register(
 @router.get("/me", response_model=APIResponse)
 def get_current_user(
     db: Session = Depends(get_db),
-    current_user: User = Depends(lambda: None)
+    current_user: User = Depends(get_current_user_from_token)  # 需要导入这个函数
 ):
     """获取当前用户信息"""
+    if not current_user:
+        return APIResponse(
+            code=401,
+            message="未登录",
+            data=None
+        )
+    
     return APIResponse(
         code=200,
         message="获取成功",
-        data=None
+        data={
+            "id": current_user.id,
+            "phone": current_user.phone,
+            "username": current_user.username,
+            "credits": current_user.credits,
+            "is_active": current_user.is_active,
+            "is_verified": current_user.is_verified,
+            "created_at": current_user.created_at.isoformat() if current_user.created_at else None
+        }
     )

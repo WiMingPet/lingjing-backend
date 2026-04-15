@@ -7,14 +7,25 @@ from alipay import AliPay
 class PaymentService:
 
     def __init__(self):
-        # 从文件读取私钥（避免环境变量换行问题）
+        # 优先从配置文件读取（Zeabur Config Files）
         private_key_path = "/app/alipay_private_key.pem"
         public_key_path = "/app/alipay_public_key.pem"
         
-        with open(private_key_path, 'r') as f:
-            app_private_key_string = f.read()
-        with open(public_key_path, 'r') as f:
-            alipay_public_key_string = f.read()
+        if os.path.exists(private_key_path):
+            with open(private_key_path, 'r') as f:
+                app_private_key_string = f.read()
+        else:
+            app_private_key_string = os.environ.get("ALIPAY_PRIVATE_KEY", "")
+        
+        if os.path.exists(public_key_path):
+            with open(public_key_path, 'r') as f:
+                alipay_public_key_string = f.read()
+        else:
+            alipay_public_key_string = os.environ.get("ALIPAY_PUBLIC_KEY", "")
+        
+        # 处理转义字符
+        app_private_key_string = app_private_key_string.replace('\\n', '\n')
+        alipay_public_key_string = alipay_public_key_string.replace('\\n', '\n')
 
         self.alipay = AliPay(
             appid=os.environ.get("ALIPAY_APP_ID"),
@@ -40,7 +51,6 @@ class PaymentService:
             return_url=return_url,
             notify_url=os.environ.get("ALIPAY_NOTIFY_URL")
         )
-
         pay_url = f"https://openapi.alipay.com/gateway.do?{order_string}"
         return pay_url
 
