@@ -37,7 +37,7 @@ def create_order(
     db.commit()
     
     pay_url = service.create_wap_pay_order(
-        out_trade_no=out_trade_no,  # 使用生成的订单号
+        out_trade_no=out_trade_no,
         total_amount=request.amount,
         subject=f"Credits Recharge - {request.credits} credits",
         body=f"Purchase {request.credits} credits",
@@ -45,7 +45,7 @@ def create_order(
     )
 
     return {
-        "order_id": out_trade_no,  # 现在有定义了
+        "order_id": out_trade_no,
         "pay_url": pay_url,
         "amount": request.amount
     }
@@ -84,7 +84,14 @@ async def alipay_notify(request: Request, db: Session = Depends(get_db)):
     logger.info(f"收到支付宝回调: {data}")
     
     # 初始化支付宝客户端
-    alipay = AliPay(...)
+    alipay = AliPay(
+        appid=os.environ.get("ALIPAY_APP_ID"),
+        app_notify_url=os.environ.get("ALIPAY_NOTIFY_URL"),
+        app_private_key_string=os.environ.get("ALIPAY_PRIVATE_KEY", "").replace('\\n', '\n'),
+        alipay_public_key_string=os.environ.get("ALIPAY_PUBLIC_KEY", "").replace('\\n', '\n'),
+        sign_type="RSA2",
+        debug=False
+    )
     
     # 验证签名
     sign = data.pop('sign', None)
