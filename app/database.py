@@ -20,5 +20,5 @@ def get_db():
 
 def init_db():
     """初始化数据库"""
-    from app.models import user, task, digital_human
+    from app.models import user, task, digital_human, order
     Base.metadata.create_all(bind=engine)
