@@ -8,7 +8,6 @@ from app.utils.auth import get_current_user
 import logging
 import os
 
-# ✅ 必须有这一行
 router = APIRouter(prefix="/payment", tags=["payment"])
 logger = logging.getLogger(__name__)
 
@@ -21,8 +20,12 @@ def create_order(
 ):
     """Create Alipay WAP payment order"""
     service = PaymentService()
+    
+    # 先生成订单号
+    out_trade_no = service.generate_order_no()
+    
     pay_url = service.create_wap_pay_order(
-        out_trade_no=service.generate_order_no(),
+        out_trade_no=out_trade_no,  # 使用生成的订单号
         total_amount=request.amount,
         subject=f"Credits Recharge - {request.credits} credits",
         body=f"Purchase {request.credits} credits",
@@ -30,7 +33,7 @@ def create_order(
     )
 
     return {
-        "order_id": out_trade_no,
+        "order_id": out_trade_no,  # 现在有定义了
         "pay_url": pay_url,
         "amount": request.amount
     }
@@ -71,8 +74,8 @@ async def alipay_notify(request: Request, db: Session = Depends(get_db)):
     alipay = AliPay(
         appid=os.environ.get("ALIPAY_APP_ID"),
         app_notify_url=os.environ.get("ALIPAY_NOTIFY_URL"),
-        app_private_key_string=os.environ.get("ALIPAY_PRIVATE_KEY", "").replace('\\n', '\n'),
-        alipay_public_key_string=os.environ.get("ALIPAY_PUBLIC_KEY", "").replace('\\n', '\n'),
+        app_private_key_string=os.environ.get("ALIPAY_PRIVATE_KEY", ""),
+        alipay_public_key_string=os.environ.get("ALIPAY_PUBLIC_KEY", ""),
         sign_type="RSA2",
         debug=False
     )
