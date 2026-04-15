@@ -26,7 +26,7 @@ async def generate_video(
     duration: int = Form(5),
     mode: str = Form("std"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),  # ✅ 新增：从token获取用户
+    current_user: User = Depends(get_current_user),  # ✅ 修改：从token获取用户
 ):
     """
     图生视频
@@ -45,24 +45,14 @@ async def generate_video(
         "mode": mode
     }
     
-    # ========== 3. 用户 ID（临时固定） ==========
-    user_id = 1
+    # ========== 3. 用户 ID（使用当前登录用户） ==========
+    user_id = current_user.id  # ✅ 修改：使用 current_user.id 代替固定的 1
     
-    # ========== 4. 确保用户存在 ==========
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        from datetime import datetime
-        user = User(
-            id=user_id,
-            phone=f"temp_{user_id}@example.com",
-            username=f"user_{user_id}",
-            password_hash="auto_created_temp_hash"
-        )
-        db.add(user)
-        db.commit()
-        print(f"[DEBUG] 自动创建了用户: id={user.id}")
+    # ========== 4. 确保用户存在（当前用户已存在，不需要创建） ==========
+    # 直接使用 current_user，不需要查询数据库
+    user = current_user  # ✅ 修改：直接使用 current_user
     
-    # ✅ 新增：根据时长确定消耗点数
+    # ✅ 根据时长确定消耗点数
     if duration == 5:
         cost = 10
     elif duration == 10:
@@ -70,7 +60,7 @@ async def generate_video(
     else:
         cost = 10  # 默认5秒的消耗
     
-    # ✅ 新增：检查并扣除灵境点
+    # ✅ 检查并扣除灵境点
     check_and_deduct_credits(user, db, cost, f"{duration}秒视频生成")
     
     # ========== 5. 调用视频生成服务 ==========
