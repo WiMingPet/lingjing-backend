@@ -16,6 +16,7 @@ from app.schemas.digital_human import (
 )
 from app.services.digital_human_service import DigitalHumanService
 from app.utils.file_utils import upload_file_helper
+from app.utils.credits import check_and_deduct_credits  # ✅ 新增：导入扣除工具
 
 router = APIRouter(prefix="/digital-human", tags=["数字人定制"])
 
@@ -190,6 +191,7 @@ async def generate_digital_human(
     prompt: Optional[str] = Form(None),
     name: Optional[str] = Form(None),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),  # ✅ 新增：从token获取用户
 ):
     """
     数字人分身 - 照片+文字/音频生成说话视频
@@ -230,6 +232,13 @@ async def generate_digital_human(
         print(f"[DEBUG] 使用用户上传音频")
     else:
         raise HTTPException(status_code=400, detail="请提供文字内容或音频文件")
+    
+    # ✅ 新增：检查并扣除 20 点灵境点
+    # 需要先获取用户对象
+    user = db.query(User).filter(User.id == current_user.id).first()
+    if not user:
+        user = current_user
+    check_and_deduct_credits(user, db, 20, "数字人分身")
     
     # 3. 调用可灵虚拟形象 API
     task_id = kling_service.generate_digital_human(

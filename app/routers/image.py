@@ -15,6 +15,7 @@ from app.schemas.task import (
 )
 from app.services.image_service import ImageService
 from app.utils.file_utils import upload_file_helper
+from app.utils.credits import check_and_deduct_credits  # ✅ 新增
 
 router = APIRouter(prefix="/image", tags=["图片生成"])
 
@@ -28,6 +29,7 @@ async def generate_image(
     num_images: int = Form(1),
     reference_image: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),  # ✅ 新增
 ):
     """
     生成图片
@@ -82,6 +84,9 @@ async def generate_image(
         db.commit()
         print(f"[DEBUG] 自动创建了用户: id={user.id}")
     # ========== 新增代码结束 ==========
+
+    # ✅ 检查并扣除 5 点灵境点
+    check_and_deduct_credits(user, db, 5, "图片生成")
 
     task = await ImageService.generate_image(db, user_id, request_data)
 

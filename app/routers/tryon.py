@@ -9,6 +9,8 @@ from app.schemas.task import APIResponse, TaskResponse
 from app.services.tryon_service import TryonService
 from app.models.user import User
 from app.utils.file_utils import upload_file_helper  # 新增：导入 OSS 上传工具
+from app.utils.credits import check_and_deduct_credits  # ✅ 新增：导入扣除工具
+from app.utils.auth import get_current_user  # ✅ 新增：导入获取用户工具
 
 router = APIRouter(prefix="/tryon", tags=["虚拟试穿"])
 
@@ -19,6 +21,7 @@ async def generate_tryon(
     garment_image: UploadFile = File(...),
     digital_human_id: Optional[int] = Form(None),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),  # ✅ 新增：从token获取用户
 ):
     """
     虚拟试穿
@@ -60,6 +63,9 @@ async def generate_tryon(
         db.commit()
         print(f"[DEBUG] 自动创建了用户: id={user.id}")
     # ========== 新增代码结束 ==========
+    
+    # ✅ 新增：检查并扣除 15 点灵境点
+    check_and_deduct_credits(user, db, 15, "虚拟试穿")
     
     task = await TryonService.generate_tryon(db, user_id, request_data)
     

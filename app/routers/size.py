@@ -11,6 +11,7 @@ from app.schemas.task import APIResponse, TaskResponse
 from app.services.size_service import SizeService
 from app.models.user import User
 from app.utils.file_utils import upload_file_helper  # 新增：导入 OSS 上传工具
+from app.utils.credits import check_and_deduct_credits  # ✅ 新增：导入扣除工具
 
 router = APIRouter(prefix="/size", tags=["尺码推荐"])
 
@@ -20,6 +21,7 @@ async def recommend_size(
     image: UploadFile = File(...),
     height: Optional[float] = Form(170.0),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),  # ✅ 新增：从token获取用户
 ):
     """
     尺码推荐
@@ -63,6 +65,9 @@ async def recommend_size(
             db.commit()
             print(f"[DEBUG] 自动创建了用户: id={user.id}")
         # ========== 新增代码结束 ==========
+        
+        # ✅ 检查并扣除 2 点灵境点
+        check_and_deduct_credits(user, db, 2, "尺码推荐")
         
         # 调用尺码推荐服务，传入图片路径、身高和 OSS URL
         task = await SizeService.recommend_size(db, user_id, image_path, height, image_url)

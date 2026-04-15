@@ -151,7 +151,7 @@ def login(
                 username=request.phone,  # 默认用户名用手机号
                 is_active=True,
                 is_verified=True,
-                credits=20  # 新用户送20灵境点
+                credits=10  # 新用户送10灵境点
             )
             db.add(user)
             db.commit()

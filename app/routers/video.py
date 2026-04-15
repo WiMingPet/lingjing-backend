@@ -13,6 +13,8 @@ from app.services.video_service import VideoService
 from app.config import settings
 from app.models.user import User
 from app.utils.file_utils import upload_file_helper  # 新增：导入 OSS 上传工具
+from app.utils.credits import check_and_deduct_credits  # ✅ 新增：导入扣除工具
+from app.utils.auth import get_current_user  # ✅ 新增：导入获取用户工具
 
 router = APIRouter(prefix="/video", tags=["视频生成"])
 
@@ -24,6 +26,7 @@ async def generate_video(
     duration: int = Form(5),
     mode: str = Form("std"),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),  # ✅ 新增：从token获取用户
 ):
     """
     图生视频
@@ -58,6 +61,17 @@ async def generate_video(
         db.add(user)
         db.commit()
         print(f"[DEBUG] 自动创建了用户: id={user.id}")
+    
+    # ✅ 新增：根据时长确定消耗点数
+    if duration == 5:
+        cost = 10
+    elif duration == 10:
+        cost = 15
+    else:
+        cost = 10  # 默认5秒的消耗
+    
+    # ✅ 新增：检查并扣除灵境点
+    check_and_deduct_credits(user, db, cost, f"{duration}秒视频生成")
     
     # ========== 5. 调用视频生成服务 ==========
     task = await VideoService.generate_video(db, user_id, request_data)
