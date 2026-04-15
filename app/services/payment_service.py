@@ -7,12 +7,14 @@ from alipay import AliPay
 class PaymentService:
 
     def __init__(self):
-        app_private_key_string = os.environ.get("ALIPAY_PRIVATE_KEY", "")
-        alipay_public_key_string = os.environ.get("ALIPAY_PUBLIC_KEY", "")
+        # 从文件读取私钥（避免环境变量换行问题）
+        private_key_path = "/app/alipay_private_key.pem"
+        public_key_path = "/app/alipay_public_key.pem"
         
-        # 将字符串中的 \n 还原为真实换行符
-        app_private_key_string = app_private_key_string.replace('\\n', '\n')
-        alipay_public_key_string = alipay_public_key_string.replace('\\n', '\n')
+        with open(private_key_path, 'r') as f:
+            app_private_key_string = f.read()
+        with open(public_key_path, 'r') as f:
+            alipay_public_key_string = f.read()
 
         self.alipay = AliPay(
             appid=os.environ.get("ALIPAY_APP_ID"),
