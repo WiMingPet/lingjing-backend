@@ -10,8 +10,9 @@ from app.database import get_db
 from app.schemas.task import APIResponse, TaskResponse
 from app.services.size_service import SizeService
 from app.models.user import User
-from app.utils.file_utils import upload_file_helper  # 新增：导入 OSS 上传工具
-from app.utils.credits import check_and_deduct_credits  # ✅ 新增：导入扣除工具
+from app.utils.file_utils import upload_file_helper
+from app.utils.credits import check_and_deduct_credits
+from app.utils.auth import get_current_user  # ✅ 添加这一行
 
 router = APIRouter(prefix="/size", tags=["尺码推荐"])
 
