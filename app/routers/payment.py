@@ -81,27 +81,36 @@ async def alipay_notify(request: Request, db: Session = Depends(get_db)):
     data = dict(form_data)
     
     logger.info(f"收到支付宝回调: {data}")
+    logger.info(f"trade_status: {data.get('trade_status')}")
+    logger.info(f"out_trade_no: {data.get('out_trade_no')}")
     
-    # ✅ 关键修改：复用 PaymentService 中的支付宝客户端
+    # 使用 PaymentService 中的支付宝客户端
     service = PaymentService()
     alipay = service.alipay
     
     # 验证签名
     sign = data.pop('sign', None)
+    logger.info(f"签名验证中...")
     if not alipay.verify(data, sign):
         logger.error("签名验证失败")
         return "fail"
+    
+    logger.info("签名验证成功")
     
     # 检查交易状态
     trade_status = data.get('trade_status')
     out_trade_no = data.get('out_trade_no')
     
     if trade_status == 'TRADE_SUCCESS':
+        logger.info(f"订单 {out_trade_no} 支付成功，开始处理")
+        
         # 查询订单
         order = db.query(RechargeOrder).filter(RechargeOrder.order_no == out_trade_no).first()
         if not order:
             logger.error(f"订单 {out_trade_no} 不存在")
             return "fail"
+        
+        logger.info(f"订单状态: {order.status}")
         
         if order.status == 'paid':
             logger.info(f"订单 {out_trade_no} 已处理过")
@@ -110,8 +119,9 @@ async def alipay_notify(request: Request, db: Session = Depends(get_db)):
         # 更新用户灵境点
         user = db.query(User).filter(User.id == order.user_id).first()
         if user:
+            old_credits = user.credits
             user.credits += order.credits
-            logger.info(f"用户 {user.id} 灵境点增加 {order.credits}，当前余额: {user.credits}")
+            logger.info(f"用户 {user.id} 灵境点从 {old_credits} 增加到 {user.credits}")
         else:
             logger.error(f"用户 {order.user_id} 不存在")
             return "fail"
@@ -122,5 +132,7 @@ async def alipay_notify(request: Request, db: Session = Depends(get_db)):
         db.commit()
         
         logger.info(f"订单 {out_trade_no} 处理完成")
+    else:
+        logger.info(f"交易状态不是 TRADE_SUCCESS，而是 {trade_status}")
         
     return "success"
