@@ -23,9 +23,8 @@ def create_order(
     """Create Alipay WAP payment order"""
     service = PaymentService()
     
-    # 先生成订单号
     out_trade_no = service.generate_order_no()
-    # 保存订单到数据库
+    
     order = RechargeOrder(
         order_no=out_trade_no,
         user_id=current_user.id,
@@ -82,7 +81,7 @@ async def alipay_notify(request: Request, db: Session = Depends(get_db)):
     
     logger.info(f"收到支付宝回调: {data}")
     
-    # 使用 PaymentService 中的支付宝客户端（已经正确初始化）
+    # 使用 PaymentService 中的支付宝客户端
     service = PaymentService()
     alipay = service.alipay
     
@@ -97,7 +96,6 @@ async def alipay_notify(request: Request, db: Session = Depends(get_db)):
     out_trade_no = data.get('out_trade_no')
     
     if trade_status == 'TRADE_SUCCESS':
-        # 查询订单
         order = db.query(RechargeOrder).filter(RechargeOrder.order_no == out_trade_no).first()
         if not order:
             logger.error(f"订单 {out_trade_no} 不存在")
@@ -107,7 +105,6 @@ async def alipay_notify(request: Request, db: Session = Depends(get_db)):
             logger.info(f"订单 {out_trade_no} 已处理过")
             return "success"
         
-        # 更新用户灵境点
         user = db.query(User).filter(User.id == order.user_id).first()
         if user:
             user.credits += order.credits
@@ -116,7 +113,6 @@ async def alipay_notify(request: Request, db: Session = Depends(get_db)):
             logger.error(f"用户 {order.user_id} 不存在")
             return "fail"
         
-        # 更新订单状态
         order.status = 'paid'
         order.paid_at = datetime.utcnow()
         db.commit()
