@@ -76,22 +76,15 @@ def get_order_status(
 @router.post("/notify")
 async def alipay_notify(request: Request, db: Session = Depends(get_db)):
     """支付宝异步通知回调"""
-    from alipay import AliPay
     
     form_data = await request.form()
     data = dict(form_data)
     
     logger.info(f"收到支付宝回调: {data}")
     
-    # 初始化支付宝客户端
-    alipay = AliPay(
-        appid=os.environ.get("ALIPAY_APP_ID"),
-        app_notify_url=os.environ.get("ALIPAY_NOTIFY_URL"),
-        app_private_key_string=os.environ.get("ALIPAY_PRIVATE_KEY", "").replace('\\n', '\n'),
-        alipay_public_key_string=os.environ.get("ALIPAY_PUBLIC_KEY", "").replace('\\n', '\n'),
-        sign_type="RSA2",
-        debug=False
-    )
+    # 使用 PaymentService 中的支付宝客户端（已经正确初始化）
+    service = PaymentService()
+    alipay = service.alipay
     
     # 验证签名
     sign = data.pop('sign', None)
