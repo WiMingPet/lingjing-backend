@@ -155,9 +155,11 @@ async def alipay_notify(request: Request, db: Session = Depends(get_db)):
         
     return "success"
 
-@router.post("/create_order_html", response_class=HTMLResponse)
+@router.get("/create_order_html", response_class=HTMLResponse)
 def create_order_html(
-    request: CreateOrderRequest,
+    package_id: int,
+    amount: float,
+    credits: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -167,8 +169,8 @@ def create_order_html(
     order = RechargeOrder(
         order_no=out_trade_no,
         user_id=current_user.id,
-        amount=request.amount,
-        credits=request.credits,
+        amount=amount,
+        credits=credits,
         status="pending"
     )
     db.add(order)
@@ -176,9 +178,9 @@ def create_order_html(
     
     pay_url = service.create_wap_pay_order(
         out_trade_no=out_trade_no,
-        total_amount=request.amount,
-        subject=f"Credits Recharge - {request.credits} credits",
-        body=f"Purchase {request.credits} credits",
+        total_amount=amount,
+        subject=f"Credits Recharge - {credits} credits",
+        body=f"Purchase {credits} credits",
         return_url=os.environ.get("ALIPAY_RETURN_URL", "https://lingji.preview.aliyun-zeabur.cn/payment/result")
     )
     
