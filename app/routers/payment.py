@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, Request
+from sqlalchemy.orm import Session
 from datetime import datetime
 from app.database import get_db
 from app.schemas.payment import CreateOrderRequest
@@ -17,9 +19,11 @@ logger = logging.getLogger(__name__)
 @router.post("/create_order")
 def create_order(
     request: CreateOrderRequest,
+    http_request: Request,  # 用于获取 User-Agent
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    """创建支付宝支付订单（自动选择支付方式）"""
     service = PaymentService()
     out_trade_no = service.generate_order_no()
     
@@ -34,23 +38,37 @@ def create_order(
     db.add(order)
     db.commit()
     
-    # 获取设备类型（从 User-Agent 判断）
-    # 这里简化处理，前端传递 device 参数
+    # 判断设备类型
+    user_agent = http_request.headers.get("user-agent", "").lower()
+    is_mobile = any(x in user_agent for x in ["mobile", "android", "iphone", "ipad", "phone"])
     
-    # 生成二维码（电脑端使用）
-    qr_code = service.create_qr_code_order(
-        out_trade_no=out_trade_no,
-        total_amount=request.amount,
-        subject=f"Credits Recharge - {request.credits} credits",
-        body=f"Purchase {request.credits} credits"
-    )
+    logger.info(f"User-Agent: {user_agent[:100]}, is_mobile: {is_mobile}")
     
-    return {
-        "order_id": out_trade_no,
-        "qr_code": qr_code,  # 二维码内容
-        "amount": request.amount,
-        "type": "qr_code"
-    }
+    if is_mobile:
+        # 手机端：使用 WAP 支付（跳转支付宝）
+        pay_url = service.create_wap_pay_order(
+            out_trade_no=out_trade_no,
+            total_amount=request.amount,
+            subject=f"Credits Recharge - {request.credits} credits",
+            body=f"Purchase {request.credits} credits",
+            return_url=os.environ.get("ALIPAY_RETURN_URL", "https://lingji.preview.aliyun-zeabur.cn/payment/result")
+        )
+        return {
+            "pay_url": pay_url,
+            "type": "wap"
+        }
+    else:
+        # 电脑端：使用当面付（二维码）
+        qr_code = service.create_qr_code_order(
+            out_trade_no=out_trade_no,
+            total_amount=request.amount,
+            subject=f"Credits Recharge - {request.credits} credits",
+            body=f"Purchase {request.credits} credits"
+        )
+        return {
+            "qr_code": qr_code,
+            "type": "qr_code"
+        }
 
 @router.get("/order_status/{order_id}")
 def get_order_status(
