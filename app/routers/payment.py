@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 @router.post("/create_order")
 def create_order(
     request: CreateOrderRequest,
-    http_request: Request,  # 用于获取 User-Agent
+    http_request: Request,  # 这个参数必须有
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -41,8 +41,6 @@ def create_order(
     # 判断设备类型
     user_agent = http_request.headers.get("user-agent", "").lower()
     is_mobile = any(x in user_agent for x in ["mobile", "android", "iphone", "ipad", "phone"])
-    
-    logger.info(f"User-Agent: {user_agent[:100]}, is_mobile: {is_mobile}")
     
     if is_mobile:
         # 手机端：使用 WAP 支付（跳转支付宝）
