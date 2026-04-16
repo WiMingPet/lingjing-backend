@@ -12,6 +12,7 @@ from app.schemas.user import (
     UserResponse,
     RegisterRequest,
     VerifyCodeRequest
+    ResetPasswordRequest  # 添加这一行
 )
 from app.schemas.task import APIResponse
 from app.services.auth_service import AuthService
@@ -273,9 +274,7 @@ def get_current_user(
 
 @router.post("/reset_password", response_model=APIResponse)
 def reset_password(
-    phone: str,
-    code: str,
-    new_password: str,
+    request_data: ResetPasswordRequest,
     db: Session = Depends(get_db)
 ):
     """
@@ -287,7 +286,11 @@ def reset_password(
     
     pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
     
-    # 1. 验证验证码
+    phone = request_data.phone
+    code = request_data.code
+    new_password = request_data.new_password
+    
+    # 验证验证码
     r = redis.Redis(
         host=os.environ.get('REDIS_HOST', 'localhost'),
         port=int(os.environ.get('REDIS_PORT', 6379)),
@@ -301,16 +304,16 @@ def reset_password(
     if stored_code != code:
         raise HTTPException(status_code=400, detail="验证码错误")
     
-    # 2. 查找用户
+    # 查找用户
     user = db.query(User).filter(User.phone == phone).first()
     if not user:
         raise HTTPException(status_code=400, detail="用户不存在")
     
-    # 3. 重置密码
+    # 重置密码
     user.password_hash = pwd_context.hash(new_password)
     db.commit()
     
-    # 4. 删除验证码
+    # 删除验证码
     r.delete(f"sms_code:{phone}")
     
     return APIResponse(

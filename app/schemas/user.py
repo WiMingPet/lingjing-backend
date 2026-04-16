@@ -47,3 +47,8 @@ class RegisterRequest(BaseModel):
 class VerifyCodeRequest(BaseModel):
     phone: str = Field(..., pattern=r"^1[3-9]\d{9}$")
     code: str = Field(..., min_length=6, max_length=6)
+
+class ResetPasswordRequest(BaseModel):
+    phone: str = Field(..., pattern=r"^1[3-9]\d{9}$")
+    code: str = Field(..., min_length=6, max_length=6)
+    new_password: str = Field(..., min_length=6)
