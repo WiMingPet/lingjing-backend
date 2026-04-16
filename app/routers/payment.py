@@ -1,159 +1,219 @@
-from fastapi import APIRouter, Depends, Request
-from sqlalchemy.orm import Session
-from fastapi import APIRouter, Depends, Request
-from sqlalchemy.orm import Session
+import logging
 from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import HTMLResponse, PlainTextResponse
+from sqlalchemy.orm import Session
+
 from app.database import get_db
-from app.schemas.payment import CreateOrderRequest
+from app.models.order import RechargeOrder
 from app.models.user import User
+from app.schemas.payment import (
+    CreateOrderRequest,
+    MobileCreateOrderResponse,
+    OrderStatusResponse,
+    PcCreateOrderResponse,
+)
 from app.services.payment_service import PaymentService
 from app.utils.auth import get_current_user
-from app.models.order import RechargeOrder
-import logging
-import os
-from fastapi.responses import HTMLResponse
+
 
 router = APIRouter(prefix="/payment", tags=["payment"])
 logger = logging.getLogger(__name__)
 
 
-@router.post("/create_order")
-def create_order(
+def _create_recharge_order(
+    db: Session,
+    current_user: User,
     request: CreateOrderRequest,
-    http_request: Request,  # 这个参数必须有
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """创建支付宝支付订单（自动选择支付方式）"""
-    service = PaymentService()
-    out_trade_no = service.generate_order_no()
-    
-    # 保存订单
+    order_no: str,
+) -> RechargeOrder:
     order = RechargeOrder(
-        order_no=out_trade_no,
+        order_no=order_no,
         user_id=current_user.id,
-        amount=request.amount,
+        amount=float(request.amount),
         credits=request.credits,
-        status="pending"
+        status="pending",
     )
     db.add(order)
     db.commit()
-    
-    # 判断设备类型
-    user_agent = http_request.headers.get("user-agent", "").lower()
-    is_mobile = any(x in user_agent for x in ["mobile", "android", "iphone", "ipad", "phone"])
-    
-    if is_mobile:
-        # 手机端：使用 WAP 支付（跳转支付宝）
-        pay_url = service.create_wap_pay_order(
-            out_trade_no=out_trade_no,
-            total_amount=request.amount,
-            subject=f"Credits Recharge - {request.credits} credits",
-            body=f"Purchase {request.credits} credits",
-            return_url=os.environ.get("ALIPAY_RETURN_URL", "https://lingji.preview.aliyun-zeabur.cn/payment/result")
-        )
-        return {
-            "pay_url": pay_url,
-            "type": "wap"
-        }
-    else:
-        # 电脑端：使用当面付（二维码）
-        qr_code = service.create_qr_code_order(
-            out_trade_no=out_trade_no,
-            total_amount=request.amount,
-            subject=f"Credits Recharge - {request.credits} credits",
-            body=f"Purchase {request.credits} credits"
-        )
-        return {
-            "qr_code": qr_code,
-            "type": "qr_code"
-        }
-
-@router.get("/order_status/{order_id}")
-def get_order_status(
-    order_id: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Query order payment status"""
-    service = PaymentService()
-    result = service.query_order(order_id)
-    
-    if result.get("code") == "10000":
-        trade_status = result.get("trade_status")
-        if trade_status == "TRADE_SUCCESS":
-            return {"status": "paid", "credits": 0}
-        elif trade_status == "WAIT_BUYER_PAY":
-            return {"status": "pending"}
-        elif trade_status == "TRADE_CLOSED":
-            return {"status": "closed"}
-    
-    return {"status": "pending"}
+    db.refresh(order)
+    return order
 
 
-@router.post("/notify")
-async def alipay_notify(request: Request, db: Session = Depends(get_db)):
-    """支付宝异步通知回调"""
-    
-    form_data = await request.form()
-    data = dict(form_data)
-    
-    logger.info(f"收到支付宝回调: {data}")
-    logger.info(f"trade_status: {data.get('trade_status')}")
-    logger.info(f"out_trade_no: {data.get('out_trade_no')}")
-    
-    # 使用 PaymentService 中的支付宝客户端
-    service = PaymentService()
-    alipay = service.alipay
-    
-    # 验证签名
-    sign = data.pop('sign', None)
-    logger.info(f"签名验证中...")
-    if not alipay.verify(data, sign):
-        logger.error("签名验证失败")
-        return "fail"
-    
-    logger.info("签名验证成功")
-    
-    # 检查交易状态
-    trade_status = data.get('trade_status')
-    out_trade_no = data.get('out_trade_no')
-    
-    if trade_status == 'TRADE_SUCCESS':
-        logger.info(f"订单 {out_trade_no} 支付成功，开始处理")
-        
-        # 查询订单
-        order = db.query(RechargeOrder).filter(RechargeOrder.order_no == out_trade_no).first()
-        if not order:
-            logger.error(f"订单 {out_trade_no} 不存在")
-            return "fail"
-        
-        logger.info(f"订单状态: {order.status}")
-        
-        if order.status == 'paid':
-            logger.info(f"订单 {out_trade_no} 已处理过")
-            return "success"
-        
-        # 更新用户灵境点
-        user = db.query(User).filter(User.id == order.user_id).first()
-        if user:
-            old_credits = user.credits
-            user.credits += order.credits
-            logger.info(f"用户 {user.id} 灵境点从 {old_credits} 增加到 {user.credits}")
-        else:
-            logger.error(f"用户 {order.user_id} 不存在")
-            return "fail"
-        
-        # 更新订单状态
-        order.status = 'paid'
-        order.paid_at = datetime.utcnow()
+def _mark_order_paid(order: RechargeOrder, db: Session) -> RechargeOrder:
+    if order.status == "paid":
+        return order
+
+    user = db.query(User).filter(User.id == order.user_id).first()
+    if not user:
+        raise HTTPException(status_code=500, detail="订单关联用户不存在")
+
+    user.credits += order.credits
+    order.status = "paid"
+    order.paid_at = order.paid_at or datetime.utcnow()
+    db.commit()
+    db.refresh(order)
+    return order
+
+
+def _sync_order_status(order: RechargeOrder, service: PaymentService, db: Session) -> RechargeOrder:
+    if order.status == "paid":
+        return order
+
+    result = service.query_order(order.order_no)
+    if result.get("code") != "10000":
+        return order
+
+    trade_status = result.get("trade_status")
+    if trade_status in {"TRADE_SUCCESS", "TRADE_FINISHED"} and order.status != "paid":
+        order = _mark_order_paid(order=order, db=db)
+    elif trade_status == "TRADE_CLOSED" and order.status == "pending":
+        order.status = "closed"
         db.commit()
-        
-        logger.info(f"订单 {out_trade_no} 处理完成")
-    else:
-        logger.info(f"交易状态不是 TRADE_SUCCESS，而是 {trade_status}")
-        
-    return "success"
+        db.refresh(order)
+
+    return order
+
+
+@router.post("/alipay/pc/create-order", response_model=PcCreateOrderResponse)
+def create_pc_order(
+    request: CreateOrderRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """电脑端创建支付宝当面付二维码订单。"""
+    service = PaymentService()
+    order_no = service.generate_order_no()
+    order = _create_recharge_order(db=db, current_user=current_user, request=request, order_no=order_no)
+    qr_code = service.create_pc_qr_order(
+        out_trade_no=order.order_no,
+        total_amount=request.amount,
+        subject=service.build_subject(request.credits),
+        body=service.build_body(request.credits),
+    )
+    return PcCreateOrderResponse(
+        order_no=order.order_no,
+        amount=request.amount,
+        credits=request.credits,
+        status=order.status,
+        channel="pc_qr",
+        qr_code=qr_code,
+    )
+
+
+@router.post("/alipay/mobile/create-order", response_model=MobileCreateOrderResponse)
+def create_mobile_order(
+    request: CreateOrderRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """手机端创建支付宝手机网站支付订单。"""
+    service = PaymentService()
+    order_no = service.generate_order_no()
+    order = _create_recharge_order(db=db, current_user=current_user, request=request, order_no=order_no)
+    pay_url = service.create_mobile_wap_order(
+        out_trade_no=order.order_no,
+        total_amount=request.amount,
+        subject=service.build_subject(request.credits),
+        body=service.build_body(request.credits),
+    )
+    return MobileCreateOrderResponse(
+        order_no=order.order_no,
+        amount=request.amount,
+        credits=request.credits,
+        status=order.status,
+        channel="mobile_wap",
+        pay_url=pay_url,
+    )
+
+
+@router.post("/create_order")
+def create_order_by_user_agent(
+    request: CreateOrderRequest,
+    http_request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """兼容旧接口，按 User-Agent 自动选择 PC 或手机支付。"""
+    user_agent = http_request.headers.get("user-agent", "").lower()
+    is_mobile = any(keyword in user_agent for keyword in ["mobile", "android", "iphone", "ipad", "phone"])
+    if is_mobile:
+        return create_mobile_order(request=request, db=db, current_user=current_user)
+    return create_pc_order(request=request, db=db, current_user=current_user)
+
+
+@router.get("/order_status/{order_no}", response_model=OrderStatusResponse)
+def get_order_status(
+    order_no: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    order = (
+        db.query(RechargeOrder)
+        .filter(RechargeOrder.order_no == order_no, RechargeOrder.user_id == current_user.id)
+        .first()
+    )
+    if not order:
+        raise HTTPException(status_code=404, detail="订单不存在")
+
+    service = PaymentService()
+    order = _sync_order_status(order=order, service=service, db=db)
+    return OrderStatusResponse(
+        order_no=order.order_no,
+        status=order.status,
+        amount=order.amount,
+        credits=order.credits,
+        paid_at=order.paid_at.isoformat() if order.paid_at else None,
+    )
+
+
+@router.post("/notify", response_class=PlainTextResponse)
+async def alipay_notify(request: Request, db: Session = Depends(get_db)):
+    """支付宝异步通知回调。"""
+    service = PaymentService()
+    form_data = await request.form()
+    payload = {key: value for key, value in form_data.items()}
+    sign = payload.pop("sign", None)
+    payload.pop("sign_type", None)
+
+    if not service.verify_notify(payload, sign):
+        logger.warning("支付宝回调验签失败")
+        return PlainTextResponse("fail")
+
+    out_trade_no = str(payload.get("out_trade_no", "")).strip()
+    if not out_trade_no:
+        logger.warning("支付宝回调缺少 out_trade_no")
+        return PlainTextResponse("fail")
+
+    order = db.query(RechargeOrder).filter(RechargeOrder.order_no == out_trade_no).first()
+    if not order:
+        logger.warning("支付宝回调订单不存在: %s", out_trade_no)
+        return PlainTextResponse("fail")
+
+    try:
+        service.validate_notify_payload(payload=payload, expected_amount=order.amount)
+    except ValueError as exc:
+        logger.warning("支付宝回调业务校验失败: %s", exc)
+        return PlainTextResponse("fail")
+
+    trade_status = str(payload.get("trade_status", "")).strip()
+    if trade_status in {"TRADE_SUCCESS", "TRADE_FINISHED"}:
+        if order.status != "paid":
+            try:
+                _mark_order_paid(order=order, db=db)
+            except HTTPException:
+                logger.error("支付成功但用户不存在: user_id=%s", order.user_id)
+                return PlainTextResponse("fail")
+            logger.info("订单支付成功并已加点: %s", out_trade_no)
+        return PlainTextResponse("success")
+
+    if trade_status == "TRADE_CLOSED" and order.status == "pending":
+        order.status = "closed"
+        db.commit()
+
+    return PlainTextResponse("success")
+
 
 @router.get("/create_order_html", response_class=HTMLResponse)
 def create_order_html(
@@ -161,29 +221,11 @@ def create_order_html(
     amount: float,
     credits: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
-    service = PaymentService()
-    out_trade_no = service.generate_order_no()
-    
-    order = RechargeOrder(
-        order_no=out_trade_no,
-        user_id=current_user.id,
-        amount=amount,
-        credits=credits,
-        status="pending"
-    )
-    db.add(order)
-    db.commit()
-    
-    pay_url = service.create_wap_pay_order(
-        out_trade_no=out_trade_no,
-        total_amount=amount,
-        subject=f"Credits Recharge - {credits} credits",
-        body=f"Purchase {credits} credits",
-        return_url=os.environ.get("ALIPAY_RETURN_URL", "https://lingji.preview.aliyun-zeabur.cn/payment/result")
-    )
-    
+    request = CreateOrderRequest(package_id=package_id, amount=amount, credits=credits)
+    response = create_mobile_order(request=request, db=db, current_user=current_user)
+
     html_content = f"""
     <!DOCTYPE html>
     <html>
@@ -192,14 +234,11 @@ def create_order_html(
         <title>正在跳转支付宝...</title>
     </head>
     <body>
-        <form id="alipayForm" action="{pay_url}" method="POST">
-            <input type="submit" value="跳转支付宝支付" style="display:none">
-        </form>
         <script>
-            document.getElementById('alipayForm').submit();
+            window.location.replace("{response.pay_url}");
         </script>
         <p>正在跳转支付宝，请稍候...</p>
-        <p>如未跳转，请<a href="{pay_url}">点击这里</a>。</p>
+        <p>如未跳转，请<a href="{response.pay_url}">点击这里继续支付</a>。</p>
     </body>
     </html>
     """
