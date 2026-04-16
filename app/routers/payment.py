@@ -11,6 +11,7 @@ from app.utils.auth import get_current_user
 from app.models.order import RechargeOrder
 import logging
 import os
+from fastapi.responses import HTMLResponse
 
 router = APIRouter(prefix="/payment", tags=["payment"])
 logger = logging.getLogger(__name__)
@@ -153,3 +154,51 @@ async def alipay_notify(request: Request, db: Session = Depends(get_db)):
         logger.info(f"交易状态不是 TRADE_SUCCESS，而是 {trade_status}")
         
     return "success"
+
+@router.post("/create_order_html", response_class=HTMLResponse)
+def create_order_html(
+    request: CreateOrderRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    service = PaymentService()
+    out_trade_no = service.generate_order_no()
+    
+    order = RechargeOrder(
+        order_no=out_trade_no,
+        user_id=current_user.id,
+        amount=request.amount,
+        credits=request.credits,
+        status="pending"
+    )
+    db.add(order)
+    db.commit()
+    
+    pay_url = service.create_wap_pay_order(
+        out_trade_no=out_trade_no,
+        total_amount=request.amount,
+        subject=f"Credits Recharge - {request.credits} credits",
+        body=f"Purchase {request.credits} credits",
+        return_url=os.environ.get("ALIPAY_RETURN_URL", "https://lingji.preview.aliyun-zeabur.cn/payment/result")
+    )
+    
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>正在跳转支付宝...</title>
+    </head>
+    <body>
+        <form id="alipayForm" action="{pay_url}" method="POST">
+            <input type="submit" value="跳转支付宝支付" style="display:none">
+        </form>
+        <script>
+            document.getElementById('alipayForm').submit();
+        </script>
+        <p>正在跳转支付宝，请稍候...</p>
+        <p>如未跳转，请<a href="{pay_url}">点击这里</a>。</p>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
