@@ -92,6 +92,8 @@ def create_pc_order(
         subject=service.build_subject(request.credits),
         body=service.build_body(request.credits),
     )
+    # 添加日志，确认生成了二维码
+    logger.info(f"PC 订单 {order.order_no} 生成二维码，长度: {len(qr_code) if qr_code else 0}")
     return PcCreateOrderResponse(
         order_no=order.order_no,
         amount=request.amount,
@@ -137,10 +139,22 @@ def create_order_by_user_agent(
 ):
     """兼容旧接口，按 User-Agent 自动选择 PC 或手机支付。"""
     user_agent = http_request.headers.get("user-agent", "").lower()
-    is_mobile = any(keyword in user_agent for keyword in ["mobile", "android", "iphone", "ipad", "phone"])
-    if is_mobile:
+    
+    # 定义更严谨的手机设备关键词
+    mobile_keywords = ["mobile", "android", "iphone", "ipad", "phone", "blackberry", "windows phone"]
+    is_mobile = any(keyword in user_agent for keyword in mobile_keywords)
+    
+    # 额外检查：如果用户代理包含 "windows" 或 "mac" 且没有移动设备关键词，则判定为电脑
+    is_pc = ("windows" in user_agent or "mac" in user_agent or "linux" in user_agent) and not is_mobile
+    
+    logger.info(f"User-Agent: {user_agent[:200]}, is_mobile: {is_mobile}, is_pc: {is_pc}")
+    
+    if is_pc:
+        # 电脑端：调用 PC 支付接口
+        return create_pc_order(request=request, db=db, current_user=current_user)
+    else:
+        # 手机端：调用手机支付接口
         return create_mobile_order(request=request, db=db, current_user=current_user)
-    return create_pc_order(request=request, db=db, current_user=current_user)
 
 
 @router.get("/order_status/{order_no}", response_model=OrderStatusResponse)
