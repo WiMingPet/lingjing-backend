@@ -246,7 +246,7 @@ def register(
 @router.get("/me", response_model=APIResponse)
 def get_current_user(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user_from_token)  # 需要导入这个函数
+    current_user: User = Depends(get_current_user_from_token)
 ):
     """获取当前用户信息"""
     if not current_user:
@@ -268,4 +268,52 @@ def get_current_user(
             "is_verified": current_user.is_verified,
             "created_at": current_user.created_at.isoformat() if current_user.created_at else None
         }
+    )
+
+
+@router.post("/reset_password", response_model=APIResponse)
+def reset_password(
+    phone: str,
+    code: str,
+    new_password: str,
+    db: Session = Depends(get_db)
+):
+    """
+    找回密码 - 通过验证码重置密码
+    """
+    import redis
+    import os
+    from passlib.context import CryptContext
+    
+    pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
+    
+    # 1. 验证验证码
+    r = redis.Redis(
+        host=os.environ.get('REDIS_HOST', 'localhost'),
+        port=int(os.environ.get('REDIS_PORT', 6379)),
+        decode_responses=True
+    )
+    stored_code = r.get(f"sms_code:{phone}")
+    
+    if not stored_code:
+        raise HTTPException(status_code=400, detail="验证码已过期，请重新获取")
+    
+    if stored_code != code:
+        raise HTTPException(status_code=400, detail="验证码错误")
+    
+    # 2. 查找用户
+    user = db.query(User).filter(User.phone == phone).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="用户不存在")
+    
+    # 3. 重置密码
+    user.password_hash = pwd_context.hash(new_password)
+    db.commit()
+    
+    # 4. 删除验证码
+    r.delete(f"sms_code:{phone}")
+    
+    return APIResponse(
+        code=200,
+        message="密码重置成功"
     )

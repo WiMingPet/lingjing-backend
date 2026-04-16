@@ -20,12 +20,10 @@ def create_order(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Create Alipay WAP payment order"""
     service = PaymentService()
-    
     out_trade_no = service.generate_order_no()
     
-    # 保存订单到数据库
+    # 保存订单
     order = RechargeOrder(
         order_no=out_trade_no,
         user_id=current_user.id,
@@ -36,20 +34,23 @@ def create_order(
     db.add(order)
     db.commit()
     
-    pay_url = service.create_wap_pay_order(
+    # 获取设备类型（从 User-Agent 判断）
+    # 这里简化处理，前端传递 device 参数
+    
+    # 生成二维码（电脑端使用）
+    qr_code = service.create_qr_code_order(
         out_trade_no=out_trade_no,
         total_amount=request.amount,
         subject=f"Credits Recharge - {request.credits} credits",
-        body=f"Purchase {request.credits} credits",
-        return_url=os.environ.get("ALIPAY_RETURN_URL", "https://lingji.preview.aliyun-zeabur.cn/payment/result")
+        body=f"Purchase {request.credits} credits"
     )
-
+    
     return {
         "order_id": out_trade_no,
-        "pay_url": pay_url,
-        "amount": request.amount
+        "qr_code": qr_code,  # 二维码内容
+        "amount": request.amount,
+        "type": "qr_code"
     }
-
 
 @router.get("/order_status/{order_id}")
 def get_order_status(
