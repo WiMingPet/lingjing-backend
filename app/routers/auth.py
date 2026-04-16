@@ -11,7 +11,7 @@ from app.schemas.user import (
     TokenResponse,
     UserResponse,
     RegisterRequest,
-    VerifyCodeRequest
+    VerifyCodeRequest,
     ResetPasswordRequest  # 添加这一行
 )
 from app.schemas.task import APIResponse
