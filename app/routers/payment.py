@@ -15,9 +15,13 @@ from app.utils.auth import get_current_user
 router = APIRouter(prefix="/payment", tags=["payment"])
 logger = logging.getLogger(__name__)
 
-
 def _is_mobile_client(user_agent: str) -> bool:
+    import logging
+    logger = logging.getLogger(__name__)
+    
     user_agent = user_agent.lower()
+    logger.info(f"=== 设备检测 === User-Agent: {user_agent[:200]}")
+    
     # 电脑关键词
     pc_keywords = ["windows", "mac", "linux", "cros"]
     # 手机关键词
@@ -26,10 +30,13 @@ def _is_mobile_client(user_agent: str) -> bool:
     # 如果包含电脑关键词，直接判定为电脑端
     is_pc = any(keyword in user_agent for keyword in pc_keywords)
     if is_pc:
+        logger.info("=== 设备检测 === 判定为电脑端")
         return False
     
     # 否则根据手机关键词判断
-    return any(keyword in user_agent for keyword in mobile_keywords)
+    is_mobile = any(keyword in user_agent for keyword in mobile_keywords)
+    logger.info(f"=== 设备检测 === 判定为手机端: {is_mobile}")
+    return is_mobile
 
 
 @router.post("/create_order", response_model=CreateOrderResponse)
