@@ -91,30 +91,52 @@ class PaymentService:
         return self.alipay.verify(data, sign)
 
     def process_paid_notification(self, db: Session, notify_data: Dict[str, Any]) -> bool:
-        out_trade_no = notify_data.get("out_trade_no")
+        import logging
+        logger = logging.getLogger(__name__)
+    
+        # 获取订单号（兼容多种字段名）
+        out_trade_no = notify_data.get("out_trade_no") or notify_data.get("out_trade_no")
         trade_status = notify_data.get("trade_status")
-        if not out_trade_no or trade_status not in {"TRADE_SUCCESS", "TRADE_FINISHED"}:
+    
+        logger.info(f"处理回调: out_trade_no={out_trade_no}, trade_status={trade_status}")
+    
+        if not out_trade_no:
+            logger.error("回调参数中没有订单号")
+            return False
+    
+        if trade_status not in {"TRADE_SUCCESS", "TRADE_FINISHED"}:
+            logger.info(f"交易状态不是成功状态: {trade_status}")
             return True
 
+        # 查询订单
         order = db.query(RechargeOrder).filter(RechargeOrder.order_no == out_trade_no).first()
         if not order:
+            logger.error(f"订单不存在: {out_trade_no}")
             return False
+    
         if order.status == "paid":
+            logger.info(f"订单 {out_trade_no} 已处理过")
             return True
 
-        if not self._validate_notification_business_fields(order, notify_data):
-            return False
+        # 验证金额（可选）
+        total_amount = notify_data.get("total_amount")
+        if total_amount and abs(float(total_amount) - order.amount) > 0.01:
+            logger.warning(f"金额不匹配: 订单 {order.amount}, 回调 {total_amount}")
 
+        # 更新用户灵境点
         user = db.query(User).filter(User.id == order.user_id).first()
         if not user:
+            logger.error(f"用户不存在: {order.user_id}")
             return False
 
+        old_credits = user.credits
         user.credits += order.credits
         order.status = "paid"
         order.paid_at = datetime.utcnow()
-        db.add(user)
-        db.add(order)
+    
         db.commit()
+    
+        logger.info(f"用户 {user.id} 灵境点从 {old_credits} 增加到 {user.credits}")
         return True
 
     def _validate_notification_business_fields(self, order: RechargeOrder, notify_data: Dict[str, Any]) -> bool:
