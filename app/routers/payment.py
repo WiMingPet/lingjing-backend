@@ -17,9 +17,19 @@ logger = logging.getLogger(__name__)
 
 
 def _is_mobile_client(user_agent: str) -> bool:
-    ua = (user_agent or "").lower()
+    user_agent = user_agent.lower()
+    # 电脑关键词
+    pc_keywords = ["windows", "mac", "linux", "cros"]
+    # 手机关键词
     mobile_keywords = ["mobile", "android", "iphone", "ipad", "phone"]
-    return any(keyword in ua for keyword in mobile_keywords)
+    
+    # 如果包含电脑关键词，直接判定为电脑端
+    is_pc = any(keyword in user_agent for keyword in pc_keywords)
+    if is_pc:
+        return False
+    
+    # 否则根据手机关键词判断
+    return any(keyword in user_agent for keyword in mobile_keywords)
 
 
 @router.post("/create_order", response_model=CreateOrderResponse)
