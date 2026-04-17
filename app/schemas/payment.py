@@ -1,38 +1,34 @@
 from decimal import Decimal
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class CreateOrderRequest(BaseModel):
-    package_id: Optional[int] = Field(default=None, description="充值套餐 ID")
-    amount: Decimal = Field(..., gt=0, decimal_places=2, description="支付金额，单位元")
+    package_id: int = Field(..., description="充值套餐ID")
+    amount: Decimal = Field(..., gt=0, description="支付金额，单位元")
     credits: int = Field(..., gt=0, description="充值后增加的灵境点")
+    channel: Optional[Literal["pc_qr", "mobile_wap"]] = Field(
+        default=None,
+        description="可选支付通道。为空时由后端根据 User-Agent 自动判断",
+    )
+
+    @field_validator("amount")
+    @classmethod
+    def normalize_amount(cls, value: Decimal) -> Decimal:
+        return value.quantize(Decimal("0.01"))
 
 
-class PaymentOrderBaseResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class CreateOrderResponse(BaseModel):
     order_no: str
+    channel: Literal["pc_qr", "mobile_wap"]
+    qr_code: Optional[str] = None
+    pay_url: Optional[str] = None
     amount: Decimal
     credits: int
-    status: str
-
-
-class PcCreateOrderResponse(PaymentOrderBaseResponse):
-    channel: Literal["pc_qr"]
-    qr_code: str
-    qr_code_expires_in: int = Field(default=7200, description="二维码有效期，单位秒")
-
-
-class MobileCreateOrderResponse(PaymentOrderBaseResponse):
-    channel: Literal["mobile_wap"]
-    pay_url: str
+    status: Literal["pending", "paid", "closed"] = "pending"
 
 
 class OrderStatusResponse(BaseModel):
     order_no: str
-    status: str
-    amount: Decimal
-    credits: int
-    paid_at: Optional[str] = None
+    status: Literal["pending", "paid", "closed", "not_found"]
