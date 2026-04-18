@@ -21,7 +21,7 @@ async def generate_tryon(
     garment_image: UploadFile = File(...),
     digital_human_id: Optional[int] = Form(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),  # ✅ 新增：从token获取用户
+    current_user: User = Depends(get_current_user),
 ):
     """
     虚拟试穿
@@ -31,14 +31,11 @@ async def generate_tryon(
     - **digital_human_id**: 数字人ID（可选）
     """
     # ========== 上传用户图片到 OSS ==========
-    # 上传模特图
     model_image_url, model_image_id = await upload_file_helper(model_image, "tryon/model")
     print(f"[DEBUG] 模特图片已上传到 OSS: {model_image_url}")
     
-    # 上传服装图
     garment_image_url, garment_image_id = await upload_file_helper(garment_image, "tryon/garment")
     print(f"[DEBUG] 服装图片已上传到 OSS: {garment_image_url}")
-    # ========== OSS 上传结束 ==========
     
     request_data = {
         "model_image_url": model_image_url,
@@ -46,25 +43,11 @@ async def generate_tryon(
         "digital_human_id": digital_human_id
     }
     
-    # 临时使用固定用户 ID 1
-    user_id = 1
+    # ✅ 直接使用当前登录用户
+    user = current_user
+    user_id = current_user.id
     
-    # ========== 确保用户存在，如果不存在则自动创建 ==========
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        from datetime import datetime
-        user = User(
-            id=user_id,
-            phone=f"temp_{user_id}@example.com",
-            username=f"user_{user_id}",
-            password_hash="auto_created_temp_hash"
-        )
-        db.add(user)
-        db.commit()
-        print(f"[DEBUG] 自动创建了用户: id={user.id}")
-    # ========== 新增代码结束 ==========
-    
-    # ✅ 新增：检查并扣除 15 点灵境点
+    # ✅ 检查并扣除 15 点灵境点
     check_and_deduct_credits(user, db, 15, "虚拟试穿")
     
     task = await TryonService.generate_tryon(db, user_id, request_data)
