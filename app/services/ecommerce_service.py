@@ -15,6 +15,9 @@ from moviepy import VideoFileClip, concatenate_videoclips
 from app.schemas.ecommerce import ProductInfo, CopywritingScript
 from app.services.kling import KlingService
 
+from crawl4ai import AsyncWebCrawler, LLMConfig
+from crawl4ai.extraction_strategy import LLMExtractionStrategy
+
 logger = logging.getLogger(__name__)
 
 # 定义商品数据的结构，帮助AI准确提取
@@ -39,12 +42,10 @@ class EcommerceService:
         async with AsyncWebCrawler(api_key=self.crawl4ai_key) as crawler:
             # 设置LLM提取策略
             extraction_strategy = LLMExtractionStrategy(
-                provider="openai/gpt-4o-mini",
-                api_token=self.api_key,
+                llm_config=LLMConfig(provider="openai/gpt-4o-mini", api_token=self.api_key),
                 schema=ProductSchema.model_json_schema(),
                 instruction="从当前网页中提取商品名称、价格、描述和所有图片链接。"
             )
-            
             result = await crawler.arun(
                 url=url,
                 extraction_strategy=extraction_strategy,
