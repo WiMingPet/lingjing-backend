@@ -115,7 +115,11 @@ class EcommerceService:
         """
         调用OpenAI生成带货口播文案和分镜描述
         """
-        client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url)
+        client = AsyncOpenAI(
+            api_key=self.api_key, 
+            base_url=self.base_url,
+            timeout=60.0  # 增加超时时间到 60 秒
+        )
         
         # 设计详细的提示词
         prompt = f"""
