@@ -139,7 +139,8 @@ class KlingService:
             "model_name": "kling-v2-6",
             "prompt": prompt,
             "duration": str(duration),
-            "mode": mode
+            "mode": mode,
+            "with_audio": True  # ← 添加这一行，开启音频
         }
         
         # 如果有图片，添加 image 参数实现图生视频
