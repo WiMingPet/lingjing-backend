@@ -21,19 +21,14 @@ async def generate_video(
 ):
     """
     提交AI带货视频生成任务
-    支持两种模式：
-    1. 手动输入：提供 title, price, description, image_url
-    2. 链接解析：提供 url，自动填充信息
     """
     service = EcommerceService()
     
     try:
         # 构建商品信息
-        # 如果有 url 且没有手动输入，尝试解析
         if request.url and not request.title:
             product = await service.parse_product_url(request.url)
         else:
-            # 使用手动输入的信息
             product = ProductInfo(
                 title=request.title,
                 price=request.price,
@@ -54,7 +49,9 @@ async def generate_video(
             "data": result
         }
     except Exception as e:
-        logger.error(f"生成视频失败: {str(e)}")
+        import traceback
+        error_detail = traceback.format_exc()
+        logger.error(f"生成视频失败: {str(e)}\n{error_detail}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
