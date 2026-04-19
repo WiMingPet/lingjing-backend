@@ -10,7 +10,7 @@ from crawl4ai import AsyncWebCrawler
 from crawl4ai.extraction_strategy import LLMExtractionStrategy
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
-from moviepy.editor import VideoFileClip, concatenate_videoclips
+from moviepy import VideoFileClip, concatenate_videoclips
 
 from app.schemas.ecommerce import ProductInfo, CopywritingScript
 from app.services.kling import KlingService
