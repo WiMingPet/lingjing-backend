@@ -260,19 +260,34 @@ class KlingService:
         raise Exception(f"虚拟试穿任务超时，task_id: {task_id}")
     
     # ========== 数字人分身 ==========
-    def generate_digital_human(self, image_url: str, audio_url: str, prompt: str = None, name: str = None) -> str:
+    def generate_digital_human(self, digital_human_id: Optional[int] = None, text: str = "", image_url: str = None, audio_url: str = None, prompt: str = None, name: str = None) -> str:
         """
-        数字人分身 - 照片+音频生成视频
-        使用可灵官方 API: /v1/videos/avatar/image2video
+        数字人分身 - 照片+文字/音频生成视频
+        支持两种模式：
+        1. 提供 text：自动用 TTS 生成音频
+        2. 提供 audio_url：直接使用音频文件
         """
+        import os
+        from app.services.tts_service import tts_service
+        from app.services.oss_service import oss_service
+    
         base_url = self._get_base_url()
         url = f"{base_url}/videos/avatar/image2video"
-        
-        # 基础参数（只传必要的）
+    
+        # 如果没有提供 audio_url 但有 text，生成音频
+        if not audio_url and text:
+            audio_data = tts_service.text_to_speech(text)
+            audio_url = oss_service.upload_file(audio_data, "mp3", "digital_human/audio")
+            print(f"[DEBUG] TTS 生成音频成功: {text[:50]}...")
+    
+        if not audio_url:
+            raise Exception("请提供文字内容或音频文件")
+    
         payload = {
             "image": image_url,
             "sound_file": audio_url,
-            "mode": "std"
+            "mode": "std",
+            "with_audio": True  # 开启声音
         }
         
         # 只有当 prompt 有实际值时才添加
