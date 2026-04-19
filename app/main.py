@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from app.config import settings
 from app.database import init_db, SessionLocal
 from app.models.digital_human import DigitalHuman
-from app.routers import auth, image, video, size, tryon, digital_human, multi_angle, proxy, payment, ecommerce
+from app.routers import auth, image, video, size, tryon, digital_human, multi_angle, proxy, payment, ecommerce, upload
 
 
 @asynccontextmanager
@@ -90,6 +90,10 @@ app.include_router(payment.router, prefix="/api")
 # 注册电商带货路由（AI带货视频）
 from app.routers import ecommerce
 app.include_router(ecommerce.router, prefix="/api")
+
+# 注册上传路由
+from app.routers import upload
+app.include_router(upload.router, prefix="/api")
 
 
 @app.get("/")
