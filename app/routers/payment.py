@@ -106,14 +106,26 @@ def get_order_status(
 async def alipay_notify(request: Request, db: Session = Depends(get_db)):
     form_data = await request.form()
     notify_data = {key: value for key, value in form_data.items()}
+    
+    # 添加日志，打印所有参数
+    logger.info(f"支付宝回调参数: {notify_data}")
+    
+    # 尝试多种方式获取 out_trade_no
+    out_trade_no = notify_data.get("out_trade_no") or notify_data.get("out_trade_no")
+    if not out_trade_no:
+        logger.error("无法获取订单号，回调参数: %s", notify_data)
+        return PlainTextResponse("fail")
+    
     service = PaymentService()
 
     if not service.verify_notification(notify_data):
-        logger.warning("Alipay notify verify failed: out_trade_no=%s", notify_data.get("out_trade_no"))
+        logger.warning(f"Alipay notify verify failed: out_trade_no={out_trade_no}")
         return PlainTextResponse("fail")
 
     handled = service.process_paid_notification(db, notify_data)
     if not handled:
-        logger.error("Alipay notify process failed: out_trade_no=%s", notify_data.get("out_trade_no"))
+        logger.error(f"Alipay notify process failed: out_trade_no={out_trade_no}")
         return PlainTextResponse("fail")
+    
+    logger.info(f"订单 {out_trade_no} 处理成功")
     return PlainTextResponse("success")
