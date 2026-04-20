@@ -26,7 +26,6 @@ RUN apt-get update && apt-get install -y \
     libx11-6 \
     libxcomposite1 \
     libxdamage1 \
-    libxext6 \
     libxfixes3 \
     libxrandr2 \
     libgbm1 \
@@ -37,12 +36,11 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# 先单独安装 opencv（利用缓存，避免超时）
+# 复制 requirements.txt
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt --default-timeout=200
 
-# 再安装其他依赖
-RUN pip install --no-cache-dir -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/ --default-timeout=100
+# 统一使用清华源安装所有依赖
+RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple --default-timeout=300
 
 # 安装 playwright 浏览器
 RUN playwright install chromium
