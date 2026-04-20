@@ -26,13 +26,22 @@ async def generate_video(
     
     try:
         # 构建商品信息
-        if request.url and not request.title:
-            product = await service.parse_product_url(request.url)
-        else:
+        # 如果有 url 且没有手动输入的信息，尝试解析
+        product = None
+        if request.url:
+            try:
+                product = await service.parse_product_url(request.url)
+            except Exception as e:
+                logger.warning(f"解析URL失败: {e}")
+                product = None
+        
+        # 如果解析失败或没有URL，使用手动输入的信息
+        if not product:
+            # 构建商品信息（使用描述字段）
             product = ProductInfo(
-                title=request.title,
-                price=request.price,
-                description=request.description,
+                title="商品",  # 默认标题
+                price="0",     # 默认价格
+                description=request.description or "",
                 images=[request.image_url] if request.image_url else [],
                 platform="manual"
             )
@@ -41,7 +50,12 @@ async def generate_video(
         script = await service.generate_copywriting(product)
         
         # 生成视频
-        result = await service.create_product_video(script, product, request.digital_human_id)
+        result = await service.create_product_video(
+            script, 
+            product, 
+            digital_image_url=request.digital_image_url,
+            digital_human_id=request.digital_human_id
+        )
         
         return {
             "code": 200,
@@ -49,9 +63,7 @@ async def generate_video(
             "data": result
         }
     except Exception as e:
-        import traceback
-        error_detail = traceback.format_exc()
-        logger.error(f"生成视频失败: {str(e)}\n{error_detail}")
+        logger.error(f"生成视频失败: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
