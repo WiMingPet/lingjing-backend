@@ -95,6 +95,9 @@ app.include_router(ecommerce.router, prefix="/api")
 from app.routers import upload
 app.include_router(upload.router, prefix="/api")
 
+from app.routers import test_network
+app.include_router(test_network.router, prefix="/api")
+
 
 @app.get("/")
 def root():
