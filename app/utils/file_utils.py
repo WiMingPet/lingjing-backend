@@ -86,7 +86,7 @@ async def upload_file_helper(
         endpoint = endpoint[8:]
     if endpoint.startswith('http://'):
         endpoint = endpoint[7:]
-    file_url = f"https://{oss_service.bucket.bucket_name}.{endpoint}/{full_path}"
+    file_url = f"https://media.lingjing-media.com/{full_path}"
     
     # 重置文件指针（以便后续可能再次读取）
     await file.seek(0)
