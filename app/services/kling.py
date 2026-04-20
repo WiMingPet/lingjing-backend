@@ -277,7 +277,7 @@ class KlingService:
         # 如果没有提供 audio_url 但有 text，生成音频
         if not audio_url and text:
             audio_data = tts_service.text_to_speech(text)
-            audio_url = oss_service.upload_file(audio_data, "mp3", "digital_human/audio")
+            audio_url = await oss_service.upload_file(audio_data, "mp3", "digital_human/audio")
             print(f"[DEBUG] TTS 生成音频成功: {text[:50]}...")
     
         if not audio_url:
