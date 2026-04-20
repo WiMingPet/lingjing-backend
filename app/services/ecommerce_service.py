@@ -118,44 +118,57 @@ class EcommerceService:
         client = AsyncOpenAI(
             api_key=self.api_key, 
             base_url=self.base_url,
-            timeout=60.0  # 增加超时时间到 60 秒
+            timeout=60.0
         )
-        
-        # 设计详细的提示词
+    
         prompt = f"""
-你是一位顶级的直播带货主播，请根据以下商品信息，生成一段约60秒的口播文案和分镜描述。
+    你是一位顶级的直播带货主播，请根据以下商品信息，生成一段约60秒的口播文案和分镜描述。
 
-商品信息：
-- 标题：{product.title}
-- 价格：{product.price}
-- 描述：{product.description}
+    商品信息：
+    - 标题：{product.title}
+    - 价格：{product.price}
+    - 描述：{product.description}
 
-要求：
-1. 口播文案需有吸引力，包含开场、产品介绍、痛点解决、促销引导。
-2. 分镜描述需指明每一段文案对应的画面建议（如：特写商品、展示使用场景、数字人主播正面镜头等）。
-3. 输出格式为JSON：
-   {{
-     "title": "视频标题",
-     "script": "完整口播文案",
-     "scenes": ["分镜1描述", "分镜2描述", ...]
-   }}
-"""
+    要求：
+    1. 口播文案需有吸引力，包含开场、产品介绍、痛点解决、促销引导。
+    2. 分镜描述需指明每一段文案对应的画面建议（如：特写商品、展示使用场景、数字人主播正面镜头等）。
+    3. 输出格式为JSON：
+       {{
+         "title": "视频标题",
+         "script": "完整口播文案",
+         "scenes": ["分镜1描述", "分镜2描述", ...]
+       }}
+    """
+    
+        try:
+            response = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                response_format={"type": "json_object"},
+                temperature=0.7
+            )
         
-        response = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"},
-            temperature=0.7
-        )
+            content = response.choices[0].message.content
+            print(f"AI返回内容: {content}")  # 添加日志
         
-        content = response.choices[0].message.content
-        result = json.loads(content)
+            if not content:
+                raise Exception("AI返回内容为空")
         
-        return CopywritingScript(
-            title=result.get("title", "AI带货视频"),
-            script=result.get("script", ""),
-            scenes=result.get("scenes", [])
-        )
+            result = json.loads(content)
+        
+            return CopywritingScript(
+                title=result.get("title", "AI带货视频"),
+                script=result.get("script", ""),
+                scenes=result.get("scenes", [])
+            )
+        except Exception as e:
+            print(f"AI生成失败: {e}")
+            # 返回默认文案
+            return CopywritingScript(
+                title="AI带货视频",
+                script=f"大家好！今天推荐 {product.title}，{product.description}，赶快下单！",
+                scenes=["开场", "展示", "结束"]
+            )
 
     async def create_product_video(self, script: CopywritingScript, product: ProductInfo, digital_human_id: Optional[int] = None) -> dict:
         # 1. 生成数字人讲解视频
