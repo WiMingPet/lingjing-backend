@@ -5,6 +5,8 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from app.routers import link_to_video
+app.include_router(link_to_video.router, prefix="/api")
 
 from app.config import settings
 from app.database import init_db, SessionLocal

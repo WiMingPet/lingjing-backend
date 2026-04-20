@@ -42,9 +42,6 @@ COPY requirements.txt .
 # 统一使用清华源安装所有依赖
 RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple --default-timeout=300
 
-# 安装 playwright 浏览器
-RUN playwright install chromium
-RUN playwright install-deps
 
 COPY . .
 

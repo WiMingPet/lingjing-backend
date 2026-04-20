@@ -6,17 +6,12 @@ import tempfile
 import logging
 import requests
 from typing import List, Optional
-from crawl4ai import AsyncWebCrawler
-from crawl4ai.extraction_strategy import LLMExtractionStrategy
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 from moviepy import VideoFileClip, concatenate_videoclips
 
 from app.schemas.ecommerce import ProductInfo, CopywritingScript
 from app.services.kling import KlingService
-
-from crawl4ai import AsyncWebCrawler, LLMConfig
-from crawl4ai.extraction_strategy import LLMExtractionStrategy
 
 logger = logging.getLogger(__name__)
 
