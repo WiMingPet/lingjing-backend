@@ -227,6 +227,8 @@ class EcommerceService:
 
     async def _merge_videos(self, digital_video_url: str, product_video_urls: List[str]) -> str:
         """使用moviepy将数字人视频和商品展示视频合并"""
+        from app.utils.file_utils import upload_file_helper
+        
         clips = []
         
         # 下载数字人视频
@@ -245,16 +247,27 @@ class EcommerceService:
                 clips.append(prod_clip)
         
         # 合并所有片段
-        final_clip = concatenate_videoclips(clips)
+        if len(clips) == 1:
+            final_clip = clips[0]
+        else:
+            final_clip = concatenate_videoclips(clips)
         
         # 保存合成视频到临时文件
         output_path = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False).name
         final_clip.write_videofile(output_path, fps=24)
         
-        # 上传到OSS并返回URL（这里需要调用你的OSS上传服务）
-        # from app.utils.file_utils import upload_file_helper
-        # file_url, _ = await upload_file_helper(output_path, "ecommerce_videos")
-        # return file_url
+        # 关闭剪辑释放资源
+        for clip in clips:
+            clip.close()
+        final_clip.close()
+        
+        # 上传到 OSS
+        file_url, _ = await upload_file_helper(output_path, "ecommerce_videos")
+        
+        # 清理临时文件
+        os.unlink(output_path)
+        
+        return file_url
         
         # 临时返回本地路径（实际使用时替换为OSS URL）
         return output_path
