@@ -260,7 +260,7 @@ class KlingService:
         raise Exception(f"虚拟试穿任务超时，task_id: {task_id}")
     
     # ========== 数字人分身 ==========
-    def generate_digital_human(self, digital_human_id: Optional[int] = None, text: str = "", image_url: str = None, audio_url: str = None, prompt: str = None, name: str = None) -> str:
+    async def generate_digital_human(self, digital_human_id: Optional[int] = None, text: str = "", image_url: str = None, audio_url: str = None, prompt: str = None, name: str = None) -> str:
         """
         数字人分身 - 照片+文字/音频生成视频
         支持两种模式：
@@ -270,46 +270,42 @@ class KlingService:
         import os
         from app.services.tts_service import tts_service
         from app.services.oss_service import oss_service
-    
+
         base_url = self._get_base_url()
         url = f"{base_url}/videos/avatar/image2video"
-    
+
         # 如果没有提供 audio_url 但有 text，生成音频
         if not audio_url and text:
             audio_data = tts_service.text_to_speech(text)
             audio_url = await oss_service.upload_file(audio_data, "mp3", "digital_human/audio")
             print(f"[DEBUG] TTS 生成音频成功: {text[:50]}...")
-    
+
         if not audio_url:
             raise Exception("请提供文字内容或音频文件")
-    
+
         payload = {
             "image": image_url,
             "sound_file": audio_url,
             "mode": "std",
-            "with_audio": True  # 开启声音
+            "with_audio": True
         }
-        
-        # 只有当 prompt 有实际值时才添加
+    
         if prompt and prompt != "string":
             payload["prompt"] = prompt
-        
-        # 只有当 name 有实际值时才添加
         if name and name != "string":
             payload["external_task_id"] = name
-        
-        # 移除 None 值，避免传给 API
+    
         payload = {k: v for k, v in payload.items() if v is not None}
-        
+    
         print(f"[DEBUG] 数字人请求URL: {url}")
         print(f"[DEBUG] 数字人请求参数: {payload}")
         response = requests.post(url, json=payload, headers=self._get_headers())
         result = response.json()
         print(f"[DEBUG] 数字人响应: {result}")
-        
+    
         if result.get("code") != 0:
             raise Exception(f"可灵数字人API错误: {result.get('message')}")
-        
+    
         return result["data"]["task_id"]
     
     def get_digital_human_task_status(self, task_id: str) -> Dict:
