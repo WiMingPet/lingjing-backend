@@ -16,10 +16,8 @@ class CopywritingScript(BaseModel):
     scenes: List[str]
 
 class VideoTaskRequest(BaseModel):
-    """视频生成请求"""
-    title: Optional[str] = None
-    price: Optional[str] = None
-    description: Optional[str] = None
     url: Optional[str] = None
+    description: Optional[str] = None
     image_url: Optional[str] = None
+    digital_image_url: Optional[str] = None
     digital_human_id: Optional[int] = None

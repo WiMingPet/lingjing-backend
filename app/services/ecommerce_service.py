@@ -170,21 +170,35 @@ class EcommerceService:
                 scenes=["开场", "展示", "结束"]
             )
 
-    async def create_product_video(self, script: CopywritingScript, product: ProductInfo, digital_human_id: Optional[int] = None) -> dict:
+    async def create_product_video(self, script: CopywritingScript, product: ProductInfo, digital_image_url: str = None, digital_human_id: Optional[int] = None) -> dict:
+        """生成完整带货视频"""
+        
+        # 使用用户上传的数字人照片
+        digital_human_image = digital_image_url
+        if not digital_human_image:
+            # 如果没有上传数字人照片，尝试从商品图片中获取（临时方案）
+            if product.images and len(product.images) > 0:
+                digital_human_image = product.images[0]
+            else:
+                raise Exception("请提供数字人照片")
+        
         # 1. 生成数字人讲解视频
         digital_task_id = await self.kling.generate_digital_human(
             digital_human_id=digital_human_id,
             text=script.script,
+            image_url=digital_human_image
         )
         digital_video_url = await self._wait_for_video(digital_task_id)
-    
-        # 2. 生成商品展示视频（单个）
+        
+        # 2. 生成商品展示视频（如果有商品图片）
         product_video_url = await self.generate_product_demo_video(product)
-    
-        # 3. 合并视频（转为列表传入）
-        product_video_urls = [product_video_url] if product_video_url else []
-        final_video_url = await self._merge_videos(digital_video_url, product_video_urls)
-    
+        
+        # 3. 合并视频
+        if product_video_url:
+            final_video_url = await self._merge_videos(digital_video_url, [product_video_url])
+        else:
+            final_video_url = digital_video_url
+        
         return {
             "task_id": digital_task_id,
             "video_url": final_video_url,
