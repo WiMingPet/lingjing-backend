@@ -7,32 +7,25 @@ router = APIRouter(prefix="/test", tags=["测试"])
 async def test_network():
     results = {}
     
-    # 测试 OpenAI - 使用 httpx 直接请求
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            headers = {
-                "Authorization": f"Bearer {os.environ.get('OPENAI_API_KEY')}"
-            }
-            r = await client.get(
-                "https://api.openai.com/v1/models",
-                headers=headers
-            )
-            results["openai_direct"] = {"status": "success", "code": r.status_code}
-    except Exception as e:
-        results["openai_direct"] = {"status": "failed", "error": str(e)}
+    # 直接写入 API Key
+    api_key = "sk-effTartCqXaPPp_ccIcJ3g"
+    base_url = "https://hnd1.aihub.zeabur.ai/v1"
     
     # 测试 Zeabur AI Hub
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            headers = {
-                "Authorization": f"Bearer {os.environ.get('OPENAI_API_KEY')}"
-            }
-            r = await client.get(
-                "https://hnd1.aihub.zeabur.ai/v1/models",
-                headers=headers
-            )
+            headers = {"Authorization": f"Bearer {api_key}"}
+            r = await client.get(f"{base_url}/models", headers=headers)
             results["zeabur_aihub"] = {"status": "success", "code": r.status_code}
     except Exception as e:
         results["zeabur_aihub"] = {"status": "failed", "error": str(e)}
+    
+    # 测试百度
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get("https://www.baidu.com")
+            results["baidu"] = {"status": "success", "code": r.status_code}
+    except Exception as e:
+        results["baidu"] = {"status": "failed", "error": str(e)}
     
     return results

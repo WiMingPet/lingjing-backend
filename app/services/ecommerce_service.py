@@ -30,9 +30,9 @@ class ProductSchema(BaseModel):
 
 class EcommerceService:
     def __init__(self):
-        self.api_key = os.environ.get("OPENAI_API_KEY")
-        self.base_url = os.environ.get("OPENAI_BASE_URL", "https://hnd1.aihub.zeabur.ai/v1")
-        self.crawl4ai_key = os.environ.get("CRAWL4AI_API_KEY")  # 可选，Crawl4AI 可能不需要
+        # 直接写入你的 API Key（不要从环境变量读取）
+        self.api_key = "sk-effTartCqXaPPp_ccIcJ3g"
+        self.base_url = "https://hnd1.aihub.zeabur.ai/v1"
         self.kling = KlingService()
 
     async def parse_product_url(self, url: str) -> ProductInfo:
