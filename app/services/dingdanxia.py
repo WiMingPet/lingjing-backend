@@ -10,7 +10,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # 从环境变量读取配置
-DINGDANXIA_APIKEY = os.getenv("DINGDANXIA_APIKEY", "")  # 注意变量名
+DINGDANXIA_APIKEY = os.getenv("DINGDANXIA_APIKEY", "")
 DINGDANXIA_IP = os.getenv("DINGDANXIA_IP", "61.160.192.99")
 DINGDANXIA_HOST = os.getenv("DINGDANXIA_HOST", "api.tbk.dingdanxia.com")
 
@@ -77,3 +77,25 @@ def parse_douyin_command(command: str) -> dict:
         return {"success": False, "error": "请求超时，请稍后重试"}
     except Exception as e:
         return {"success": False, "error": f"解析失败: {str(e)}"}
+
+
+# ========== 兼容 link_to_video 路由 ==========
+def get_douyin_product_info(url: str) -> dict:
+    """
+    获取抖音商品信息（兼容旧接口）
+    """
+    result = parse_douyin_command(url)
+    
+    if result["success"]:
+        return {
+            "success": True,
+            "product_id": result["product_id"],
+            "title": result["title"],
+            "price": result["price"],
+            "detail_url": result["detail_url"]
+        }
+    else:
+        return {
+            "success": False,
+            "error": result["error"]
+        }
