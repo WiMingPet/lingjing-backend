@@ -30,49 +30,85 @@ class EcommerceService:
         self.base_url = "https://hnd1.aihub.zeabur.ai/v1"
         self.kling = KlingService()
 
-    async def parse_product_url(self, url: str) -> ProductInfo:
+    # ========== 本地解析抖音链接（不需要订单侠） ==========
+    def _parse_douyin_from_url(self, url: str) -> dict:
         """
-        使用订单侠 API 解析商品链接
-        如果解析失败，直接抛出异常，不生成模拟数据
+        从抖音分享链接的 URL 参数中直接提取商品信息
+        返回: {"title": "xxx", "price": 89.9, "images": ["url1", "url2"]}
         """
-        import httpx
         import re
+        from urllib.parse import unquote
+        import json
+        import requests as sync_requests
         
-        apikey = os.environ.get("DINGDANXIA_APIKEY")
-        
-        # ⚠️ 关键修改：如果没有配置 API Key，直接报错，不生成模拟数据
-        if not apikey:
-            logger.error("未配置 DINGDANXIA_APIKEY，无法解析链接")
-            raise Exception("系统配置错误：未配置订单侠API Key")
-        
-        # 判断是否是抖音链接
-        is_douyin = "douyin.com" in url or "iesdouyin.com" in url or "haohuo.jinritemai.com" in url or "v.douyin.com" in url
-        
-        if not is_douyin:
-            # 非抖音链接，目前只支持抖音
-            raise Exception(f"暂不支持该平台链接，目前仅支持抖音商品链接")
-        
-        # 解析抖音链接
-        return await self._parse_douyin_url(url, apikey)
-
-    async def _parse_douyin_url(self, url: str, apikey: str) -> ProductInfo:
-        """
-        使用订单侠解析抖音链接
-        使用 IP 直连，绕过 DNS 解析问题
-        """
-        import httpx
-        import re
-        
-        # 处理短链接，获取真实 URL
         final_url = url
+        
+        # 处理短链接（v.douyin.com/xxx），获取真实 URL
         if "v.douyin.com" in url:
             try:
-                import requests as sync_requests
                 response = sync_requests.get(url, allow_redirects=True, timeout=10)
                 final_url = response.url
                 print(f"[DEBUG] 短链接重定向后: {final_url}")
             except Exception as e:
                 print(f"[DEBUG] 短链接重定向失败: {e}")
+                return None
+        
+        # 从 URL 中提取 goods_detail 参数
+        match = re.search(r'goods_detail=([^&]+)', final_url)
+        if not match:
+            print("[DEBUG] 未找到 goods_detail 参数")
+            return None
+        
+        encoded_json = match.group(1)
+        decoded_json = unquote(encoded_json)
+        
+        try:
+            goods_detail = json.loads(decoded_json)
+            print(f"[DEBUG] 本地解析成功: {goods_detail.get('title', '')[:50]}...")
+            
+            # 提取商品信息
+            price_fen = goods_detail.get("min_price", 0)
+            images = goods_detail.get("img", {}).get("url_list", [])
+            
+            return {
+                "title": goods_detail.get("title", ""),
+                "price": price_fen / 100 if price_fen else 0,
+                "description": goods_detail.get("title", ""),
+                "images": images
+            }
+        except json.JSONDecodeError as e:
+            print(f"[DEBUG] JSON解析失败: {e}")
+            return None
+        except Exception as e:
+            print(f"[DEBUG] 本地解析异常: {e}")
+            return None
+
+    async def parse_product_url(self, url: str) -> ProductInfo:
+        """
+        解析商品链接，获取商品信息
+        优先使用本地解析（从 URL 参数提取），失败后再尝试订单侠
+        """
+        import httpx
+        import os
+        
+        # ========== 优先使用本地解析 ==========
+        local_result = self._parse_douyin_from_url(url)
+        if local_result and local_result.get("title"):
+            print(f"[INFO] 本地解析成功: {local_result['title']}")
+            return ProductInfo(
+                title=local_result["title"],
+                price=str(local_result["price"]),
+                description=local_result["description"],
+                images=local_result["images"],
+                platform="douyin"
+            )
+        
+        # ========== 本地解析失败，尝试订单侠 ==========
+        print("[INFO] 本地解析失败，尝试订单侠...")
+        
+        apikey = os.environ.get("DINGDANXIA_APIKEY")
+        if not apikey:
+            raise Exception("未配置订单侠API Key，且本地解析失败")
         
         # 订单侠配置（使用 IP 直连）
         orderxia_ip = os.environ.get("DINGDANXIA_IP", "61.160.192.99")
@@ -87,7 +123,7 @@ class EcommerceService:
         
         payload = {
             "apikey": apikey,
-            "command": final_url  # 使用重定向后的 URL
+            "command": url
         }
         
         try:
@@ -96,38 +132,21 @@ class EcommerceService:
                 response.raise_for_status()
                 data = response.json()
                 
-                print(f"[DEBUG] 订单侠响应: {data}")
-                
-                # code=0 表示成功
                 if data.get("code") == 0:
                     result = data.get("data", {})
                     price_fen = result.get("price", 0)
-                    price_yuan = price_fen / 100 if price_fen else 0
-                    
-                    # ⚠️ 注意：订单侠不返回商品图片
-                    # 返回 need_image 标记，让前端引导用户上传
                     return ProductInfo(
                         title=result.get("title", ""),
-                        price=str(price_yuan),
-                        description=result.get("title", ""),  # 用标题作为描述
-                        images=[],  # 图片为空，需要用户上传
-                        platform="douyin",
-                        # 注意：ProductInfo 可能没有 need_image 字段，这里先返回空图片
+                        price=str(price_fen / 100 if price_fen else 0),
+                        description=result.get("title", ""),
+                        images=[],  # 订单侠不返回图片
+                        platform="douyin"
                     )
                 else:
                     error_msg = data.get("msg", "未知错误")
-                    logger.error(f"订单侠解析失败: {error_msg}")
                     raise Exception(f"订单侠解析失败: {error_msg}")
-                    
-        except httpx.ConnectError as e:
-            logger.error(f"订单侠连接失败: {e}")
-            raise Exception("网络连接失败，请稍后重试")
-        except httpx.TimeoutException:
-            logger.error("订单侠请求超时")
-            raise Exception("请求超时，请稍后重试")
         except Exception as e:
-            logger.error(f"订单侠请求异常: {e}")
-            raise Exception(f"解析失败: {str(e)}")
+            raise Exception(f"所有解析方式均失败: {str(e)}")
 
     def _extract_douyin_id(self, url: str) -> str:
         """从抖音链接中提取商品 ID（保留备用）"""
