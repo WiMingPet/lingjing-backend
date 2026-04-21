@@ -239,6 +239,7 @@ class EcommerceService:
                 
                 if task_status == "succeed":
                     task_result = status.get("task_result", {})
+                    # 可灵 API 返回的视频 URL 在 videos 数组中
                     videos = task_result.get("videos", [])
                     if videos:
                         video_url = videos[0].get("url")
