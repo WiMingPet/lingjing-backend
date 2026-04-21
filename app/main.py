@@ -5,8 +5,6 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from app.routers import link_to_video
-app.include_router(link_to_video.router, prefix="/api")
 
 from app.config import settings
 from app.database import init_db, SessionLocal
@@ -99,6 +97,10 @@ app.include_router(upload.router, prefix="/api")
 
 from app.routers import test_network
 app.include_router(test_network.router, prefix="/api")
+
+# 注册链接转视频路由（订单侠）
+from app.routers import link_to_video
+app.include_router(link_to_video.router, prefix="/api")
 
 
 @app.get("/")
