@@ -202,7 +202,7 @@ class EcommerceService:
         """轮询等待视频生成完成"""
         start_time = time.time()
         while time.time() - start_time < max_wait:
-            status = await self.kling.get_video_task_status(task_id)
+            status = self.kling.get_video_task_status(task_id)
             if status.get("task_status") == "succeed":
                 return status.get("task_result", {}).get("video_url")
             elif status.get("task_status") == "failed":
