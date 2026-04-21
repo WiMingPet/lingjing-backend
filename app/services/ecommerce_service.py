@@ -73,6 +73,17 @@ class EcommerceService:
     def _extract_douyin_id(self, url: str) -> str:
         """从抖音链接中提取商品 ID"""
         import re
+        import requests
+        
+        # 如果是短链接，先获取重定向后的真实 URL
+        if "v.douyin.com" in url:
+            try:
+                response = requests.get(url, allow_redirects=True, timeout=10)
+                url = response.url
+                print(f"[DEBUG] 短链接重定向后: {url}")
+            except Exception as e:
+                print(f"[DEBUG] 短链接重定向失败: {e}")
+        
         patterns = [
             r'product/(\d+)',
             r'goods/(\d+)',
@@ -84,6 +95,15 @@ class EcommerceService:
             if match:
                 return match.group(1)
         return None
+
+    def _detect_platform(self, url: str) -> str:
+        if "taobao.com" in url or "tmall.com" in url:
+            return "taobao"
+        elif "jd.com" in url:
+            return "jd"
+        elif "douyin.com" in url:
+            return "douyin"
+        return "unknown"
 
     def _get_mock_product_info(self, url: str) -> ProductInfo:
         import re
@@ -210,14 +230,26 @@ class EcommerceService:
     async def _wait_for_video(self, task_id: str, max_wait: int = 300) -> str:
         """轮询等待视频生成完成"""
         start_time = time.time()
+        print(f"[DEBUG] 开始轮询视频任务: {task_id}")
         while time.time() - start_time < max_wait:
-            status = self.kling.get_digital_human_task_status(task_id)
-            if status.get("task_status") == "succeed":
-                return status.get("task_result", {}).get("video_url")
-            elif status.get("task_status") == "failed":
-                raise Exception(f"视频生成失败: {status.get('task_status_msg')}")
+            try:
+                status = self.kling.get_digital_human_task_status(task_id)
+                task_status = status.get("task_status")
+                print(f"[DEBUG] 数字人任务状态: {task_status}")
+                
+                if task_status == "succeed":
+                    video_url = status.get("task_result", {}).get("video_url")
+                    print(f"[DEBUG] 视频生成成功: {video_url}")
+                    return video_url
+                elif task_status == "failed":
+                    error_msg = status.get("task_status_msg", "未知错误")
+                    raise Exception(f"视频生成失败: {error_msg}")
+            except Exception as e:
+                print(f"[DEBUG] 查询状态异常: {e}")
+            
             await asyncio.sleep(5)
-        raise Exception("视频生成超时")
+        
+        raise Exception(f"视频生成超时，task_id: {task_id}")
 
     async def _wait_for_videos(self, task_ids: List[str]) -> List[str]:
         """等待多个视频生成完成"""
