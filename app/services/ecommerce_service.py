@@ -31,47 +31,106 @@ class EcommerceService:
         self.kling = KlingService()
 
     async def parse_product_url(self, url: str) -> ProductInfo:
-        """使用订单侠 API 解析商品链接"""
+        """
+        使用订单侠 API 解析商品链接
+        如果解析失败，直接抛出异常，不生成模拟数据
+        """
         import httpx
         import re
         
         apikey = os.environ.get("DINGDANXIA_APIKEY")
-        if not apikey:
-            logger.warning("未配置 DINGDANXIA_APIKEY，使用模拟数据")
-            return self._get_mock_product_info(url)
         
-        # 从 URL 中提取商品 ID
-        product_id = self._extract_douyin_id(url)
-        if not product_id:
-            logger.warning(f"无法从链接中提取商品ID: {url}")
-            return self._get_mock_product_info(url)
+        # ⚠️ 关键修改：如果没有配置 API Key，直接报错，不生成模拟数据
+        if not apikey:
+            logger.error("未配置 DINGDANXIA_APIKEY，无法解析链接")
+            raise Exception("系统配置错误：未配置订单侠API Key")
+        
+        # 判断是否是抖音链接
+        is_douyin = "douyin.com" in url or "iesdouyin.com" in url or "haohuo.jinritemai.com" in url or "v.douyin.com" in url
+        
+        if not is_douyin:
+            # 非抖音链接，目前只支持抖音
+            raise Exception(f"暂不支持该平台链接，目前仅支持抖音商品链接")
+        
+        # 解析抖音链接
+        return await self._parse_douyin_url(url, apikey)
+
+    async def _parse_douyin_url(self, url: str, apikey: str) -> ProductInfo:
+        """
+        使用订单侠解析抖音链接
+        使用 IP 直连，绕过 DNS 解析问题
+        """
+        import httpx
+        import re
+        
+        # 处理短链接，获取真实 URL
+        final_url = url
+        if "v.douyin.com" in url:
+            try:
+                import requests as sync_requests
+                response = sync_requests.get(url, allow_redirects=True, timeout=10)
+                final_url = response.url
+                print(f"[DEBUG] 短链接重定向后: {final_url}")
+            except Exception as e:
+                print(f"[DEBUG] 短链接重定向失败: {e}")
+        
+        # 订单侠配置（使用 IP 直连）
+        orderxia_ip = os.environ.get("DINGDANXIA_IP", "61.160.192.99")
+        orderxia_host = os.environ.get("DINGDANXIA_HOST", "api.tbk.dingdanxia.com")
+        api_path = "/douyin/shareCommandParse"
+        api_url = f"http://{orderxia_ip}{api_path}"
+        
+        headers = {
+            "Host": orderxia_host,
+            "Content-Type": "application/json",
+        }
+        
+        payload = {
+            "apikey": apikey,
+            "command": final_url  # 使用重定向后的 URL
+        }
         
         try:
-            async with httpx.AsyncClient(timeout=15) as client:
-                response = await client.get(
-                    "https://api.dingdanxia.com/douyin/goods/detail",
-                    params={"apikey": apikey, "item_id": product_id, "platform": "douyin"}
-                )
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.post(api_url, json=payload, headers=headers)
+                response.raise_for_status()
                 data = response.json()
                 
-                if data.get("code") != 0:
-                    logger.warning(f"订单侠解析失败: {data.get('msg')}")
-                    return self._get_mock_product_info(url)
+                print(f"[DEBUG] 订单侠响应: {data}")
                 
-                result = data.get("data", {})
-                return ProductInfo(
-                    title=result.get("title", ""),
-                    price=result.get("price", ""),
-                    description=result.get("desc", ""),
-                    images=[result.get("image", "")] if result.get("image") else [],
-                    platform="douyin"
-                )
+                # code=0 表示成功
+                if data.get("code") == 0:
+                    result = data.get("data", {})
+                    price_fen = result.get("price", 0)
+                    price_yuan = price_fen / 100 if price_fen else 0
+                    
+                    # ⚠️ 注意：订单侠不返回商品图片
+                    # 返回 need_image 标记，让前端引导用户上传
+                    return ProductInfo(
+                        title=result.get("title", ""),
+                        price=str(price_yuan),
+                        description=result.get("title", ""),  # 用标题作为描述
+                        images=[],  # 图片为空，需要用户上传
+                        platform="douyin",
+                        # 注意：ProductInfo 可能没有 need_image 字段，这里先返回空图片
+                    )
+                else:
+                    error_msg = data.get("msg", "未知错误")
+                    logger.error(f"订单侠解析失败: {error_msg}")
+                    raise Exception(f"订单侠解析失败: {error_msg}")
+                    
+        except httpx.ConnectError as e:
+            logger.error(f"订单侠连接失败: {e}")
+            raise Exception("网络连接失败，请稍后重试")
+        except httpx.TimeoutException:
+            logger.error("订单侠请求超时")
+            raise Exception("请求超时，请稍后重试")
         except Exception as e:
             logger.error(f"订单侠请求异常: {e}")
-            return self._get_mock_product_info(url)
+            raise Exception(f"解析失败: {str(e)}")
 
     def _extract_douyin_id(self, url: str) -> str:
-        """从抖音链接中提取商品 ID"""
+        """从抖音链接中提取商品 ID（保留备用）"""
         import re
         import requests
         
@@ -105,18 +164,7 @@ class EcommerceService:
             return "douyin"
         return "unknown"
 
-    def _get_mock_product_info(self, url: str) -> ProductInfo:
-        import re
-        platform = self._detect_platform(url)
-        product_id = re.search(r'(\d+)', url)
-        title = f"商品_{product_id.group(1)}" if product_id else "测试商品"
-        return ProductInfo(
-            title=title,
-            price="99.00",
-            description="这是一个测试商品的描述",
-            images=[],
-            platform=platform
-        )
+    # ⚠️ 删除 _get_mock_product_info 方法，不再生成模拟数据
 
     async def generate_product_demo_video(self, product: ProductInfo) -> Optional[str]:
         """生成商品展示视频"""
@@ -173,7 +221,7 @@ class EcommerceService:
             )
         
             content = response.choices[0].message.content
-            print(f"AI返回内容: {content}")  # 添加日志
+            print(f"AI返回内容: {content}")
         
             if not content:
                 raise Exception("AI返回内容为空")
@@ -187,10 +235,10 @@ class EcommerceService:
             )
         except Exception as e:
             print(f"AI生成失败: {e}")
-            # 返回默认文案
+            # 返回默认文案（但使用真实商品信息）
             return CopywritingScript(
                 title="AI带货视频",
-                script=f"大家好！今天推荐 {product.title}，{product.description}，赶快下单！",
+                script=f"家人们！今天给大家推荐这款{product.title}，只要{product.price}元，赶快下单吧！",
                 scenes=["开场", "展示", "结束"]
             )
 
@@ -308,6 +356,3 @@ class EcommerceService:
         os.unlink(output_path)
         
         return file_url
-        
-        # 临时返回本地路径（实际使用时替换为OSS URL）
-        return output_path

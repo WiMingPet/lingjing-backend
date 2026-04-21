@@ -10,6 +10,7 @@ from app.services.oss_service import oss_service
 from PIL import Image
 
 
+
 async def convert_to_supported_format(file_content: bytes, original_filename: str) -> Tuple[bytes, str]:
     """
     将图片转换为 JPEG 格式（可灵 API 支持）

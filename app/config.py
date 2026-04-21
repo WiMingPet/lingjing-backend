@@ -64,3 +64,6 @@ settings = Settings()
 
 # Create upload directory if not exists
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+
+# OSS 自定义域名（用于生成可预览的 URL）
+OSS_CUSTOM_DOMAIN = "https://media.lingjing-media.com"

@@ -11,7 +11,6 @@ import logging
 router = APIRouter(prefix="/ecommerce", tags=["电商带货"])
 logger = logging.getLogger(__name__)
 
-
 @router.post("/generate_video")
 async def generate_video(
     request: VideoTaskRequest,
@@ -75,9 +74,38 @@ async def parse_url(
 ):
     """
     解析商品链接，获取商品信息
+    优先使用订单侠解析抖音链接
     """
+    from app.services.dingdanxia import parse_douyin_command
+    
     service = EcommerceService()
     
+    # 判断是否是抖音链接
+    is_douyin_link = "douyin.com" in url or "iesdouyin.com" in url or "haohuo.jinritemai.com" in url
+    
+    # 如果是抖音链接，优先用订单侠
+    if is_douyin_link:
+        logger.info(f"检测到抖音链接，使用订单侠解析: {url}")
+        parse_result = parse_douyin_command(url)
+        
+        if parse_result["success"]:
+            logger.info(f"订单侠解析成功: {parse_result['title']}")
+            return {
+                "code": 200,
+                "message": "解析成功",
+                "data": {
+                    "title": parse_result["title"],
+                    "price": str(parse_result["price"]),
+                    "description": parse_result["title"],
+                    "images": [],  # 订单侠不返回图片
+                    "need_image": True  # 告诉前端需要上传图片
+                }
+            }
+        else:
+            logger.warning(f"订单侠解析失败: {parse_result['error']}，尝试原有解析")
+            # 订单侠失败，继续走原有解析逻辑
+    
+    # 原有解析逻辑（作为备选，处理非抖音链接或订单侠失败的情况）
     try:
         product = await service.parse_product_url(url)
         return {
@@ -87,7 +115,8 @@ async def parse_url(
                 "title": product.title,
                 "price": product.price,
                 "description": product.description,
-                "images": product.images
+                "images": product.images,
+                "need_image": False
             }
         }
     except Exception as e:
