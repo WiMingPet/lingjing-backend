@@ -32,10 +32,7 @@ class EcommerceService:
 
     # ========== 本地解析抖音链接（不需要订单侠） ==========
     def _parse_douyin_from_url(self, url: str) -> dict:
-        """
-        从抖音分享链接的 URL 参数中直接提取商品信息
-        返回: {"title": "xxx", "price": 89.9, "images": ["url1", "url2"]}
-        """
+        """从抖音分享链接的 URL 参数中直接提取商品信息"""
         import re
         from urllib.parse import unquote
         import json
@@ -43,7 +40,7 @@ class EcommerceService:
         
         final_url = url
         
-        # 处理短链接（v.douyin.com/xxx），获取真实 URL
+        # 处理短链接
         if "v.douyin.com" in url:
             try:
                 response = sync_requests.get(url, allow_redirects=True, timeout=10)
@@ -53,7 +50,7 @@ class EcommerceService:
                 print(f"[DEBUG] 短链接重定向失败: {e}")
                 return None
         
-        # 从 URL 中提取 goods_detail 参数
+        # 提取 goods_detail 参数
         match = re.search(r'goods_detail=([^&]+)', final_url)
         if not match:
             print("[DEBUG] 未找到 goods_detail 参数")
@@ -64,21 +61,21 @@ class EcommerceService:
         
         try:
             goods_detail = json.loads(decoded_json)
-            print(f"[DEBUG] 本地解析成功: {goods_detail.get('title', '')[:50]}...")
-            
-            # 提取商品信息
             price_fen = goods_detail.get("min_price", 0)
-            images = goods_detail.get("img", {}).get("url_list", [])
+            
+            # 提取图片 URL
+            img_data = goods_detail.get("img", {})
+            images = img_data.get("url_list", [])
+            
+            print(f"[DEBUG] 本地解析成功: {goods_detail.get('title', '')[:50]}...")
+            print(f"[DEBUG] 获取到 {len(images)} 张图片")
             
             return {
                 "title": goods_detail.get("title", ""),
                 "price": price_fen / 100 if price_fen else 0,
                 "description": goods_detail.get("title", ""),
-                "images": images
+                "images": images  # 返回图片数组
             }
-        except json.JSONDecodeError as e:
-            print(f"[DEBUG] JSON解析失败: {e}")
-            return None
         except Exception as e:
             print(f"[DEBUG] 本地解析异常: {e}")
             return None
@@ -99,7 +96,7 @@ class EcommerceService:
                 title=local_result["title"],
                 price=str(local_result["price"]),
                 description=local_result["description"],
-                images=local_result["images"],
+                images=local_result.get("images", []),  # 使用解析到的图片
                 platform="douyin"
             )
         
