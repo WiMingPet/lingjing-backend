@@ -39,9 +39,14 @@ WORKDIR /app
 # 复制 requirements.txt
 COPY requirements.txt .
 
-# 统一使用清华源安装所有依赖
-RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple --default-timeout=300
+# ========== 关键修改：设置 pip 全局使用清华源 ==========
+RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
+RUN pip config set global.trusted-host pypi.tuna.tsinghua.edu.cn
+RUN pip config set global.timeout 300
+RUN pip config list
 
+# 安装依赖
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
