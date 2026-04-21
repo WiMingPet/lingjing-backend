@@ -31,50 +31,59 @@ class EcommerceService:
         self.kling = KlingService()
 
     async def parse_product_url(self, url: str) -> ProductInfo:
-        """解析商品链接（带反检测）"""
-        try:
-            async with AsyncWebCrawler(
-                headless=True,
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-                ignore_robots_txt=True,
-                stealth=True
-            ) as crawler:
-                extraction_strategy = LLMExtractionStrategy(
-                    llm_config=LLMConfig(provider="openai/gpt-4o-mini", api_token=self.api_key),
-                    schema=ProductSchema.model_json_schema(),
-                    instruction="从当前网页中提取商品名称、价格、描述和所有图片链接。"
-                )
-            
-                result = await crawler.arun(
-                    url=url,
-                    extraction_strategy=extraction_strategy,
-                    bypass_cache=True,
-                )
-            
-                if result.success:
-                    extracted_data = json.loads(result.extracted_content)
-                    product_data = extracted_data[0]
-                    return ProductInfo(
-                        title=product_data.get("product_name", ""),
-                        price=product_data.get("price", ""),
-                        description=product_data.get("description", ""),
-                        images=product_data.get("image_urls", []),
-                        platform=self._detect_platform(url)
-                    )
-                else:
-                    logger.warning(f"解析失败: {result.error_message}")
-                    return self._get_mock_product_info(url)
-        except Exception as e:
-            logger.error(f"爬虫异常: {e}")
+        """使用订单侠 API 解析商品链接"""
+        import httpx
+        import re
+        
+        apikey = os.environ.get("DINGDANXIA_APIKEY")
+        if not apikey:
+            logger.warning("未配置 DINGDANXIA_APIKEY，使用模拟数据")
             return self._get_mock_product_info(url)
-    def _detect_platform(self, url: str) -> str:
-        if "taobao.com" in url or "tmall.com" in url:
-            return "taobao"
-        elif "jd.com" in url:
-            return "jd"
-        elif "douyin.com" in url:
-            return "douyin"
-        return "unknown"
+        
+        # 从 URL 中提取商品 ID
+        product_id = self._extract_douyin_id(url)
+        if not product_id:
+            logger.warning(f"无法从链接中提取商品ID: {url}")
+            return self._get_mock_product_info(url)
+        
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                response = await client.get(
+                    "https://api.dingdanxia.com/douyin/goods/detail",
+                    params={"apikey": apikey, "item_id": product_id, "platform": "douyin"}
+                )
+                data = response.json()
+                
+                if data.get("code") != 0:
+                    logger.warning(f"订单侠解析失败: {data.get('msg')}")
+                    return self._get_mock_product_info(url)
+                
+                result = data.get("data", {})
+                return ProductInfo(
+                    title=result.get("title", ""),
+                    price=result.get("price", ""),
+                    description=result.get("desc", ""),
+                    images=[result.get("image", "")] if result.get("image") else [],
+                    platform="douyin"
+                )
+        except Exception as e:
+            logger.error(f"订单侠请求异常: {e}")
+            return self._get_mock_product_info(url)
+
+    def _extract_douyin_id(self, url: str) -> str:
+        """从抖音链接中提取商品 ID"""
+        import re
+        patterns = [
+            r'product/(\d+)',
+            r'goods/(\d+)',
+            r'item_id=(\d+)',
+            r'(\d{19})'
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, url)
+            if match:
+                return match.group(1)
+        return None
 
     def _get_mock_product_info(self, url: str) -> ProductInfo:
         import re
