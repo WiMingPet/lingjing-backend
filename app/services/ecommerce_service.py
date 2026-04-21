@@ -238,7 +238,12 @@ class EcommerceService:
                 print(f"[DEBUG] 数字人任务状态: {task_status}")
                 
                 if task_status == "succeed":
-                    video_url = status.get("task_result", {}).get("video_url")
+                    task_result = status.get("task_result", {})
+                    videos = task_result.get("videos", [])
+                    if videos:
+                        video_url = videos[0].get("url")
+                    else:
+                        video_url = task_result.get("video_url")
                     print(f"[DEBUG] 视频生成成功: {video_url}")
                     return video_url
                 elif task_status == "failed":
