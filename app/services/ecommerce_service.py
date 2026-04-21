@@ -183,14 +183,13 @@ class EcommerceService:
     # ⚠️ 删除 _get_mock_product_info 方法，不再生成模拟数据
 
     async def generate_product_demo_video(self, product: ProductInfo) -> Optional[str]:
-        """生成商品展示视频"""
         if not product.images:
             return None
-    
+
         product_image_url = product.images[0]
         prompt = f"展示商品{product.title}，从多个角度展示，突出卖点，自然光线，4K高清。"
-    
-        task_id = await self.kling.generate_video(
+
+        task_id = self.kling.generate_video(  # ✅ 去掉 await
             image_url=product_image_url,
             prompt=prompt,
             duration=5,
