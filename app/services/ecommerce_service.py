@@ -167,22 +167,20 @@ class EcommerceService:
 
     async def create_product_video(self, script: CopywritingScript, product: ProductInfo, digital_image_url: str = None, digital_human_id: Optional[int] = None) -> dict:
         """生成完整带货视频"""
-        
-        # 使用用户上传的数字人照片
+    
+        # 使用默认数字人照片
         digital_human_image = digital_image_url
         if not digital_human_image:
-            # 如果没有上传数字人照片，尝试从商品图片中获取（临时方案）
-            if product.images and len(product.images) > 0:
-                digital_human_image = product.images[0]
-            else:
-                raise Exception("请提供数字人照片")
-        
+            # 使用你昨天上传的图片 URL
+            digital_human_image = "https://media.lingjing-media.com/Scr.jpg"
+    
         # 1. 生成数字人讲解视频
         digital_task_id = await self.kling.generate_digital_human(
             digital_human_id=digital_human_id,
             text=script.script,
             image_url=digital_human_image
         )
+    
         digital_video_url = await self._wait_for_video(digital_task_id)
         
         # 2. 生成商品展示视频（如果有商品图片）
