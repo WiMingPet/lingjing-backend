@@ -331,43 +331,83 @@ class EcommerceService:
     async def _merge_videos(self, digital_video_url: str, product_video_urls: List[str]) -> str:
         """使用moviepy将数字人视频和商品展示视频合并"""
         from app.utils.file_utils import upload_file_helper
+        import time
         
         clips = []
+        temp_files = []  # 记录所有临时文件，用于最后清理
         
-        # 下载数字人视频
-        digital_response = requests.get(digital_video_url)
-        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp_digital:
-            tmp_digital.write(digital_response.content)
-            digital_clip = VideoFileClip(tmp_digital.name)
-            clips.append(digital_clip)
-        
-        # 下载并添加商品展示视频片段
-        for url in product_video_urls:
-            response = requests.get(url)
-            with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp_prod:
-                tmp_prod.write(response.content)
-                prod_clip = VideoFileClip(tmp_prod.name)
-                clips.append(prod_clip)
-        
-        # 合并所有片段
-        if len(clips) == 1:
-            final_clip = clips[0]
-        else:
-            final_clip = concatenate_videoclips(clips)
-        
-        # 保存合成视频到临时文件
-        output_path = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False).name
-        final_clip.write_videofile(output_path, fps=24)
-        
-        # 关闭剪辑释放资源
-        for clip in clips:
-            clip.close()
-        final_clip.close()
-        
-        # 上传到 OSS
-        file_url, _ = await upload_file_helper(output_path, "ecommerce_videos")
-        
-        # 清理临时文件
-        os.unlink(output_path)
-        
-        return file_url
+        try:
+            # 1. 下载数字人视频
+            digital_response = requests.get(digital_video_url)
+            digital_response.raise_for_status()
+            
+            with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp_digital:
+                tmp_digital.write(digital_response.content)
+                tmp_digital.flush()  # 强制刷新到磁盘
+                tmp_digital.close()  # 关闭文件，确保数据写入
+                temp_files.append(tmp_digital.name)
+                
+                # 重新打开文件读取
+                digital_clip = VideoFileClip(tmp_digital.name)
+                clips.append(digital_clip)
+            
+            # 2. 下载商品展示视频
+            for idx, url in enumerate(product_video_urls):
+                response = requests.get(url)
+                response.raise_for_status()
+                
+                with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp_prod:
+                    tmp_prod.write(response.content)
+                    tmp_prod.flush()
+                    tmp_prod.close()
+                    temp_files.append(tmp_prod.name)
+                    
+                    prod_clip = VideoFileClip(tmp_prod.name)
+                    clips.append(prod_clip)
+            
+            # 3. 合并所有片段
+            if len(clips) == 1:
+                final_clip = clips[0]
+            else:
+                final_clip = concatenate_videoclips(clips, method="compose")
+            
+            # 4. 保存合成视频
+            output_path = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False).name
+            temp_files.append(output_path)
+            
+            final_clip.write_videofile(
+                output_path,
+                fps=24,
+                codec='libx264',
+                audio_codec='aac',
+                threads=2
+            )
+            
+            # 5. 上传到 OSS
+            file_url, _ = await upload_file_helper(output_path, "ecommerce_videos")
+            
+            return file_url
+            
+        except Exception as e:
+            print(f"[ERROR] 视频合并失败: {e}")
+            raise
+            
+        finally:
+            # 6. 清理临时文件
+            for file_path in temp_files:
+                try:
+                    if os.path.exists(file_path):
+                        os.unlink(file_path)
+                except Exception as e:
+                    print(f"[WARN] 清理临时文件失败 {file_path}: {e}")
+            
+            # 关闭所有视频剪辑释放资源
+            for clip in clips:
+                try:
+                    clip.close()
+                except:
+                    pass
+            try:
+                final_clip.close()
+            except:
+                pass
