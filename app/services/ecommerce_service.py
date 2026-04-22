@@ -2,7 +2,6 @@ import os
 import json
 import time
 import asyncio
-import aiofiles
 import tempfile
 import logging
 import requests
@@ -332,10 +331,6 @@ class EcommerceService:
 
     async def _merge_videos(self, digital_video_url: str, product_video_urls: List[str]) -> str:
         """使用 moviepy 将数字人视频和商品展示视频合并"""
-        import tempfile
-        import os
-        import requests
-        from moviepy import VideoFileClip, concatenate_videoclips
         
         clips = []
         temp_files = []
@@ -399,7 +394,7 @@ class EcommerceService:
             with open(output_path, 'rb') as f:
                 file_content = f.read()
             
-            filename = f"ecommerce_videos/merged_{int(time.time())}.mp4"
+            filename = f"merged_{int(time.time())}.mp4"
             file_url = await oss_service.upload_file(file_content, filename, "ecommerce_videos")
             
             return file_url
