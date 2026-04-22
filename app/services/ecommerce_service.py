@@ -13,6 +13,7 @@ from moviepy import VideoFileClip, concatenate_videoclips
 
 from app.schemas.ecommerce import ProductInfo, CopywritingScript
 from app.services.kling import KlingService
+from app.services.oss_service import oss_service
 
 logger = logging.getLogger(__name__)
 
