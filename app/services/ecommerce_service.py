@@ -385,10 +385,12 @@ class EcommerceService:
             
             # 5. 上传到 OSS（使用 aiofiles 流式读取）
             async with aiofiles.open(output_path, 'rb') as f:
-                file_url, _ = await upload_file_helper(f, "ecommerce_videos")
-            
-            return file_url
-            
+                file_url, _ = await upload_file_helper(
+                    f, 
+                    "ecommerce_videos", 
+                    filename=os.path.basename(output_path)
+                )
+
         except Exception as e:
             print(f"[ERROR] 视频合并失败: {e}")
             import traceback
