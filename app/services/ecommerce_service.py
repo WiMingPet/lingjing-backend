@@ -383,7 +383,8 @@ class EcommerceService:
             )
             
             # 5. 上传到 OSS
-            file_url, _ = await upload_file_helper(output_path, "ecommerce_videos")
+            with open(output_path, 'rb') as f:
+                file_url, _ = await upload_file_helper(f, "ecommerce_videos")
             
             return file_url
             
