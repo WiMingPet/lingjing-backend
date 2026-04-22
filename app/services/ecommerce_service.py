@@ -331,8 +331,11 @@ class EcommerceService:
         return urls
 
     async def _merge_videos(self, digital_video_url: str, product_video_urls: List[str]) -> str:
-        """使用moviepy将数字人视频和商品展示视频合并"""
-        from app.utils.file_utils import upload_file_helper
+        """使用 moviepy 将数字人视频和商品展示视频合并"""
+        import tempfile
+        import os
+        import requests
+        from moviepy import VideoFileClip, concatenate_videoclips
         
         clips = []
         temp_files = []
@@ -384,19 +387,23 @@ class EcommerceService:
                 logger=None
             )
             
-            # 5. 上传到 OSS（使用 aiofiles 流式读取）
-            async with aiofiles.open(output_path, 'rb') as f:
-                file_url, _ = await upload_file_helper(
-                    f, 
-                    "ecommerce_videos", 
-                    filename=os.path.basename(output_path)  # ← 添加这个参数
-                )
-
+            # 5. 关闭剪辑释放资源
+            for clip in clips:
+                clip.close()
+            final_clip.close()
+            
+            # 6. 上传到 OSS
+            from app.services.oss_service import oss_service
+            import time
+            
+            with open(output_path, 'rb') as f:
+                file_content = f.read()
+            
             filename = f"ecommerce_videos/merged_{int(time.time())}.mp4"
             file_url = await oss_service.upload_file(file_content, filename, "ecommerce_videos")
-
+            
             return file_url
-
+            
         except Exception as e:
             print(f"[ERROR] 视频合并失败: {e}")
             import traceback
@@ -404,18 +411,7 @@ class EcommerceService:
             raise
             
         finally:
-            # 6. 关闭所有剪辑
-            for clip in clips:
-                try:
-                    clip.close()
-                except:
-                    pass
-            try:
-                final_clip.close()
-            except:
-                pass
-            
-            # 7. 清理临时文件
+            # 清理临时文件
             for file_path in temp_files:
                 try:
                     if os.path.exists(file_path):
