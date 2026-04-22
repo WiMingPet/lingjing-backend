@@ -2,6 +2,7 @@ import os
 import json
 import time
 import asyncio
+import aiofiles
 import tempfile
 import logging
 import requests
@@ -382,12 +383,13 @@ class EcommerceService:
                 logger=None
             )
             
-            # 5. 直接上传到 OSS
-            from app.services.oss_service import oss_service
-            import time
-
-            with open(output_path, 'rb') as f:
-                file_content = f.read()
+            # 5. 上传到 OSS（使用 aiofiles 流式读取）
+            async with aiofiles.open(output_path, 'rb') as f:
+                file_url, _ = await upload_file_helper(
+                    f, 
+                    "ecommerce_videos", 
+                    filename=os.path.basename(output_path)  # ← 添加这个参数
+                )
 
             filename = f"ecommerce_videos/merged_{int(time.time())}.mp4"
             file_url = await oss_service.upload_file(file_content, filename, "ecommerce_videos")
