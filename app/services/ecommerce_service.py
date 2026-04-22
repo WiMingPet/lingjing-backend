@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import aiofiles
 import asyncio
 import tempfile
 import logging
@@ -382,8 +383,8 @@ class EcommerceService:
                 logger=None
             )
             
-            # 5. 上传到 OSS
-            with open(output_path, 'rb') as f:
+            # 5. 上传到 OSS（使用 aiofiles 流式读取）
+            async with aiofiles.open(output_path, 'rb') as f:
                 file_url, _ = await upload_file_helper(f, "ecommerce_videos")
             
             return file_url
