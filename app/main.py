@@ -4,6 +4,7 @@ AI创意生成平台 - FastAPI应用入口
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response  # ← 添加这行导入
 from contextlib import asynccontextmanager
 
 from app.config import settings
@@ -63,11 +64,27 @@ app = FastAPI(
 # 配置CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://lingjing-media.com",
+        "https://lingjing.preview.aliyun-zeabur.cn",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 添加 OPTIONS 请求处理
+@app.options("/{rest_of_path:path}")
+async def options_handler():
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "https://lingjing-media.com",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Credentials": "true",
+        }
+    )
 
 # 挂载静态文件
 import os
