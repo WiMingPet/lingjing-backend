@@ -241,7 +241,7 @@ async def generate_digital_human(
     check_and_deduct_credits(user, db, 20, "数字人分身")
     
     # 3. 调用可灵虚拟形象 API
-    task_id = kling_service.generate_digital_human(
+    task_id = await kling_service.generate_digital_human(
         image_url=image_url,
         audio_url=audio_url,
         prompt=prompt,
