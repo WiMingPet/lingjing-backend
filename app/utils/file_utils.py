@@ -4,6 +4,8 @@
 import uuid
 import os
 import io
+import time
+from app.services.oss_service import oss_service
 from typing import Tuple
 from fastapi import UploadFile
 from app.services.oss_service import oss_service
@@ -43,53 +45,64 @@ async def convert_to_supported_format(file_content: bytes, original_filename: st
         return file_content, original_filename
 
 
-async def upload_file_helper(
-    file: UploadFile,
-    sub_folder: str = "uploads"
-) -> Tuple[str, str]:
+async def upload_file_helper(file, folder: str, filename: str = None) -> tuple:
     """
-    上传文件到 OSS，自动转换图片格式
+    上传文件到 OSS
     
-    Args:
-        file: 上传的文件对象
-        sub_folder: OSS 子文件夹名称
+    参数:
+        file: 文件对象（支持同步/异步）或文件路径字符串或 bytes
+        folder: OSS 文件夹名称
+        filename: 可选，指定文件名（不传则自动生成或从 file 对象获取）
     
-    Returns:
-        (file_url, file_id) 元组，file_url 是 OSS 公网地址，file_id 是文件名
+    返回:
+        (url, file_id)
     """
-    # 读取文件内容
-    content = await file.read()
-    filename = file.filename or "unknown"
+    # 1. 获取文件名
+    if filename:
+        final_filename = filename
+    elif hasattr(file, 'filename'):
+        final_filename = file.filename
+    elif hasattr(file, 'name'):
+        final_filename = os.path.basename(file.name)
+    else:
+        # 自动生成文件名
+        ext = "bin"
+        if hasattr(file, 'name') and '.' in file.name:
+            ext = file.name.split('.')[-1]
+        final_filename = f"{folder}_{int(time.time())}.{ext}"
     
-    # 如果是图片文件，自动转换为 JPEG
-    if file.content_type and file.content_type.startswith('image/'):
-        content, filename = await convert_to_supported_format(content, filename)
+    # 2. 读取文件内容
+    content = None
+    if hasattr(file, 'read'):
+        # 文件对象
+        try:
+            content = await file.read()
+        except TypeError:
+            # 同步读取
+            content = file.read()
+        except AttributeError:
+            # 没有 read 方法，尝试直接使用
+            content = file
+    elif isinstance(file, bytes):
+        content = file
+    elif isinstance(file, str):
+        # 文件路径
+        with open(file, 'rb') as f:
+            content = f.read()
+    else:
+        content = file
     
-    # 获取文件扩展名
-    extension = filename.split(".")[-1].lower()
+    if content is None:
+        raise ValueError("无法读取文件内容")
     
-    # 生成唯一文件名（作为 file_id）
-    file_id = f"{uuid.uuid4()}.{extension}"
-    full_path = f"{sub_folder}/{file_id}"
+    # 3. 对于图片，转换为 JPEG 格式
+    if final_filename.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.bmp')):
+        try:
+            content, final_filename = await convert_to_supported_format(content, final_filename)
+        except Exception as e:
+            print(f"图片转换失败: {e}")
     
-    # 上传到 OSS
-    headers = {
-        'Content-Type': f'image/{extension}' if extension in ['jpg', 'jpeg', 'png', 'webp', 'gif'] else 'application/octet-stream',
-        'x-oss-object-acl': 'public-read',
-        'Content-Disposition': 'inline'
-    }
+    # 4. 上传到 OSS
+    file_url = await oss_service.upload_file(content, final_filename, folder)
     
-    oss_service.bucket.put_object(full_path, content, headers=headers)
-    
-    # 生成公网 URL
-    endpoint = oss_service.bucket.endpoint
-    if endpoint.startswith('https://'):
-        endpoint = endpoint[8:]
-    if endpoint.startswith('http://'):
-        endpoint = endpoint[7:]
-    file_url = f"https://media.lingjing-media.com/{full_path}"
-    
-    # 重置文件指针（以便后续可能再次读取）
-    await file.seek(0)
-    
-    return file_url, file_id
+    return file_url, final_filename
