@@ -6,6 +6,7 @@ import jwt
 import time
 from typing import Dict, Optional, List
 from app.config import settings
+from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 
 
 class KlingService:
@@ -268,6 +269,8 @@ class KlingService:
         2. 提供 audio_url：直接使用音频文件
         """
         import os
+        import uuid
+        import time
         from app.services.tts_service import tts_service
         from app.services.oss_service import oss_service
 
@@ -283,33 +286,42 @@ class KlingService:
         if not audio_url:
             raise Exception("请提供文字内容或音频文件")
 
+        # ========== 强制生成唯一的 external_task_id ==========
+        # 忽略前端传入的 name，使用 UUID + 时间戳生成唯一 ID
+        unique_task_id = f"dh_{uuid.uuid4().hex}_{int(time.time())}"
+        print(f"[DEBUG] 原始名称: {name}, 生成唯一任务ID: {unique_task_id}")
+        # ====================================================
+
         payload = {
             "image": image_url,
             "sound_file": audio_url,
             "mode": "std",
-            "with_audio": True
+            "with_audio": True,
+            "external_task_id": unique_task_id  # 使用唯一 ID，不再使用前端传入的 name
         }
-    
+
         if prompt and prompt != "string":
             payload["prompt"] = prompt
-        if name and name != "string":
-            payload["external_task_id"] = name
-    
+        
+        # 注意：不再使用 name 作为 external_task_id
+        # 如果前端传入了 name，可以记录到日志，但不作为任务ID使用
+
         payload = {k: v for k, v in payload.items() if v is not None}
-    
+
         print(f"[DEBUG] 数字人请求URL: {url}")
         print(f"[DEBUG] 数字人请求参数: {payload}")
         response = requests.post(url, json=payload, headers=self._get_headers())
         result = response.json()
         print(f"[DEBUG] 数字人响应: {result}")
-    
+
         if result.get("code") != 0:
             raise Exception(f"可灵数字人API错误: {result.get('message')}")
-    
+
         return result["data"]["task_id"]
     
+    @retry(stop=stop_after_attempt(3), wait=wait_fixed(2), retry=retry_if_exception_type(Exception))
     def get_digital_human_task_status(self, task_id: str) -> Dict:
-        """查询数字人任务状态"""
+        """查询数字人任务状态（带自动重试，遇到异常重试3次，每次间隔2秒）"""
         base_url = self._get_base_url()
         url = f"{base_url}/videos/avatar/image2video/{task_id}"
         response = requests.get(url, headers=self._get_headers())
