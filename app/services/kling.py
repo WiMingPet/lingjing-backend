@@ -357,6 +357,16 @@ class KlingService:
         
         raise Exception(f"数字人任务超时，task_id: {task_id}")
 
+    def get_tts_voices(self) -> List[Dict]:
+        """获取可灵 TTS 音色列表"""
+        url = f"{self._get_base_url()}/audio/tts/voices"
+        response = requests.get(url, headers=self._get_headers())
+        result = response.json()
+        
+        if result.get("code") != 0:
+            raise Exception(f"获取音色列表失败: {result.get('message')}")
+        
+        return result.get("data", [])
 
 # 单例实例
 kling_service = KlingService()

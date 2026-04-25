@@ -11,7 +11,7 @@ from app.routers import preset_avatars
 from app.config import settings
 from app.database import init_db, SessionLocal
 from app.models.digital_human import DigitalHuman
-from app.routers import auth, image, video, size, tryon, digital_human, multi_angle, proxy, payment, ecommerce, upload
+from app.routers import auth, image, video, size, tryon, digital_human, multi_angle, proxy, payment, ecommerce, upload, tts
 
 
 @asynccontextmanager
@@ -113,6 +113,7 @@ app.include_router(ecommerce.router, prefix="/api")
 # 注册上传路由
 from app.routers import upload
 app.include_router(upload.router, prefix="/api")
+app.include_router(tts.router, prefix="/api")
 
 from app.routers import test_network
 app.include_router(test_network.router, prefix="/api")
