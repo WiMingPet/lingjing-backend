@@ -3,7 +3,7 @@
 """
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional,List 
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
@@ -259,3 +259,8 @@ async def generate_digital_human(
         message="数字人视频生成成功",
         data={"video_url": video_url, "task_id": task_id}
     )
+@router.get("/preset-avatars")
+async def get_preset_avatars() -> List[dict]:
+    """获取所有预设形象列表"""
+    from app.data.preset_avatars import PRESET_AVATARS
+    return PRESET_AVATARS

@@ -6,7 +6,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response  # ← 添加这行导入
 from contextlib import asynccontextmanager
-from app.routers import preset_avatars
 
 from app.config import settings
 from app.database import init_db, SessionLocal
@@ -99,7 +98,6 @@ app.include_router(video.router, prefix="/api")
 app.include_router(size.router, prefix="/api")
 app.include_router(tryon.router, prefix="/api")
 app.include_router(digital_human.router, prefix="/api")
-app.include_router(preset_avatars.router, prefix="/api")
 app.include_router(multi_angle.router, prefix="/api")
 
 # 注册支付路由（必须在 app 创建之后）
