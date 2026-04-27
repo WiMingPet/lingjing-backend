@@ -140,6 +140,11 @@ def health_check():
     """健康检查"""
     return {"status": "healthy"}
 
+@app.get("/public-test")
+async def public_test():
+    """公共测试接口 - 无认证要求"""
+    return {"message": "If you see this, the gateway auth is OFF"}
+
 
 if __name__ == "__main__":
     import uvicorn
