@@ -145,6 +145,13 @@ async def public_test():
     """公共测试接口 - 无认证要求"""
     return {"message": "If you see this, the gateway auth is OFF"}
 
+from app.data.preset_avatars import PRESET_AVATARS
+
+@app.get("/api/preset-avatars")
+async def public_preset_avatars():
+    """公共预设形象接口"""
+    return PRESET_AVATARS
+
 
 if __name__ == "__main__":
     import uvicorn
