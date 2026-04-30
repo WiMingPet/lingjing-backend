@@ -364,16 +364,32 @@ class KlingService:
         url = f"{base_url}/audio/tts/voices"
         headers = self._get_headers()
         
+        print(f"[DEBUG] 请求音色列表 URL: {url}")
+        print(f"[DEBUG] 请求头: {headers}")
+        
         try:
             response = requests.get(url, headers=headers)
-            result = response.json()
+            print(f"[DEBUG] 响应状态码: {response.status_code}")
+            print(f"[DEBUG] 原始响应内容: {response.text}")
             
-            if result.get("code") != 0:
-                print(f"[ERROR] 获取音色列表失败: {result.get('message')}")
+            if response.status_code != 200:
+                print(f"[ERROR] 可灵 API 返回非200: {response.status_code}")
                 return []
             
-            # 可灵 API 返回的数据结构通常是 {"code":0, "data": [...]}
+            result = response.json()
+            print(f"[DEBUG] 解析后的 JSON: {result}")
+            
+            if result.get("code") != 0:
+                print(f"[ERROR] 可灵 API 返回错误: {result.get('message')}")
+                return []
+            
+            # 可灵 API 返回的数据结构
             voices_data = result.get("data", [])
+            print(f"[DEBUG] 获取到 {len(voices_data)} 个音色")
+            
+            # 打印第一个音色的结构，帮助调试
+            if voices_data:
+                print(f"[DEBUG] 第一个音色示例: {voices_data[0]}")
             
             # 整理成前端需要的格式
             formatted_voices = []
@@ -386,9 +402,12 @@ class KlingService:
                     "gender": voice.get("gender", "female")
                 })
             
+            print(f"[DEBUG] 格式化后返回 {len(formatted_voices)} 个音色")
             return formatted_voices
         except Exception as e:
             print(f"[ERROR] 获取音色列表异常: {e}")
+            import traceback
+            traceback.print_exc()
             return []
 
 # 单例实例
