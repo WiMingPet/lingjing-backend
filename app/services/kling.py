@@ -361,12 +361,12 @@ class KlingService:
     def get_tts_voices(self) -> List[Dict]:
         """
         获取可灵 TTS 音色列表（预置音色）
-        使用 GET /v1/audio/tts/voices 接口
+        使用 GET /v1/general/presets-voices 接口
         """
         import requests
         
         base_url = self._get_base_url()
-        url = f"{base_url}/audio/tts/voices"
+        url = f"{base_url}/general/presets-voices?pageNum=1&pageSize=100"
         headers = self._get_headers()
         
         print(f"[DEBUG] 请求预置音色列表 URL: {url}")
@@ -378,7 +378,7 @@ class KlingService:
             if response.status_code != 200:
                 print(f"[ERROR] 可灵 API 返回非200: {response.status_code}")
                 print(f"[ERROR] 响应内容: {response.text}")
-                return self._get_mock_voices()  # 降级使用模拟数据
+                return self._get_mock_voices()
             
             result = response.json()
             print(f"[DEBUG] 可灵返回 code: {result.get('code')}")
@@ -387,26 +387,28 @@ class KlingService:
                 print(f"[ERROR] 可灵 API 错误: {result.get('message')}")
                 return self._get_mock_voices()
             
-            voices_data = result.get("data", [])
-            print(f"[DEBUG] 获取到 {len(voices_data)} 个预置音色")
+            # 可灵 API 返回的数据结构是 data 数组
+            data_list = result.get("data", [])
+            print(f"[DEBUG] 获取到 {len(data_list)} 条音色记录")
             
-            if not voices_data:
+            if not data_list:
                 return self._get_mock_voices()
             
             # 整理成前端需要的格式
             formatted_voices = []
-            for voice in voices_data:
-                formatted_voices.append({
-                    "id": voice.get("speakerId") or voice.get("voice_id"),
-                    "name": voice.get("name") or voice.get("voice_name"),
-                    "preview_url": voice.get("exampleUrl") or voice.get("trial_url"),
-                    "language": voice.get("language", "zh-CN"),
-                    "gender": voice.get("gender", "female"),
-                    "type": "preset"  # 标记为预置音色
-                })
+            for item in data_list:
+                task_result = item.get("task_result", {})
+                voices = task_result.get("voices", [])
+                for voice in voices:
+                    formatted_voices.append({
+                        "id": voice.get("voice_id"),
+                        "name": voice.get("voice_name"),
+                        "preview_url": voice.get("trial_url"),
+                        "type": "preset",
+                        "owned_by": voice.get("owned_by", "kling")
+                    })
             
-            # 过滤掉没有预览链接的音色
-            formatted_voices = [v for v in formatted_voices if v["preview_url"]]
+            print(f"[DEBUG] 格式化后得到 {len(formatted_voices)} 个预置音色")
             return formatted_voices
             
         except Exception as e:
@@ -415,7 +417,7 @@ class KlingService:
             traceback.print_exc()
             return self._get_mock_voices()
 
-                # ========== 自定义音色列表接口 ==========
+    # ========== 自定义音色列表接口 ==========
     def get_custom_voices(self, page_num: int = 1, page_size: int = 30) -> List[Dict]:
         """
         获取可灵自定义音色列表
@@ -448,7 +450,6 @@ class KlingService:
             
             formatted_voices = []
             for item in data_list:
-                # 只取成功的任务
                 if item.get("task_status") != "succeed":
                     continue
                 task_result = item.get("task_result", {})
@@ -458,7 +459,7 @@ class KlingService:
                         "id": voice.get("voice_id"),
                         "name": voice.get("voice_name"),
                         "preview_url": voice.get("trial_url"),
-                        "type": "custom",  # 标记为自定义音色
+                        "type": "custom",
                         "owned_by": voice.get("owned_by", "user")
                     })
             
