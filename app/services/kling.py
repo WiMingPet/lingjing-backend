@@ -362,60 +362,86 @@ class KlingService:
         """
         获取可灵 TTS 音色列表（预置音色）
         使用 GET /v1/general/presets-voices 接口
+        支持分页获取所有音色
         """
         import requests
         
         base_url = self._get_base_url()
-        url = f"{base_url}/general/presets-voices?pageNum=1&pageSize=100"
         headers = self._get_headers()
         
-        print(f"[DEBUG] 请求预置音色列表 URL: {url}")
+        all_voices = []
+        page_num = 1
+        page_size = 200  # 每次获取200条
         
-        try:
-            response = requests.get(url, headers=headers, timeout=30)
-            print(f"[DEBUG] 响应状态码: {response.status_code}")
+        print(f"[DEBUG] 开始获取预置音色列表...")
+        
+        while True:
+            url = f"{base_url}/general/presets-voices?pageNum={page_num}&pageSize={page_size}"
+            print(f"[DEBUG] 请求第 {page_num} 页: {url}")
             
-            if response.status_code != 200:
-                print(f"[ERROR] 可灵 API 返回非200: {response.status_code}")
-                print(f"[ERROR] 响应内容: {response.text}")
-                return self._get_mock_voices()
-            
-            result = response.json()
-            print(f"[DEBUG] 可灵返回 code: {result.get('code')}")
-            
-            if result.get("code") != 0:
-                print(f"[ERROR] 可灵 API 错误: {result.get('message')}")
-                return self._get_mock_voices()
-            
-            # 可灵 API 返回的数据结构是 data 数组
-            data_list = result.get("data", [])
-            print(f"[DEBUG] 获取到 {len(data_list)} 条音色记录")
-            
-            if not data_list:
-                return self._get_mock_voices()
-            
-            # 整理成前端需要的格式
-            formatted_voices = []
-            for item in data_list:
-                task_result = item.get("task_result", {})
-                voices = task_result.get("voices", [])
-                for voice in voices:
-                    formatted_voices.append({
-                        "id": voice.get("voice_id"),
-                        "name": voice.get("voice_name"),
-                        "preview_url": voice.get("trial_url"),
-                        "type": "preset",
-                        "owned_by": voice.get("owned_by", "kling")
-                    })
-            
-            print(f"[DEBUG] 格式化后得到 {len(formatted_voices)} 个预置音色")
-            return formatted_voices
-            
-        except Exception as e:
-            print(f"[ERROR] 获取预置音色异常: {e}")
-            import traceback
-            traceback.print_exc()
-            return self._get_mock_voices()
+            try:
+                response = requests.get(url, headers=headers, timeout=30)
+                print(f"[DEBUG] 响应状态码: {response.status_code}")
+                
+                if response.status_code != 200:
+                    print(f"[ERROR] 可灵 API 返回非200: {response.status_code}")
+                    break
+                
+                result = response.json()
+                print(f"[DEBUG] 可灵返回 code: {result.get('code')}")
+                
+                if result.get("code") != 0:
+                    print(f"[ERROR] 可灵 API 错误: {result.get('message')}")
+                    break
+                
+                data_list = result.get("data", [])
+                print(f"[DEBUG] 第 {page_num} 页获取到 {len(data_list)} 条音色任务")
+                
+                if not data_list:
+                    print(f"[DEBUG] 没有更多数据，停止获取")
+                    break
+                
+                # 遍历每个任务，提取音色
+                for item in data_list:
+                    task_id = item.get("task_id")
+                    task_result = item.get("task_result", {})
+                    voices = task_result.get("voices", [])
+                    
+                    print(f"[DEBUG] 任务 {task_id} 包含 {len(voices)} 个音色")
+                    
+                    for voice in voices:
+                        all_voices.append({
+                            "id": voice.get("voice_id"),
+                            "name": voice.get("voice_name"),
+                            "preview_url": voice.get("trial_url"),
+                            "language": voice.get("language", "zh-CN"),
+                            "gender": voice.get("gender", "female"),
+                            "type": "preset",
+                            "owned_by": voice.get("owned_by", "kling")
+                        })
+                
+                # 如果返回数据少于 pageSize，说明是最后一页
+                if len(data_list) < page_size:
+                    print(f"[DEBUG] 已获取全部数据，共 {len(data_list)} 条（小于 pageSize={page_size}）")
+                    break
+                
+                page_num += 1
+                
+            except Exception as e:
+                print(f"[ERROR] 获取预置音色异常: {e}")
+                import traceback
+                traceback.print_exc()
+                break
+        
+        print(f"[DEBUG] ========== 获取完成 ==========")
+        print(f"[DEBUG] 总共获取 {len(all_voices)} 个预置音色")
+        
+        if all_voices:
+            # 打印前3个音色示例
+            for i, voice in enumerate(all_voices[:3]):
+                print(f"[DEBUG] 音色示例 {i+1}: {voice.get('name')} (ID: {voice.get('id')})")
+        
+        return all_voices if all_voices else self._get_mock_voices()
 
     # ========== 自定义音色列表接口 ==========
     def get_custom_voices(self, page_num: int = 1, page_size: int = 30) -> List[Dict]:
@@ -472,14 +498,18 @@ class KlingService:
     # ========== 获取全部音色（预置+自定义） ==========
     def get_all_voices(self) -> List[Dict]:
         """获取全部音色：预置音色 + 自定义音色"""
+        print(f"[DEBUG] ========== 开始获取全部音色 ==========")
+        
         preset_voices = self.get_tts_voices()
+        print(f"[DEBUG] 预置音色: {len(preset_voices)} 个")
+        
         custom_voices = self.get_custom_voices()
+        print(f"[DEBUG] 自定义音色: {len(custom_voices)} 个")
         
         # 合并列表，自定义音色放在前面
         all_voices = custom_voices + preset_voices
         
-        print(f"[DEBUG] 总共获取 {len(all_voices)} 个音色（自定义: {len(custom_voices)}, 预置: {len(preset_voices)}）")
-        
+        print(f"[DEBUG] 总共获取 {len(all_voices)} 个音色")
         return all_voices
 
     def _get_mock_voices(self) -> List[Dict]:
