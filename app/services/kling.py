@@ -357,16 +357,39 @@ class KlingService:
         
         raise Exception(f"数字人任务超时，task_id: {task_id}")
 
+    # ========== 音色列表接口 ==========
     def get_tts_voices(self) -> List[Dict]:
         """获取可灵 TTS 音色列表"""
-        url = f"{self._get_base_url()}/audio/tts/voices"
-        response = requests.get(url, headers=self._get_headers())
-        result = response.json()
+        base_url = self._get_base_url()
+        url = f"{base_url}/audio/tts/voices"
+        headers = self._get_headers()
         
-        if result.get("code") != 0:
-            raise Exception(f"获取音色列表失败: {result.get('message')}")
-        
-        return result.get("data", [])
+        try:
+            response = requests.get(url, headers=headers)
+            result = response.json()
+            
+            if result.get("code") != 0:
+                print(f"[ERROR] 获取音色列表失败: {result.get('message')}")
+                return []
+            
+            # 可灵 API 返回的数据结构通常是 {"code":0, "data": [...]}
+            voices_data = result.get("data", [])
+            
+            # 整理成前端需要的格式
+            formatted_voices = []
+            for voice in voices_data:
+                formatted_voices.append({
+                    "id": voice.get("speakerId", voice.get("id")),
+                    "name": voice.get("name", voice.get("voice_name")),
+                    "preview_url": voice.get("exampleUrl", voice.get("preview_url")),
+                    "language": voice.get("language", "zh-CN"),
+                    "gender": voice.get("gender", "female")
+                })
+            
+            return formatted_voices
+        except Exception as e:
+            print(f"[ERROR] 获取音色列表异常: {e}")
+            return []
 
 # 单例实例
 kling_service = KlingService()
