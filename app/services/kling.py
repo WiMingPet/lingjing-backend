@@ -359,14 +359,17 @@ class KlingService:
 
     # ========== 音色列表接口 ==========
     def get_tts_voices(self) -> List[Dict]:
-        """获取可灵 TTS 音色列表"""
+        """
+        获取可灵 TTS 音色列表（预置音色）
+        使用 GET /v1/audio/tts/voices 接口
+        """
         import requests
         
         base_url = self._get_base_url()
         url = f"{base_url}/audio/tts/voices"
         headers = self._get_headers()
         
-        print(f"[DEBUG] 请求音色列表 URL: {url}")
+        print(f"[DEBUG] 请求预置音色列表 URL: {url}")
         
         try:
             response = requests.get(url, headers=headers, timeout=30)
@@ -375,8 +378,7 @@ class KlingService:
             if response.status_code != 200:
                 print(f"[ERROR] 可灵 API 返回非200: {response.status_code}")
                 print(f"[ERROR] 响应内容: {response.text}")
-                # 返回模拟数据用于测试
-                return self._get_mock_voices()
+                return self._get_mock_voices()  # 降级使用模拟数据
             
             result = response.json()
             print(f"[DEBUG] 可灵返回 code: {result.get('code')}")
@@ -386,7 +388,7 @@ class KlingService:
                 return self._get_mock_voices()
             
             voices_data = result.get("data", [])
-            print(f"[DEBUG] 获取到 {len(voices_data)} 个音色")
+            print(f"[DEBUG] 获取到 {len(voices_data)} 个预置音色")
             
             if not voices_data:
                 return self._get_mock_voices()
@@ -395,11 +397,12 @@ class KlingService:
             formatted_voices = []
             for voice in voices_data:
                 formatted_voices.append({
-                    "id": voice.get("speakerId") or voice.get("id"),
+                    "id": voice.get("speakerId") or voice.get("voice_id"),
                     "name": voice.get("name") or voice.get("voice_name"),
-                    "preview_url": voice.get("exampleUrl") or voice.get("preview_url"),
+                    "preview_url": voice.get("exampleUrl") or voice.get("trial_url"),
                     "language": voice.get("language", "zh-CN"),
-                    "gender": voice.get("gender", "female")
+                    "gender": voice.get("gender", "female"),
+                    "type": "preset"  # 标记为预置音色
                 })
             
             # 过滤掉没有预览链接的音色
@@ -407,22 +410,84 @@ class KlingService:
             return formatted_voices
             
         except Exception as e:
-            print(f"[ERROR] 获取音色列表异常: {e}")
+            print(f"[ERROR] 获取预置音色异常: {e}")
             import traceback
             traceback.print_exc()
             return self._get_mock_voices()
-    
+
+                # ========== 自定义音色列表接口 ==========
+    def get_custom_voices(self, page_num: int = 1, page_size: int = 30) -> List[Dict]:
+        """
+        获取可灵自定义音色列表
+        使用 GET /v1/general/custom-voices 接口
+        """
+        import requests
+        
+        base_url = self._get_base_url()
+        url = f"{base_url}/general/custom-voices?pageNum={page_num}&pageSize={page_size}"
+        headers = self._get_headers()
+        
+        print(f"[DEBUG] 请求自定义音色列表 URL: {url}")
+        
+        try:
+            response = requests.get(url, headers=headers, timeout=30)
+            print(f"[DEBUG] 响应状态码: {response.status_code}")
+            
+            if response.status_code != 200:
+                print(f"[WARN] 获取自定义音色失败: {response.status_code}")
+                return []
+            
+            result = response.json()
+            
+            if result.get("code") != 0:
+                print(f"[WARN] 自定义音色 API 错误: {result.get('message')}")
+                return []
+            
+            data_list = result.get("data", [])
+            print(f"[DEBUG] 获取到 {len(data_list)} 条自定义音色记录")
+            
+            formatted_voices = []
+            for item in data_list:
+                # 只取成功的任务
+                if item.get("task_status") != "succeed":
+                    continue
+                task_result = item.get("task_result", {})
+                voices = task_result.get("voices", [])
+                for voice in voices:
+                    formatted_voices.append({
+                        "id": voice.get("voice_id"),
+                        "name": voice.get("voice_name"),
+                        "preview_url": voice.get("trial_url"),
+                        "type": "custom",  # 标记为自定义音色
+                        "owned_by": voice.get("owned_by", "user")
+                    })
+            
+            return formatted_voices
+            
+        except Exception as e:
+            print(f"[ERROR] 获取自定义音色异常: {e}")
+            return []
+
+    # ========== 获取全部音色（预置+自定义） ==========
+    def get_all_voices(self) -> List[Dict]:
+        """获取全部音色：预置音色 + 自定义音色"""
+        preset_voices = self.get_tts_voices()
+        custom_voices = self.get_custom_voices()
+        
+        # 合并列表，自定义音色放在前面
+        all_voices = custom_voices + preset_voices
+        
+        print(f"[DEBUG] 总共获取 {len(all_voices)} 个音色（自定义: {len(custom_voices)}, 预置: {len(preset_voices)}）")
+        
+        return all_voices
+
     def _get_mock_voices(self) -> List[Dict]:
-        """模拟音色数据（用于测试）"""
+        """模拟音色数据（降级用，当可灵 API 不可用时使用）"""
         return [
-            {"id": "zh-CN-XiaoxiaoNeural", "name": "晓晓 - 温柔女声", "preview_url": "https://example.com/voice1.mp3", "language": "zh-CN", "gender": "female"},
-            {"id": "zh-CN-YunxiNeural", "name": "云希 - 沉稳男声", "preview_url": "https://example.com/voice2.mp3", "language": "zh-CN", "gender": "male"},
-            {"id": "zh-CN-XiaoyiNeural", "name": "晓伊 - 活泼女声", "preview_url": "https://example.com/voice3.mp3", "language": "zh-CN", "gender": "female"},
-            {"id": "zh-CN-YunjianNeural", "name": "云健 - 磁性男声", "preview_url": "https://example.com/voice4.mp3", "language": "zh-CN", "gender": "male"},
-            {"id": "zh-CN-XiaohanNeural", "name": "晓涵 - 甜美女声", "preview_url": "https://example.com/voice5.mp3", "language": "zh-CN", "gender": "female"},
-            {"id": "zh-CN-YunyangNeural", "name": "云扬 - 阳刚男声", "preview_url": "https://example.com/voice6.mp3", "language": "zh-CN", "gender": "male"},
-            {"id": "zh-CN-XiaomoNeural", "name": "晓莫 - 自然女声", "preview_url": "https://example.com/voice7.mp3", "language": "zh-CN", "gender": "female"},
-            {"id": "zh-CN-XiaoningNeural", "name": "晓宁 - 亲切女声", "preview_url": "https://example.com/voice8.mp3", "language": "zh-CN", "gender": "female"},
+            {"id": "zh-CN-XiaoxiaoNeural", "name": "晓晓 - 温柔女声", "preview_url": "", "language": "zh-CN", "gender": "female", "type": "preset"},
+            {"id": "zh-CN-YunxiNeural", "name": "云希 - 沉稳男声", "preview_url": "", "language": "zh-CN", "gender": "male", "type": "preset"},
+            {"id": "zh-CN-XiaoyiNeural", "name": "晓伊 - 活泼女声", "preview_url": "", "language": "zh-CN", "gender": "female", "type": "preset"},
+            {"id": "zh-CN-YunjianNeural", "name": "云健 - 磁性男声", "preview_url": "", "language": "zh-CN", "gender": "male", "type": "preset"},
         ]
 
 # 单例实例

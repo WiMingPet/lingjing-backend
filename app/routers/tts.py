@@ -11,6 +11,28 @@ router = APIRouter(prefix="/tts", tags=["语音合成"])
 async def get_tts_voices(
     current_user: User = Depends(get_current_user)
 ) -> List[Dict]:
-    """获取可灵 TTS 音色列表"""
+    """
+    获取可灵 TTS 音色列表（预置音色 + 自定义音色）
+    """
+    kling = KlingService()
+    return kling.get_all_voices()
+
+
+@router.get("/preset-voices")
+async def get_preset_voices(
+    current_user: User = Depends(get_current_user)
+) -> List[Dict]:
+    """仅获取预置音色"""
     kling = KlingService()
     return kling.get_tts_voices()
+
+
+@router.get("/custom-voices")
+async def get_custom_voices(
+    page_num: int = 1,
+    page_size: int = 30,
+    current_user: User = Depends(get_current_user)
+) -> List[Dict]:
+    """获取自定义音色列表"""
+    kling = KlingService()
+    return kling.get_custom_voices(page_num, page_size)
