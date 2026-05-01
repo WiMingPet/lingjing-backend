@@ -4,7 +4,6 @@
 import requests
 import jwt
 import time
-import base64
 from typing import Dict, Optional, List
 from app.config import settings
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
@@ -293,29 +292,12 @@ class KlingService:
         print(f"[DEBUG] 原始名称: {name}, 生成唯一任务ID: {unique_task_id}")
         # ====================================================
 
-        # ========== 将图片转换为 Base64 格式 ==========
-        import requests as sync_requests
-        
-        try:
-            # 下载图片
-            img_response = sync_requests.get(image_url, timeout=30)
-            img_response.raise_for_status()
-            # 转换为 base64
-            img_base64 = base64.b64encode(img_response.content).decode('utf-8')
-            # 添加 data:image/jpeg;base64, 前缀（根据图片格式可能需要调整）
-            image_payload = f"data:image/jpeg;base64,{img_base64}"
-            print(f"[DEBUG] 图片已转换为 Base64，长度: {len(img_base64)}")
-        except Exception as e:
-            print(f"[ERROR] 图片转换失败: {e}")
-            raise Exception(f"图片处理失败: {str(e)}")
-        # ====================================================
-
         payload = {
-            "image": image_payload,  # 使用 Base64 格式
+            "image": image_url,
             "sound_file": audio_url,
             "mode": "std",
             "with_audio": True,
-            "external_task_id": unique_task_id
+            "external_task_id": unique_task_id  # 使用唯一 ID，不再使用前端传入的 name
         }
 
         if prompt and prompt != "string":
