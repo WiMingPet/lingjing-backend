@@ -1,7 +1,7 @@
 """
 AI创意生成平台 - FastAPI应用入口
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response  # ← 添加这行导入
