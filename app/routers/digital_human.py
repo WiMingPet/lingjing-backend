@@ -3,7 +3,7 @@
 """
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from sqlalchemy.orm import Session
-from typing import Optional,List 
+from typing import Optional,List, json
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
@@ -185,13 +185,14 @@ def delete_digital_human(
 
 @router.post("/generate", response_model=APIResponse)
 async def generate_digital_human(
-    image: UploadFile = File(...),
+    image_url: Optional[str] = Form(None),      # 新增：接收 URL
+    image: Optional[UploadFile] = File(None),   # 改为可选
     text: Optional[str] = Form(None),
     audio: Optional[UploadFile] = File(None),
     prompt: Optional[str] = Form(None),
     name: Optional[str] = Form(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),  # ✅ 新增：从token获取用户
+    current_user: User = Depends(get_current_user),
 ):
     """
     数字人分身 - 照片+文字/音频生成说话视频
@@ -213,9 +214,17 @@ async def generate_digital_human(
     if name == "string":
         name = None
     
-    # 1. 上传图片到 OSS
-    image_url, image_id = await upload_file_helper(image, "digital_human/images")
-    print(f"[DEBUG] 图片已上传: {image_url}")
+    # 1. 处理图片（支持 URL 或文件）
+    if image_url:
+        # 形象库：直接使用传入的 URL
+        final_image_url = image_url
+        print(f"[DEBUG] 使用形象库图片 URL: {final_image_url}")
+    elif image:
+        # 手动上传：保存到 OSS
+        final_image_url, image_id = await upload_file_helper(image, "digital_human/images")
+        print(f"[DEBUG] 手动上传图片已保存: {final_image_url}")
+    else:
+        raise HTTPException(status_code=400, detail="请提供图片 URL 或上传图片文件")
     
     # 2. 获取音频（文字转语音 或 用户上传）
     audio_url = None
@@ -242,7 +251,7 @@ async def generate_digital_human(
     
     # 3. 调用可灵虚拟形象 API
     task_id = await kling_service.generate_digital_human(
-        image_url=image_url,
+        image_url=final_image_url,
         audio_url=audio_url,
         prompt=prompt,
         name=name
