@@ -66,6 +66,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://lingjing-media.com",
+        "https://www.lingjing-media.com",          # ← 添加 www 子域名
+        "https://media.lingjing-media.com",        # ← 添加 OSS 域名
+        "https://lingji.preview.aliyun-zeabur.cn",
         "https://lingjing.preview.aliyun-zeabur.cn",
     ],
     allow_credentials=True,
@@ -75,16 +78,26 @@ app.add_middleware(
 
 # 添加 OPTIONS 请求处理
 @app.options("/{rest_of_path:path}")
-async def options_handler():
-    return Response(
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": "https://lingjing-media.com",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
-            "Access-Control-Allow-Credentials": "true",
-        }
-    )
+async def options_handler(request: Request):
+    origin = request.headers.get("origin")
+    # 允许所有相关域名
+    allowed_origins = [
+        "https://lingjing-media.com",
+        "https://www.lingjing-media.com",
+        "https://lingji.preview.aliyun-zeabur.cn",
+        "https://lingjing.preview.aliyun-zeabur.cn",
+    ]
+    if origin in allowed_origins:
+        return Response(
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": origin,
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+                "Access-Control-Allow-Credentials": "true",
+            }
+        )
+    return Response(status_code=200)
 
 # 挂载静态文件
 import os
