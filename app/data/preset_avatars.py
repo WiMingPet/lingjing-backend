@@ -22,8 +22,8 @@ PRESET_AVATARS = [
         "id": 3,
         "name": "玲美",
         "category": "情感问答",
-        "preview_image": "https://media.lingjing-media.com/image/%E7%8E%B2%E7%BE%8E.png",
-        "model_image": "https://media.lingjing-media.com/image/%E7%8E%B2%E7%BE%8E.png",
+        "preview_image": "https://media.lingjing-media.com/%E7%8E%B2%E7%BE%8E.png",
+        "model_image": "https://media.lingjing-media.com/%E7%8E%B2%E7%BE%8E.png",
         "preview_video_url": "https://media.lingjing-media.com/MP4/kling_20260428_%E4%BD%9C%E5%93%81_%E6%88%91%E6%98%AF%E7%8E%B2%E7%BE%8E_%E4%BD%A0%E5%BF%83%E9%87%8C%E9%82%A3%E4%BA%9B_4106_0.mp4",
         "description": "28岁知性姐姐，富有共情力"
     },
