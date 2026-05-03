@@ -162,11 +162,12 @@ class KlingService:
         
         return result["data"]["task_id"]
     
+    @retry(stop=stop_after_attempt(3), wait=wait_fixed(2), retry=retry_if_exception_type(Exception))
     def get_video_task_status(self, task_id: str) -> Dict:
-        """查询视频任务状态"""
+        """查询视频任务状态（带重试）"""
         base_url = self._get_base_url()
         url = f"{base_url}/videos/image2video/{task_id}"
-        response = requests.get(url, headers=self._get_headers())
+        response = requests.get(url, headers=self._get_headers(), timeout=30)
         result = response.json()
         
         if result.get("code") != 0:
