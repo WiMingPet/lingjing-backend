@@ -13,8 +13,8 @@ PRESET_AVATARS = [
         "id": 2,
         "name": "佳慧",
         "category": "生活分享",
-        "preview_image": "https://media.lingjing-media.com/%E7%8E%B2%E7%BE%8E.png",
-        "model_image": "https://media.lingjing-media.com/%E7%8E%B2%E7%BE%8E.png",
+        "preview_image": "https://media.lingjing-media.com/%E4%BD%B3%E6%85%A7.png",
+        "model_image": "https://media.lingjing-media.com/%E4%BD%B3%E6%85%A7.png",
         "preview_video_url": "https://media.lingjing-media.com/MP4/kling_20260428_%E4%BD%9C%E5%93%81_%E5%97%A8_%E6%88%91%E6%98%AF%E4%BD%B3%E6%85%A7_%E7%94%9F%E6%B4%BB%E4%B8%AD_4099_0.mp4",
         "description": "22岁邻家女孩，温暖治愈"
     },

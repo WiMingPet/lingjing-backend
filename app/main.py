@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response  # ← 添加这行导入
 from contextlib import asynccontextmanager
+from app.routers import history
 
 from app.config import settings
 from app.database import init_db, SessionLocal
@@ -105,6 +106,7 @@ os.makedirs("./uploads", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="./uploads"), name="uploads")
 
 # 注册路由（带 /api 前缀）
+app.include_router(history.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
 app.include_router(image.router, prefix="/api")
 app.include_router(video.router, prefix="/api")
