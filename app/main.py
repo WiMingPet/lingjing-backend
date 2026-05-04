@@ -6,12 +6,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response  # ← 添加这行导入
 from contextlib import asynccontextmanager
-from app.routers import history
+
 
 from app.config import settings
 from app.database import init_db, SessionLocal
 from app.models.digital_human import DigitalHuman
 from app.routers import auth, image, video, size, tryon, digital_human, multi_angle, proxy, payment, ecommerce, upload, tts
+from app.routers import history
+from app.database import Base, engine
 
 
 @asynccontextmanager
@@ -19,6 +21,12 @@ async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     # 启动时
     print("Starting AI Creative Platform...")
+
+    # ========== 强制创建所有表（如果不存在） ==========
+    from app.database import Base, engine
+    Base.metadata.create_all(bind=engine)
+    print("数据库表创建/检查完成")
+    # ================================================
 
     # 初始化数据库
     init_db()
@@ -106,7 +114,7 @@ os.makedirs("./uploads", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="./uploads"), name="uploads")
 
 # 注册路由（带 /api 前缀）
-app.include_router(history.router, prefix="/api")
+
 app.include_router(auth.router, prefix="/api")
 app.include_router(image.router, prefix="/api")
 app.include_router(video.router, prefix="/api")
@@ -114,6 +122,7 @@ app.include_router(size.router, prefix="/api")
 app.include_router(tryon.router, prefix="/api")
 app.include_router(digital_human.router, prefix="/api")
 app.include_router(multi_angle.router, prefix="/api")
+app.include_router(history.router, prefix="/api")
 
 # 注册支付路由（必须在 app 创建之后）
 from app.routers import payment
