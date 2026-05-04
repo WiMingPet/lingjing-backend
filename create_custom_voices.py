@@ -31,6 +31,12 @@ NEW_VOICES = [
     {"name": "活力男声", "voice_url": "https://media.lingjing-media.com/custom-voices/%E6%B4%BB%E5%8A%9B%E7%94%B7%E5%A3%B0.mp3"},
     {"name": "磁性大叔", "voice_url": "https://media.lingjing-media.com/custom-voices/%E7%A3%81%E6%80%A7%E5%A4%A7%E5%8F%94.mp3"},
     {"name": "温柔解说", "voice_url": "https://media.lingjing-media.com/custom-voices/%E6%B8%A9%E6%9F%94%E8%A7%A3%E8%AF%B4.mp3"},
+        # ========== 新增 5 个音色 ==========
+    {"name": "小静", "voice_url": "https://media.lingjing-media.com/custom-voices/%E5%B0%8F%E9%9D%99.mp3"},
+    {"name": "小芊", "voice_url": "https://media.lingjing-media.com/custom-voices/%E5%B0%8F%E8%8A%8A.mp3"},
+    {"name": "智薇", "voice_url": "https://media.lingjing-media.com/custom-voices/%E6%99%BA%E8%96%87.mp3"},
+    {"name": "智萱", "voice_url": "https://media.lingjing-media.com/custom-voices/%E6%99%BA%E8%90%B1.mp3"},
+    {"name": "智希", "voice_url": "https://media.lingjing-media.com/custom-voices/%E6%99%BA%E5%B8%8C.mp3"},
 ]
 
 def create_custom_voice(voice_name, audio_url):

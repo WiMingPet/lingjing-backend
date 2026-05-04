@@ -7,7 +7,6 @@ from app.models.task import Task
 from app.services.oss_service import oss_service  # 新增：导入 OSS 服务
 
 
-
 class VideoService:
     """视频生成服务"""
 
