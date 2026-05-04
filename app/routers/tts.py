@@ -15,7 +15,7 @@ async def get_tts_voices(
     获取可灵 TTS 音色列表（预置音色 + 自定义音色）
     """
     kling = KlingService()
-    return kling.get_all_voices()
+    return kling.get_tts_voices()  # 改为只返回预置音色
 
 
 @router.get("/preset-voices")
