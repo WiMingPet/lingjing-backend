@@ -335,46 +335,56 @@ class EcommerceService:
     async def _call_tryon_api(self, garment_image_url: str, model_image_url: str, user_token: str = None) -> Optional[str]:
         """
         用 multipart/form-data 方式调用虚拟试穿接口
-        先用同步方式下载图片，再提交给试穿API
+        增加下载重试机制，解决 DNS 偶发失败
         """
         import aiohttp
-        import aiohttp.client_exceptions
+        
+        async def download_with_retry(url, max_retries=3):
+            """带重试的下载，解决 DNS 偶发失败"""
+            for i in range(max_retries):
+                try:
+                    timeout = aiohttp.ClientTimeout(total=30)
+                    async with aiohttp.ClientSession(timeout=timeout) as session:
+                        async with session.get(url) as resp:
+                            if resp.status != 200:
+                                raise Exception(f"HTTP {resp.status}")
+                            return await resp.read()
+                except Exception as e:
+                    print(f"[DEBUG] 下载重试 {i+1}/{max_retries}: {e}")
+                    if i < max_retries - 1:
+                        await asyncio.sleep(2)
+            raise Exception(f"下载失败（已重试{max_retries}次）: {url}")
         
         try:
-            # 下载商品图片和模特图片
             print(f"[DEBUG] 下载商品图片: {garment_image_url[:80]}...")
             print(f"[DEBUG] 下载模特图片: {model_image_url[:80]}...")
             
+            # 并发下载两张图片（带重试）
+            garment_bytes = await download_with_retry(garment_image_url)
+            model_bytes = await download_with_retry(model_image_url)
+            
+            # 准备 multipart 数据
+            form_data = aiohttp.FormData()
+            form_data.add_field(
+                "garment_image",
+                garment_bytes,
+                filename="garment.jpg",
+                content_type="image/jpeg"
+            )
+            form_data.add_field(
+                "model_image",
+                model_bytes,
+                filename="model.jpg",
+                content_type="image/jpeg"
+            )
+            
+            # 构建请求头
+            headers = {}
+            if user_token:
+                headers["Authorization"] = f"Bearer {user_token}"
+            
             timeout = aiohttp.ClientTimeout(total=120)
             async with aiohttp.ClientSession(timeout=timeout) as session:
-                # 并发下载两张图片
-                async def download(url):
-                    async with session.get(url) as resp:
-                        return await resp.read()
-                
-                garment_bytes = await download(garment_image_url)
-                model_bytes = await download(model_image_url)
-                
-                # 准备 multipart 数据
-                form_data = aiohttp.FormData()
-                form_data.add_field(
-                    "garment_image",
-                    garment_bytes,
-                    filename="garment.jpg",
-                    content_type="image/jpeg"
-                )
-                form_data.add_field(
-                    "model_image",
-                    model_bytes,
-                    filename="model.jpg", 
-                    content_type="image/jpeg"
-                )
-                
-                # 构建请求头
-                headers = {}
-                if user_token:
-                    headers["Authorization"] = f"Bearer {user_token}"
-                
                 api_url = "https://lingjing.preview.aliyun-zeabur.cn/api/tryon/generate"
                 print(f"[DEBUG] 调用试穿API: {api_url}")
                 
@@ -382,11 +392,9 @@ class EcommerceService:
                     print(f"[DEBUG] 试穿API响应状态: {resp.status}")
                     if resp.status == 200:
                         result = await resp.json()
-                        # 试穿接口通常返回 task_id，需要轮询获取视频
                         task_data = result.get("data", {})
                         task_id = task_data.get("id")
                         if task_id:
-                            # 轮询等待试穿结果
                             video_url = await self._wait_for_tryon_result(task_id, user_token)
                             if video_url:
                                 print(f"[DEBUG] 虚拟试穿视频已生成")
