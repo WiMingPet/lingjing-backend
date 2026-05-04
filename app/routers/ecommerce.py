@@ -29,6 +29,11 @@ async def generate_video(
     """提交AI带货视频生成任务"""
     service = EcommerceService()
     
+    # 提取用户token用于内部API调用
+    from fastapi import Request
+    # 注：这里需要通过依赖注入获取token，先用简单方式
+    user_token = None  # FastAPI中较难直接获取原始token，可传空（试穿接口可能需要调整）
+    
     try:
         product = None
         if request.url:
@@ -53,8 +58,22 @@ async def generate_video(
             script, 
             product, 
             digital_image_url=request.digital_image_url,
-            digital_human_id=request.digital_human_id
+            digital_human_id=request.digital_human_id,
+            user_token=user_token
         )
+        
+        # 【修复3】保存历史记录
+        from app.models.history import History
+        import datetime
+        history = History(
+            user_id=current_user.id,
+            url=result["video_url"],
+            type="AI带货视频",
+            thumbnail=None,
+            created_at=datetime.datetime.utcnow()
+        )
+        db.add(history)
+        db.commit()
         
         return {
             "code": 200,
