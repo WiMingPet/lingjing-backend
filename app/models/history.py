@@ -8,6 +8,6 @@ class History(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, nullable=False)  # 不加 ForeignKey
     url = Column(Text, nullable=False)
-    type = Column(String(50), nullable=False)
-    thumbnail = Column(String(500), nullable=True)
+    type = Column(Text, nullable=False)          # 改为 Text
+    thumbnail = Column(Text, nullable=True)      # 改为 Text
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
