@@ -12,7 +12,7 @@ class TryonService:
     @staticmethod
     async def generate_tryon(db: Session, user_id: int, request_data: Dict) -> Task:
         """
-        生成虚拟试穿图片 - 调用真实可灵API
+        生成虚拟试穿视频 - 先调用可灵图生图接口生成试穿效果图，再调用图生视频接口生成动态展示视频
         """
         from app.services.kling import kling_service
         
@@ -37,11 +37,11 @@ class TryonService:
             garment_image_url = request_data.get("garment_image_url", "")
             digital_human_id = request_data.get("digital_human_id", None)
             
-            print(f"[DEBUG] 调用可灵虚拟试穿API...")
+            print(f"[DEBUG] 第一步：调用可灵虚拟试穿API生成效果图...")
             print(f"[DEBUG] 模特图片URL: {model_image_url}")
             print(f"[DEBUG] 服装图片URL: {garment_image_url}")
             
-            # 调用可灵API
+            # 1. 调用可灵虚拟试穿图生图接口
             api_task_id = kling_service.generate_tryon(
                 human_image_url=model_image_url,
                 cloth_image_url=garment_image_url,
@@ -49,23 +49,49 @@ class TryonService:
             )
             print(f"[DEBUG] 可灵虚拟试穿API返回任务ID: {api_task_id}")
             
-            # 轮询等待结果
+            # 轮询等待试穿结果图片
             result = kling_service.wait_for_tryon_result(api_task_id, max_wait=120)
             
-            # 提取结果（虚拟试穿返回的是图片）
+            # 提取试穿效果图片URL
             images = result.get("task_result", {}).get("images", [])
             if images:
-                image_url = images[0].get("url", "")
-                # 可灵返回的是图片URL，这里存入 video_url 字段
-                video_url = image_url
+                tryon_image_url = images[0].get("url", "")
+                print(f"[DEBUG] 试穿效果图: {tryon_image_url}")
             else:
-                video_url = ""
+                raise Exception("虚拟试穿未返回效果图")
             
-            print(f"[DEBUG] 试穿结果图片URL: {video_url}")
+            task.progress = 50
+            db.commit()
+            
+            # 2. 用试穿效果图生成动态展示视频
+            print(f"[DEBUG] 第二步：调用可灵图生视频接口生成动态展示...")
+            
+            video_prompt = "模特穿着服装自然展示，缓慢旋转展示服装细节，专业灯光，4K高清"
+            
+            video_task_id = kling_service.generate_video(
+                image_url=tryon_image_url,
+                prompt=video_prompt,
+                duration=5,
+                mode="std"
+            )
+            print(f"[DEBUG] 图生视频任务ID: {video_task_id}")
+            
+            # 轮询等待视频生成
+            video_result = kling_service.wait_for_video_result(video_task_id, max_wait=300)
+            video_url = video_result.get("task_result", {}).get("video_url", "")
+            
+            if not video_url:
+                # 如果视频生成失败，降级使用图片
+                print("[DEBUG] 视频生成失败，降级使用效果图")
+                video_url = tryon_image_url
+            
+            print(f"[DEBUG] 试穿展示视频: {video_url}")
             
             output_data = {
                 "task_id": api_task_id,
+                "video_task_id": video_task_id,
                 "video_url": video_url,
+                "tryon_image_url": tryon_image_url,
                 "status": "completed"
             }
             
@@ -73,7 +99,7 @@ class TryonService:
             task.progress = 100
             task.output_data = output_data
             db.commit()
-            print("[DEBUG] ========== 虚拟试穿成功 ==========")
+            print("[DEBUG] ========== 虚拟试穿完成 ==========")
             
         except Exception as e:
             import traceback
