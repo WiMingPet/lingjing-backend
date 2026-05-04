@@ -498,7 +498,7 @@ class KlingService:
 
     # ========== 获取全部音色（预置+自定义） ==========
     def get_all_voices(self) -> List[Dict]:
-        """获取全部音色：预置音色 + 自定义音色"""
+        """获取全部音色：预置音色 + 自定义音色（去重）"""
         print(f"[DEBUG] ========== 开始获取全部音色 ==========")
         
         preset_voices = self.get_tts_voices()
@@ -510,8 +510,18 @@ class KlingService:
         # 合并列表，自定义音色放在前面
         all_voices = custom_voices + preset_voices
         
-        print(f"[DEBUG] 总共获取 {len(all_voices)} 个音色")
-        return all_voices
+        # ========== 按 id 去重 ==========
+        seen_ids = set()
+        unique_voices = []
+        for voice in all_voices:
+            voice_id = voice.get("id")
+            if voice_id and voice_id not in seen_ids:
+                seen_ids.add(voice_id)
+                unique_voices.append(voice)
+        # =================================
+        
+        print(f"[DEBUG] 去重后总共 {len(unique_voices)} 个音色")
+        return unique_voices
 
     def _get_mock_voices(self) -> List[Dict]:
         """模拟音色数据（降级用，当可灵 API 不可用时使用）"""
