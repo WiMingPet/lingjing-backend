@@ -5,11 +5,7 @@ from typing import Optional, Dict
 from sqlalchemy.orm import Session
 from app.models.task import Task
 from app.services.oss_service import oss_service  # 新增：导入 OSS 服务
-import subprocess
-import tempfile
-import os
-import requests
-import time
+
 
 
 class VideoService:
@@ -80,29 +76,10 @@ class VideoService:
                     print(f"[DEBUG] OSS 上传失败，使用原始 URL: {e}")
             # ========== OSS 上传结束 ==========
             
-            # ========== 提取封面图并保存历史记录 ==========
-            thumbnail_url = None
-            if video_url:
-                thumbnail_url = await VideoService.extract_thumbnail(video_url)
-                print(f"[DEBUG] 封面图URL: {thumbnail_url}")
-                
-                # 保存到历史记录表
-                from app.models.history import History
-                history = History(
-                    user_id=user_id,
-                    url=video_url,
-                    type="视频生成",
-                    thumbnail=thumbnail_url
-                )
-                db.add(history)
-                print(f"[DEBUG] 历史记录已保存，用户ID: {user_id}")
-            # =============================================
-            
             output_data = {
                 "task_id": api_task_id,
                 "video_url": video_url,
-                "status": "completed",
-                "thumbnail_url": thumbnail_url   # 添加封面图到返回数据
+                "status": "completed"
             }
             
             task.status = "completed"
@@ -121,48 +98,6 @@ class VideoService:
             raise e
         
         return task
-
-    @staticmethod
-    async def extract_thumbnail(video_url: str) -> str:
-        """下载视频，提取第一帧为jpg，上传OSS，返回封面图URL"""
-        from app.services.oss_service import oss_service
-        
-        temp_files = []
-        try:
-            # 1. 下载视频
-            resp = requests.get(video_url, timeout=30)
-            resp.raise_for_status()
-            with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as f:
-                f.write(resp.content)
-                video_path = f.name
-                temp_files.append(video_path)
-            
-            # 2. 提取第一帧
-            thumb_path = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False).name
-            temp_files.append(thumb_path)
-            subprocess.run([
-                'ffmpeg', '-i', video_path, '-vframes', '1',
-                '-q:v', '2', '-y', thumb_path
-            ], check=True, capture_output=True)
-            
-            # 3. 上传到OSS
-            with open(thumb_path, 'rb') as f:
-                thumb_url = await oss_service.upload_file(
-                    f.read(),
-                    f"thumbnails/video_{int(time.time())}.jpg",
-                    "history"
-                )
-            return thumb_url
-        except Exception as e:
-            print(f"[DEBUG] 提取封面失败: {e}")
-            return None
-        finally:
-            for path in temp_files:
-                if os.path.exists(path):
-                    try:
-                        os.unlink(path)
-                    except:
-                        pass
 
     @staticmethod
     def get_task_result(db: Session, task_id: int) -> Optional[Task]:
