@@ -102,3 +102,74 @@ class VideoService:
     def get_task_result(db: Session, task_id: int) -> Optional[Task]:
         """获取任务结果"""
         return db.query(Task).filter(Task.id == task_id).first()
+
+    @staticmethod
+    async def extract_thumbnail(video_url: str) -> Optional[str]:
+        """
+        从视频URL提取第一帧并上传到OSS，返回封面图URL。
+        若失败返回 None。
+        """
+        import subprocess
+        import tempfile
+        import os
+
+        # 1. 下载视频到临时文件
+        tmp_video = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+        tmp_video.close()
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                async with session.get(video_url) as resp:
+                    if resp.status != 200:
+                        print(f"[DEBUG] 下载视频失败: HTTP {resp.status}")
+                        return None
+                    with open(tmp_video.name, "wb") as f:
+                        f.write(await resp.read())
+        except Exception as e:
+            print(f"[DEBUG] 下载视频异常: {e}")
+            if os.path.exists(tmp_video.name):
+                os.unlink(tmp_video.name)
+            return None
+
+        # 2. 用 ffmpeg 提取第一帧到临时文件
+        tmp_thumbnail = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+        tmp_thumbnail.close()
+        try:
+            cmd = [
+                "ffmpeg", "-i", tmp_video.name,
+                "-ss", "00:00:01.000",
+                "-vframes", "1",
+                tmp_thumbnail.name,
+                "-y"
+            ]
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        except Exception as e:
+            print(f"[DEBUG] ffmpeg 提取封面失败: {e}")
+            if os.path.exists(tmp_thumbnail.name):
+                os.unlink(tmp_thumbnail.name)
+            return None
+        finally:
+            # 删除临时视频
+            if os.path.exists(tmp_video.name):
+                os.unlink(tmp_video.name)
+
+        # 3. 上传封面到OSS（读取文件字节）
+        if os.path.exists(tmp_thumbnail.name) and os.path.getsize(tmp_thumbnail.name) > 0:
+            try:
+                with open(tmp_thumbnail.name, "rb") as f:
+                    thumbnail_bytes = f.read()
+                oss_url = await oss_service.upload_file(
+                    file_content=thumbnail_bytes,
+                    file_extension="jpg",
+                    sub_folder="thumbnails"
+                )
+                os.unlink(tmp_thumbnail.name)
+                return oss_url
+            except Exception as e:
+                print(f"[DEBUG] 上传封面到OSS失败: {e}")
+                if os.path.exists(tmp_thumbnail.name):
+                    os.unlink(tmp_thumbnail.name)
+                return None
+        else:
+            print("[DEBUG] 提取的封面文件不存在或为空")
+            return None

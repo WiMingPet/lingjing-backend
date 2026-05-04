@@ -6,6 +6,7 @@ from app.utils.auth import get_current_user
 from app.models.history import History
 from pydantic import BaseModel
 from typing import Optional
+from app.services.video_service import VideoService
 
 router = APIRouter(prefix="/history", tags=["历史记录"])
 
@@ -20,11 +21,19 @@ async def save_history(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    # 自动生成封面（如果是视频且未提供封面）
+    thumbnail_url = request.thumbnail
+    if not thumbnail_url and request.type in ["数字人分身", "视频生成", "AI带货视频", "虚拟试穿"]:
+        try:
+            thumbnail_url = await VideoService.extract_thumbnail(request.url)
+        except Exception as e:
+            print(f"[DEBUG] 封面生成失败（不影响保存）: {e}")
+
     history = History(
         user_id=current_user.id,
         url=request.url,
         type=request.type,
-        thumbnail=request.thumbnail
+        thumbnail=thumbnail_url
     )
     db.add(history)
     db.commit()
