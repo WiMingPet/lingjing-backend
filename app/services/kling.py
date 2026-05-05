@@ -212,7 +212,8 @@ class KlingService:
         payload = {
             "model_name": "kolors-virtual-try-on-v1-5",
             "human_image": human_image_url,
-            "cloth_image": cloth_image_url
+            "cloth_image": cloth_image_url,
+            "cloth_category": "default"  # ← 自动适配任意服装
         }
         # 如果有数字人ID，添加到请求中（如果API支持）
         if digital_human_id:
