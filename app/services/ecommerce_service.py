@@ -319,7 +319,7 @@ class EcommerceService:
         product: ProductInfo, 
         digital_image_url: str = None, 
         digital_human_id: Optional[int] = None,
-        user_token: str = None  # 【新增】用户token，用于调用试穿接口
+        user_token: str = None,  # 【新增】用户token，用于调用试穿接口
         is_manual_mode: bool = False  # ✅ 保留
     ) -> dict:
         """生成完整带货视频"""
