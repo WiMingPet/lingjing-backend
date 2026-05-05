@@ -4,6 +4,7 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Header
 from sqlalchemy.orm import Session
 from typing import Optional
+from pydantic import BaseModel
 from app.database import get_db
 from app.schemas.task import APIResponse, TaskResponse
 from app.services.tryon_service import TryonService
