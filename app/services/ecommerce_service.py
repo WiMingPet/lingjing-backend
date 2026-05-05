@@ -6,7 +6,7 @@ import tempfile
 import logging
 import requests
 import re
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from urllib.parse import unquote
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
@@ -246,41 +246,31 @@ class EcommerceService:
         )
     
         if is_manual_mode:
+            # 【核心】先让 AI 识别产品图片
+            if product.images:
+                detected_name, detected_desc = await self._analyze_product_image(
+                    product.images[0], 
+                    user_input=product.description
+                )
+                # 用识别结果覆盖
+                product.title = detected_name or product.title
+                product.description = detected_desc or product.description
+            
             prompt = f"""
-你是一位顶级的直播带货主播，请根据用户上传的产品信息，生成一段约60秒的口播文案。
+你是一位顶级的直播带货主播，需要根据以下产品信息，生成一段约60秒的直播口播文案。
 
 产品信息：
-- 标题：{product.title}
-- 描述：{product.description}
+- 名称：{product.title}
+- 详细描述：{product.description}
 
-要求：
-1. 根据标题和描述，推断出产品的核心卖点、款式、材质、适合人群、使用场景。
-2. 口播文案需有吸引力，包含：开场吸引注意、产品卖点介绍、解决痛点、促销引导。
-3. 文案内容必须和产品特征一致，不能脱离事实编造功能。
+创作要求：
+1. 风格：真实、有感染力、有购买号召力，像真人在直播间的即兴发挥。
+2. 结构：开场抓眼球（2秒内） -> 产品卖点介绍（材质、款式、解决什么痛点） -> 适合什么样的人群 -> 使用场景 -> 促销引导。
+3. 文案必须严格基于以上产品信息，不能编造。
 4. 输出格式为JSON：
    {{
-     "title": "视频标题",
-     "script": "完整口播文案（约300字，60秒）",
-     "scenes": ["分镜1描述", "分镜2描述", ...]
-   }}
-"""
-        else:
-            prompt = f"""
-你是一位顶级的直播带货主播，请根据以下商品信息，生成一段约60秒的口播文案和分镜描述。
-
-商品信息：
-- 标题：{product.title}
-- 价格：{product.price}
-- 描述：{product.description}
-
-要求：
-1. 口播文案需有吸引力，包含开场、产品介绍、痛点解决、促销引导。
-2. 分镜描述需指明每一段文案对应的画面建议。
-3. 输出格式为JSON：
-   {{
-     "title": "视频标题",
-     "script": "完整口播文案",
-     "scenes": ["分镜1描述", "分镜2描述", ...]
+     "title": "抓眼球的视频标题",
+     "script": "完整的口播文案（约300字，保证能讲满60秒）"
    }}
 """
         
@@ -303,12 +293,24 @@ class EcommerceService:
                 scenes=result.get("scenes", [])
             )
         except Exception as e:
-            print(f"AI生成失败: {e}")
-            return CopywritingScript(
-                title="AI带货视频",
-                script=f"家人们！今天给大家推荐这款{product.title}，只要{product.price}元，这性价比简直太高了！赶快点击下方链接下单吧！",
-                scenes=["开场", "展示", "结束"]
-            )
+            print(f"AI生成失败 (重试一次): {e}")
+            try:
+                response = await client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=500,
+                    temperature=0.8
+                )
+                content = response.choices[0].message.content
+                result = json.loads(content)
+                return CopywritingScript(
+                    title=result.get("title", "AI带货视频"),
+                    script=result.get("script", ""),
+                    scenes=result.get("scenes", [])
+                )
+            except Exception as e2:
+                print(f"AI重试也失败: {e2}")
+                raise Exception(f"AI文案生成失败，请稍后重试")
 
     # ==================== 【修复1+2+3+4】完整的视频生成主流程 ====================
     async def create_product_video(
@@ -318,6 +320,7 @@ class EcommerceService:
         digital_image_url: str = None, 
         digital_human_id: Optional[int] = None,
         user_token: str = None  # 【新增】用户token，用于调用试穿接口
+        is_manual_mode: bool = False  # ✅ 保留
     ) -> dict:
         """生成完整带货视频"""
         
@@ -530,6 +533,63 @@ class EcommerceService:
             url = await self._wait_for_video(task_id)
             urls.append(url)
         return urls
+    async def _analyze_product_image(self, image_url: str, user_input: str = "") -> Tuple[str, str]:
+        """
+        分析图片，返回 (product_name, detailed_description)
+        """
+        import aiohttp
+        
+        try:
+            # 下载图片并转为 base64
+            async with aiohttp.ClientSession() as session:
+                async with session.get(image_url) as resp:
+                    image_data = await resp.read()
+            image_base64 = base64.b64encode(image_data).decode('utf-8')
+            
+            # 调用 OpenAI 视觉模型
+            client = AsyncOpenAI(
+                api_key=self.api_key,
+                base_url=self.base_url,
+                timeout=60.0
+            )
+            
+            prompt = f"""
+请仔细分析这张产品图片，提取以下信息：
+1. 产品名称（具体到款式、类型）
+2. 核心卖点（至少3个）
+3. 材质/面料
+4. 适合人群（年龄、性别、风格偏好）
+5. 适用场景（至少2个）
+6. 如果有{user_input}，请结合用户输入的内容
+
+输出格式严格为JSON：
+{{
+  "product_name": "具体产品名称",
+  "selling_points": "核心卖点，用中文逗号分隔",
+  "description": "一段约100字的详细产品描述，包含材质、版型、风格"
+}}
+"""
+            
+            response = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": image_url}}
+                    ]
+                }],
+                max_tokens=500,
+                temperature=0.5
+            )
+            
+            content = response.choices[0].message.content
+            result = json.loads(content)
+            return result.get("product_name", "商品"), result.get("description", "")
+            
+        except Exception as e:
+            print(f"图片识别失败: {e}")
+            return "优质商品", "质量保证，性价比高"
 
     async def _merge_videos(self, digital_video_url: str, product_video_urls: List[str]) -> str:
         """使用 ffmpeg 合并视频"""
