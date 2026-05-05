@@ -334,61 +334,35 @@ class EcommerceService:
     # ==================== 【修复1】正确调用虚拟试穿接口 ====================
     async def _call_tryon_api(self, garment_image_url: str, model_image_url: str, user_token: str = None) -> Optional[str]:
         """
-        用 multipart/form-data 方式调用虚拟试穿接口
-        增加下载重试机制，解决 DNS 偶发失败
+        通过URL调用虚拟试穿接口（内部新接口，无需下载图片）
         """
         import aiohttp
-        
-        async def download_with_retry(url, max_retries=3):
-            """带重试的下载，解决 DNS 偶发失败"""
-            for i in range(max_retries):
-                try:
-                    timeout = aiohttp.ClientTimeout(total=30)
-                    async with aiohttp.ClientSession(timeout=timeout) as session:
-                        async with session.get(url) as resp:
-                            if resp.status != 200:
-                                raise Exception(f"HTTP {resp.status}")
-                            return await resp.read()
-                except Exception as e:
-                    print(f"[DEBUG] 下载重试 {i+1}/{max_retries}: {e}")
-                    if i < max_retries - 1:
-                        await asyncio.sleep(2)
-            raise Exception(f"下载失败（已重试{max_retries}次）: {url}")
+        import os
         
         try:
-            print(f"[DEBUG] 下载商品图片: {garment_image_url[:80]}...")
-            print(f"[DEBUG] 下载模特图片: {model_image_url[:80]}...")
-            
-            # 并发下载两张图片（带重试）
-            garment_bytes = await download_with_retry(garment_image_url)
-            model_bytes = await download_with_retry(model_image_url)
-            
-            # 准备 multipart 数据
-            form_data = aiohttp.FormData()
-            form_data.add_field(
-                "garment_image",
-                garment_bytes,
-                filename="garment.jpg",
-                content_type="image/jpeg"
-            )
-            form_data.add_field(
-                "model_image",
-                model_bytes,
-                filename="model.jpg",
-                content_type="image/jpeg"
-            )
-            
-            # 构建请求头
-            headers = {}
-            if user_token:
-                headers["Authorization"] = f"Bearer {user_token}"
+            print(f"[DEBUG] 通过URL调用试穿接口（无需下载图片）")
+            print(f"[DEBUG] 服装图: {garment_image_url[:80]}...")
+            print(f"[DEBUG] 模特图: {model_image_url[:80]}...")
             
             timeout = aiohttp.ClientTimeout(total=120)
             async with aiohttp.ClientSession(timeout=timeout) as session:
-                api_url = "https://lingjing.preview.aliyun-zeabur.cn/api/tryon/generate"
-                print(f"[DEBUG] 调用试穿API: {api_url}")
+                api_url = "https://lingjing.preview.aliyun-zeabur.cn/api/tryon/generate_by_url"
                 
-                async with session.post(api_url, data=form_data, headers=headers) as resp:
+                payload = {
+                    "model_image_url": model_image_url,
+                    "garment_image_url": garment_image_url
+                }
+                
+                headers = {
+                    "Content-Type": "application/json",
+                    "X-Internal-Key": os.getenv("INTERNAL_API_KEY", "lingjing-internal-2026")
+                }
+                if user_token:
+                    headers["Authorization"] = f"Bearer {user_token}"
+                
+                print(f"[DEBUG] 调用试穿URL接口: {api_url}")
+                
+                async with session.post(api_url, json=payload, headers=headers) as resp:
                     print(f"[DEBUG] 试穿API响应状态: {resp.status}")
                     if resp.status == 200:
                         result = await resp.json()

@@ -1,7 +1,7 @@
 """
 虚拟试穿路由
 """
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Header
 from sqlalchemy.orm import Session
 from typing import Optional
 from app.database import get_db
@@ -72,5 +72,45 @@ def get_tryon_task(
     return APIResponse(
         code=200,
         message="获取成功",
+        data=TaskResponse.model_validate(task)
+    )
+# ========== 新增：通过URL生成试穿（服务器内部专用） ==========
+import os
+
+class TryonByUrlRequest(BaseModel):
+    model_image_url: str
+    garment_image_url: str
+
+@router.post("/generate_by_url", response_model=APIResponse)
+async def generate_tryon_by_url(
+    request: TryonByUrlRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    x_internal_key: str = Header(None, alias="X-Internal-Key")
+):
+    """
+    通过图片URL生成虚拟试穿（服务器内部专用）
+    
+    - **model_image_url**: 模特图片URL
+    - **garment_image_url**: 服装图片URL
+    """
+    # 安全校验：仅允许服务器内部调用
+    INTERNAL_KEY = os.getenv("INTERNAL_API_KEY", "lingjing-internal-2026")
+    if x_internal_key != INTERNAL_KEY:
+        raise HTTPException(status_code=403, detail="仅限内部调用")
+    
+    # ✅ 检查并扣除 10 点灵境点
+    check_and_deduct_credits(current_user, db, 10, "虚拟试穿")
+    
+    request_data = {
+        "model_image_url": request.model_image_url,
+        "garment_image_url": request.garment_image_url
+    }
+    
+    task = await TryonService.generate_tryon(db, current_user.id, request_data)
+    
+    return APIResponse(
+        code=200,
+        message="虚拟试穿任务已提交",
         data=TaskResponse.model_validate(task)
     )
