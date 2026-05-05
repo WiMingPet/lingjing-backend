@@ -28,7 +28,7 @@ class ProductSchema(BaseModel):
 
 class EcommerceService:
     def __init__(self):
-        self.api_key = "sk-effTartCqXaPPp_ccIcJ3g"
+        self.api_key = "sk-xS3B_2aEVaLpvM7zAju_xA"
         self.base_url = "https://hnd1.aihub.zeabur.ai/v1"
         self.kling = KlingService()
 
