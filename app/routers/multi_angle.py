@@ -1,7 +1,7 @@
 """
 多角度试穿路由
 """
-from fastapi import APIRouter, Depends, HTTPException, File, Form
+from fastapi import APIRouter, Depends, HTTPException, File, Form, UploadFile
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from app.database import get_db
