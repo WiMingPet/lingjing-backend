@@ -17,7 +17,11 @@ logger = logging.getLogger(__name__)
 
 def _is_mobile_client(user_agent: str) -> bool:
     user_agent = user_agent.lower()
-    mobile_keywords = ["mobile", "android", "iphone", "ipad", "phone"]
+    mobile_keywords = [
+        "mobile", "android", "iphone", "ipad", "ipod", "phone",
+        "webos", "blackberry", "opera mini", "iemobile", "symbian",
+        "mqqbrowser", "ucbrowser", "micromessenger", "wechat"
+    ]
     return any(keyword in user_agent for keyword in mobile_keywords)
 
 
