@@ -53,10 +53,13 @@ async def _generate_video_background(
                 platform="manual"
             )
         
+        # 判断是否为手动模式（没有链接，只有图片或描述）
+        is_manual = not request.url and (request.image_url or request.description)
+        
         task_store[task_id] = {"status": "processing", "message": "正在生成口播文案..."}
         
         # 2. 生成文案
-        script = await service.generate_copywriting(product)
+        script = await service.generate_copywriting(product, is_manual_mode=is_manual)
         
         task_store[task_id] = {"status": "processing", "message": "正在生成带货视频，预计2-5分钟..."}
         
@@ -66,7 +69,8 @@ async def _generate_video_background(
             product, 
             digital_image_url=request.digital_image_url,
             digital_human_id=request.digital_human_id,
-            user_token=None
+            user_token=None,
+            is_manual_mode=is_manual
         )
         
         # 4. 保存历史记录

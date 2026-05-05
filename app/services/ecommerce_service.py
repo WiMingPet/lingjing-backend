@@ -245,7 +245,27 @@ class EcommerceService:
             timeout=60.0
         )
     
-        prompt = f"""
+        if is_manual_mode:
+            prompt = f"""
+你是一位顶级的直播带货主播，请根据用户上传的产品信息，生成一段约60秒的口播文案。
+
+产品信息：
+- 标题：{product.title}
+- 描述：{product.description}
+
+要求：
+1. 根据标题和描述，推断出产品的核心卖点、款式、材质、适合人群、使用场景。
+2. 口播文案需有吸引力，包含：开场吸引注意、产品卖点介绍、解决痛点、促销引导。
+3. 文案内容必须和产品特征一致，不能脱离事实编造功能。
+4. 输出格式为JSON：
+   {{
+     "title": "视频标题",
+     "script": "完整口播文案（约300字，60秒）",
+     "scenes": ["分镜1描述", "分镜2描述", ...]
+   }}
+"""
+        else:
+            prompt = f"""
 你是一位顶级的直播带货主播，请根据以下商品信息，生成一段约60秒的口播文案和分镜描述。
 
 商品信息：
@@ -263,7 +283,7 @@ class EcommerceService:
      "scenes": ["分镜1描述", "分镜2描述", ...]
    }}
 """
-    
+        
         try:
             response = await client.chat.completions.create(
                 model="gpt-4o-mini",
@@ -318,32 +338,48 @@ class EcommerceService:
         
         # 2. 生成商品展示视频
         product_video_url = None
-
-        # --- 核心修改：先判断是否已有视频，没有才走虚拟试穿流程 ---
         product_images = product.images or []
         
-        # 情况A：如果链接里直接带了视频，就用原视频
+        fashion_keywords = [
+            "裤", "衣", "裙", "服装", "T恤", "衬衫", "外套", "卫衣",
+            "短袖", "长袖", "夹克", "羽绒", "马甲", "背心", "毛衣",
+            "针织", "风衣", "大衣", "棉服", "西服", "套装", "连体"
+        ]
+        is_fashion = any(keyword in product.title for keyword in fashion_keywords)
+        
+        # 情况1：链接里有视频 → 直接用原视频
         if hasattr(product, 'video_url') and product.video_url:
             product_video_url = product.video_url
             print(f"[DEBUG] 使用链接内视频: {product_video_url}")
-        # 情况B：没视频，但有图片，并且是服装类商品
-        elif product_images:
-            fashion_keywords = ["裤", "衣", "裙", "服装", "T恤", "衬衫", "外套", "卫衣", "短袖", "长袖", "夹克", "羽绒"]
-            is_fashion = any(keyword in product.title for keyword in fashion_keywords)
-            
-            if is_fashion:
-                # 走虚拟试穿流程：把商品图“穿”到数字人身上
-                print(f"[DEBUG] 检测到服装类商品，尝试调用虚拟试穿生成展示视频...")
-                product_video_url = await self._call_tryon_api(
-                    garment_image_url=product.images[0],
-                    model_image_url=digital_human_image,
-                    user_token=user_token
-                )
-            
-            # 降级：如果是非服装类图片，或者试穿失败，用图生视频
+        
+        # 情况2：手动模式 + 服装类 → 虚拟试穿
+        elif is_manual_mode and is_fashion and product_images:
+            print(f"[DEBUG] 手动模式+服装类：调用虚拟试穿...")
+            product_video_url = await self._call_tryon_api(
+                garment_image_url=product_images[0],
+                model_image_url=digital_human_image,
+                user_token=user_token
+            )
             if not product_video_url:
-                print(f"[DEBUG] 使用图生视频生成商品展示...")
-                product_video_url = await self.generate_product_demo_video(product)
+                print(f"[DEBUG] 试穿失败，降级为原图展示...")
+                product_video_url = await self._image_to_video(product_images[0], duration=5)
+        
+        # 情况3：链接模式 + 服装类 → 虚拟试穿
+        elif not is_manual_mode and is_fashion and product_images:
+            print(f"[DEBUG] 链接模式+服装类：调用虚拟试穿...")
+            product_video_url = await self._call_tryon_api(
+                garment_image_url=product_images[0],
+                model_image_url=digital_human_image,
+                user_token=user_token
+            )
+            if not product_video_url:
+                print(f"[DEBUG] 试穿失败，降级为原图展示...")
+                product_video_url = await self._image_to_video(product_images[0], duration=5)
+        
+        # 情况4：非服装类（无论手动还是链接）→ 原图展示
+        elif product_images:
+            print(f"[DEBUG] 非服装类商品，用原图生成展示视频...")
+            product_video_url = await self._image_to_video(product_images[0], duration=5)
         
         # 3. 合并视频
         if product_video_url:
