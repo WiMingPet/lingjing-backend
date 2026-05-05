@@ -82,6 +82,26 @@ class PaymentService:
             notify_url=self.notify_url,
         )
         return f"{self.gateway}?{order_string}"
+        
+    def create_app_order(
+        self,
+        out_trade_no: str,
+        total_amount: Decimal,
+        subject: str,
+        body: str,
+    ) -> str:
+        """
+        创建支付宝APP支付订单
+        返回 order_info 字符串，前端传给支付宝SDK唤起APP支付
+        """
+        order_string = self.alipay.api_alipay_trade_app_pay(
+            out_trade_no=out_trade_no,
+            total_amount=str(total_amount),
+            subject=subject,
+            body=body,
+            notify_url=self.notify_url,
+        )
+        return order_string
 
     def verify_notification(self, notify_data: Dict[str, Any]) -> bool:
         data = dict(notify_data)

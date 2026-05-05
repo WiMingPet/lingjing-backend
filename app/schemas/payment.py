@@ -21,9 +21,10 @@ class CreateOrderRequest(BaseModel):
 
 class CreateOrderResponse(BaseModel):
     order_no: str
-    channel: Literal["pc_qr", "mobile_wap"]
+    channel: Literal["pc_qr", "mobile_wap", "app_native"]  # 新增 app_native
     qr_code: Optional[str] = None
     pay_url: Optional[str] = None
+    order_info: Optional[str] = None  # 新增：APP支付订单串
     amount: Decimal
     credits: int
     status: Literal["pending", "paid", "closed"] = "pending"

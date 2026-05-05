@@ -44,10 +44,35 @@ def create_order(
     subject = f"灵境点充值 {payload.credits} 点"
     body = f"用户 {current_user.id} 充值灵境点"
     channel = payload.channel
+    user_agent = http_request.headers.get("user-agent", "").lower()
+
+    # 渠道判断
     if not channel:
-        channel = "mobile_wap" if _is_mobile_client(http_request.headers.get("user-agent", "")) else "pc_qr"
+        if "expo" in user_agent or "lingjing" in user_agent:
+            channel = "app_native"
+        elif _is_mobile_client(user_agent):
+            channel = "mobile_wap"
+        else:
+            channel = "pc_qr"
 
     try:
+        # ========== APP原生支付 ==========
+        if channel == "app_native":
+            order_info = service.create_app_order(
+                out_trade_no=order_no,
+                total_amount=payload.amount,
+                subject=subject,
+                body=body,
+            )
+            return CreateOrderResponse(
+                order_no=order_no,
+                channel="app_native",
+                order_info=order_info,
+                amount=payload.amount,
+                credits=payload.credits,
+                status="pending",
+            )
+
         if channel == "mobile_wap":
             pay_url = service.create_mobile_wap_order(
                 out_trade_no=order_no,
@@ -65,6 +90,7 @@ def create_order(
                 status="pending",
             )
 
+        # 兜底：PC二维码
         qr_code = service.create_pc_qr_order(
             out_trade_no=order_no,
             total_amount=payload.amount,
