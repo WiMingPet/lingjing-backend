@@ -99,14 +99,30 @@ class EcommerceService:
                 images = img_data.get("url_list", [])
                 
                 title = goods_detail.get("title", "")
+                
+                # ========== 新增：提取视频 URL ==========
+                video_url = None
+                video_data = goods_detail.get("video", {})
+                if video_data.get("url_list"):
+                    video_url = video_data["url_list"][0]
+                if not video_url:
+                    from urllib.parse import unquote
+                    video_match = re.search(r'video_url=([^&]+)', unquote(final_url))
+                    if video_match:
+                        video_url = unquote(video_match.group(1))
+                # ========== 提取结束 ==========
+                
                 print(f"[DEBUG] 本地解析成功: {title[:50]}...")
                 print(f"[DEBUG] 获取到 {len(images)} 张图片")
+                if video_url:
+                    print(f"[DEBUG] 获取到视频: {video_url[:80]}...")
                 
                 return {
                     "title": title,
                     "price": price_fen / 100 if price_fen else 0,
                     "description": title,
-                    "images": images
+                    "images": images,
+                    "video_url": video_url
                 }
             except Exception as e:
                 print(f"[DEBUG] goods_detail 解析异常: {e}")
@@ -143,6 +159,7 @@ class EcommerceService:
                 price=str(local_result["price"]),
                 description=local_result["description"],
                 images=local_result.get("images", []),
+                video_url=local_result.get("video_url"),
                 platform="douyin"
             )
         
@@ -299,18 +316,31 @@ class EcommerceService:
         digital_video_url = await self._wait_for_video(digital_task_id)
         print(f"[DEBUG] 数字人视频生成完成")
         
-        # 2. 生成商品展示视频（带虚拟试穿）
+        # 2. 生成商品展示视频
         product_video_url = None
+
+        # --- 核心修改：先判断是否已有视频，没有才走虚拟试穿流程 ---
+        product_images = product.images or []
         
-        if product.images:
+        # 情况A：如果链接里直接带了视频，就用原视频
+        if hasattr(product, 'video_url') and product.video_url:
+            product_video_url = product.video_url
+            print(f"[DEBUG] 使用链接内视频: {product_video_url}")
+        # 情况B：没视频，但有图片，并且是服装类商品
+        elif product_images:
             fashion_keywords = ["裤", "衣", "裙", "服装", "T恤", "衬衫", "外套", "卫衣", "短袖", "长袖", "夹克", "羽绒"]
             is_fashion = any(keyword in product.title for keyword in fashion_keywords)
             
             if is_fashion:
-                # 直接用商品原图做展示视频，确保画面与链接商品一致
-                print(f"[DEBUG] 检测到服装类商品，直接用商品原图生成展示视频...")
-                product_video_url = await self.generate_product_demo_video(product)
+                # 走虚拟试穿流程：把商品图“穿”到数字人身上
+                print(f"[DEBUG] 检测到服装类商品，尝试调用虚拟试穿生成展示视频...")
+                product_video_url = await self._call_tryon_api(
+                    garment_image_url=product.images[0],
+                    model_image_url=digital_human_image,
+                    user_token=user_token
+                )
             
+            # 降级：如果是非服装类图片，或者试穿失败，用图生视频
             if not product_video_url:
                 print(f"[DEBUG] 使用图生视频生成商品展示...")
                 product_video_url = await self.generate_product_demo_video(product)

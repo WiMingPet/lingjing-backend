@@ -8,6 +8,7 @@ class ProductInfo(BaseModel):
     description: str
     images: List[str]
     platform: str
+    video_url: Optional[str] = None  # 新增
 
 class CopywritingScript(BaseModel):
     """AI生成的带货脚本"""
