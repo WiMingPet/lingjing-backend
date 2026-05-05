@@ -307,12 +307,9 @@ class EcommerceService:
             is_fashion = any(keyword in product.title for keyword in fashion_keywords)
             
             if is_fashion:
-                print(f"[DEBUG] 检测到服装类商品，尝试调用虚拟试穿...")
-                product_video_url = await self._call_tryon_api(
-                    garment_image_url=product.images[0],
-                    model_image_url=digital_human_image,
-                    user_token=user_token
-                )
+                # 直接用商品原图做展示视频，确保画面与链接商品一致
+                print(f"[DEBUG] 检测到服装类商品，直接用商品原图生成展示视频...")
+                product_video_url = await self.generate_product_demo_video(product)
             
             if not product_video_url:
                 print(f"[DEBUG] 使用图生视频生成商品展示...")
