@@ -237,7 +237,7 @@ class EcommerceService:
         video_url = await self._wait_for_video(task_id)
         return video_url
 
-    async def generate_copywriting(self, product: ProductInfo) -> CopywritingScript:
+    async def generate_copywriting(self, product: ProductInfo, is_manual_mode: bool = False) -> CopywritingScript:
         """调用 OpenAI 生成带货口播文案"""
         client = AsyncOpenAI(
             api_key=self.api_key, 
