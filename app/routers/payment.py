@@ -20,8 +20,12 @@ def _is_mobile_client(user_agent: str) -> bool:
     mobile_keywords = [
         "mobile", "android", "iphone", "ipad", "ipod", "phone",
         "webos", "blackberry", "opera mini", "iemobile", "symbian",
+        "edg", "edge",  # Edge 移动版也包含这些关键字
         "mqqbrowser", "ucbrowser", "micromessenger", "wechat"
     ]
+    # 额外排除：包含 "mobile" 但明确是桌面版的不算
+    if "mobile" in user_agent and "desktop" not in user_agent:
+        return True
     return any(keyword in user_agent for keyword in mobile_keywords)
 
 

@@ -37,6 +37,8 @@ async def create_digital_human(
     - **description**: 描述 (可选)
     - **source_video**: 模特视频 (必填)
     """
+    # ✅ 检查并扣除 20 灵境点
+    check_and_deduct_credits(current_user, db, 20, "定制数字人")
     # 上传视频
     file_url, file_id = await upload_file_helper(source_video, "digital_human_videos")
     source_video_id = file_id
@@ -243,12 +245,12 @@ async def generate_digital_human(
     else:
         raise HTTPException(status_code=400, detail="请提供文字内容或音频文件")
     
-    # ✅ 新增：检查并扣除 20 点灵境点
+    # ✅ 新增：检查并扣除 10 点灵境点
     # 需要先获取用户对象
     user = db.query(User).filter(User.id == current_user.id).first()
     if not user:
         user = current_user
-    check_and_deduct_credits(user, db, 20, "数字人分身")
+    check_and_deduct_credits(user, db, 10, "数字人分身")
     
     # 3. 调用可灵虚拟形象 API
     task_id = await kling_service.generate_digital_human(

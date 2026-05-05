@@ -6,6 +6,7 @@ from app.models.user import User
 from app.utils.auth import get_current_user
 from app.schemas.ecommerce import VideoTaskRequest, ProductInfo
 from app.services.ecommerce_service import EcommerceService
+from app.utils.credits import check_and_deduct_credits
 from app.models.history import History
 import datetime
 import logging
@@ -98,6 +99,8 @@ async def generate_video(
     current_user: User = Depends(get_current_user)
 ):
     """提交AI带货视频生成任务（异步后台执行）"""
+    # ✅ 检查并扣除 20 灵境点
+    check_and_deduct_credits(current_user, db, 20, "AI带货视频")
     import uuid
     task_id = str(uuid.uuid4())
     

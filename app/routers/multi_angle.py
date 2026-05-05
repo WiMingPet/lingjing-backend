@@ -54,8 +54,8 @@ async def generate_unified_character(
         print(f"[DEBUG] 自动创建了用户: id={user.id}")
     # ========== 新增代码结束 ==========
     
-    # ✅ 新增：检查并扣除 15 点灵境点
-    check_and_deduct_credits(user, db, 15, "多角度试穿")
+    # ✅ 新增：检查并扣除 10 点灵境点
+    check_and_deduct_credits(user, db, 10, "多角度试穿")
     
     task = await MultiAngleService.generate_unified_character(db, user_id, request_data)
     

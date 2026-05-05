@@ -47,8 +47,8 @@ async def generate_tryon(
     user = current_user
     user_id = current_user.id
     
-    # ✅ 检查并扣除 15 点灵境点
-    check_and_deduct_credits(user, db, 15, "虚拟试穿")
+    # ✅ 检查并扣除 10 点灵境点
+    check_and_deduct_credits(user, db, 10, "虚拟试穿")
     
     task = await TryonService.generate_tryon(db, user_id, request_data)
     
