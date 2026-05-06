@@ -431,18 +431,8 @@ class EcommerceService:
         voice_name = self._ai_select_voice(product.title, product.description or "", avatar)
         print(f"[DEBUG] 使用音色: {voice_name}")
         
-        # 1. 生成数字人讲解视频
-        print(f"[DEBUG] 开始生成数字人讲解视频...")
-        digital_task_id = await self.kling.generate_digital_human(
-            digital_human_id=digital_human_id,
-            text=script.script,
-            image_url=digital_human_image,
-            voice=voice_name
-        )
-        digital_video_url = await self._wait_for_video(digital_task_id)
-        print(f"[DEBUG] 数字人视频生成完成")
-        
-        # 2. 生成商品展示视频
+       
+        # 1. 生成商品展示视频
         product_video_url = None
         product_images = product.images or []
         
@@ -479,6 +469,17 @@ class EcommerceService:
         elif product_images:
             print(f"[DEBUG] 非服装类商品，用原图生成展示视频...")
             product_video_url = await self._image_to_video(product_images[0], duration=5)
+
+        # 2. 生成数字人讲解视频
+        print(f"[DEBUG] 开始生成数字人讲解视频...")
+        digital_task_id = await self.kling.generate_digital_human(
+            digital_human_id=digital_human_id,
+            text=script.script,
+            image_url=digital_human_image,
+            voice=voice_name
+        )
+        digital_video_url = await self._wait_for_video(digital_task_id)
+        print(f"[DEBUG] 数字人视频生成完成")
         
         # 3. 合并视频
         if product_video_url:
@@ -763,7 +764,7 @@ class EcommerceService:
             cmd = [
                 "ffmpeg", "-i", tmp_video.name, "-i", tmp_audio_source.name,
                 "-c:v", "copy", "-c:a", "aac", "-map", "0:v:0", "-map", "1:a:0",
-                "-shortest", "-y", output_file.name
+                "-y", output_file.name
             ]
             subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
