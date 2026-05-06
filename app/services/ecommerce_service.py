@@ -397,6 +397,45 @@ class EcommerceService:
             "status": "completed"
         }
 
+    async def _image_to_video(self, image_url: str, duration: int = 5) -> str:
+        """把图片转成固定时长的视频"""
+        import subprocess
+        import aiohttp
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(image_url) as resp:
+                    image_data = await resp.read()
+            
+            tmp_image = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+            tmp_image.write(image_data)
+            tmp_image.close()
+            
+            tmp_video = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+            tmp_video.close()
+            
+            cmd = [
+                "ffmpeg", "-loop", "1", "-i", tmp_image.name,
+                "-c:v", "libx264", "-t", str(duration),
+                "-pix_fmt", "yuv420p", "-y",
+                tmp_video.name
+            ]
+            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
+            with open(tmp_video.name, "rb") as f:
+                result_url = await oss_service.upload_file(f.read(), "mp4", "product_images")
+            
+            os.unlink(tmp_image.name)
+            os.unlink(tmp_video.name)
+            
+            return result_url
+            
+        except Exception as e:
+            print(f"[ERROR] 图片转视频失败: {e}")
+            return None
+
+    async def _call_tryon_api(self, ...):
+
     # ==================== 【修复1】正确调用虚拟试穿接口 ====================
     async def _call_tryon_api(self, garment_image_url: str, model_image_url: str, user_token: str = None) -> Optional[str]:
         """
@@ -538,6 +577,7 @@ class EcommerceService:
         分析图片，返回 (product_name, detailed_description)
         """
         import aiohttp
+        import base64
         
         try:
             # 下载图片并转为 base64
@@ -589,7 +629,7 @@ class EcommerceService:
             
         except Exception as e:
             print(f"图片识别失败: {e}")
-            return "优质商品", "质量保证，性价比高"
+            return "时尚服装", "优质服装，版型好，面料舒适，性价比高"
 
     async def _merge_videos(self, digital_video_url: str, product_video_urls: List[str]) -> str:
         """使用 ffmpeg 合并视频"""
