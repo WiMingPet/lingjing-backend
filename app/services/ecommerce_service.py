@@ -550,9 +550,12 @@ class EcommerceService:
             }
             
             # 直接调用 TryonService，和手动试穿完全一致
-            from app.database import get_db
-            db = next(get_db.__wrapped__())
-            task = await TryonService.generate_tryon(db, 1, request_data)
+            from app.database import SessionLocal
+            db = SessionLocal()
+            try:
+                task = await TryonService.generate_tryon(db, 1, request_data)
+            finally:
+                db.close()
             
             if task.status == "completed" and task.output_data:
                 video_url = task.output_data.get("video_url", "")
