@@ -32,6 +32,28 @@ class EcommerceService:
         self.base_url = "https://hnd1.aihub.zeabur.ai/v1"
         self.kling = KlingService()
 
+    def _select_avatar_for_product(self, product_title: str) -> dict:
+        """降级方案：根据标题关键词选择形象"""
+        title_lower = product_title.lower()
+        
+        if any(kw in title_lower for kw in ["男", "男装", "数码", "汽车"]):
+            for avatar in PRESET_AVATARS:
+                if avatar["id"] == 5:
+                    return avatar
+        if any(kw in title_lower for kw in ["美妆", "护肤", "化妆"]):
+            for avatar in PRESET_AVATARS:
+                if avatar["id"] == 12:
+                    return avatar
+        if any(kw in title_lower for kw in ["儿童", "教育", "老师"]):
+            for avatar in PRESET_AVATARS:
+                if avatar["id"] == 10:
+                    return avatar
+        
+        for avatar in PRESET_AVATARS:
+            if avatar["id"] == 12:
+                return avatar
+        return PRESET_AVATARS[0]
+
     # ==================== 【修复2】自动选择预设形象 ====================
     def _ai_select_avatar(self, product_title: str, product_description: str) -> dict:
         """
@@ -59,14 +81,24 @@ class EcommerceService:
 3. 请只返回选中形象的 ID 数字，不要包含其他任何内容。
 """
         try:
-            client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url, timeout=30.0)
-            response = asyncio.run(client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=10,
-                temperature=0.3
-            ))
-            avatar_id = int(response.choices[0].message.content.strip())
+            import requests as sync_requests
+            
+            response = sync_requests.post(
+                f"{self.base_url}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "gpt-4o-mini",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 10,
+                    "temperature": 0.3
+                },
+                timeout=30
+            )
+            result = response.json()
+            avatar_id = int(result["choices"][0]["message"]["content"].strip())
             # 查找并返回对应的形象
             for avatar in PRESET_AVATARS:
                 if avatar["id"] == avatar_id:
@@ -105,14 +137,24 @@ class EcommerceService:
 要求：只返回音色名称，不要包含其他内容。例如：温柔女声
 """
         try:
-            client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url, timeout=30.0)
-            response = asyncio.run(client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=10,
-                temperature=0.3
-            ))
-            voice_name = response.choices[0].message.content.strip()
+            import requests as sync_requests
+            
+            response = sync_requests.post(
+                f"{self.base_url}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "gpt-4o-mini",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 10,
+                    "temperature": 0.3
+                },
+                timeout=30
+            )
+            result = response.json()
+            voice_name = result["choices"][0]["message"]["content"].strip()
             print(f"[AI决策] 选中音色: {voice_name}")
             return voice_name
         except Exception as e:
@@ -633,12 +675,8 @@ class EcommerceService:
                     image_data = await resp.read()
             image_base64 = base64.b64encode(image_data).decode('utf-8')
             
-            # 调用 OpenAI 视觉模型
-            client = AsyncOpenAI(
-                api_key=self.api_key,
-                base_url=self.base_url,
-                timeout=60.0
-            )
+            # 调用 OpenAI 视觉模型（使用同步 requests 方式，避免 asyncio 冲突）
+            import requests as sync_requests
             
             prompt = f"""
 请仔细分析这张产品图片，提取以下信息：
@@ -647,7 +685,6 @@ class EcommerceService:
 3. 材质/面料
 4. 适合人群（年龄、性别、风格偏好）
 5. 适用场景（至少2个）
-6. 如果有{user_input}，请结合用户输入的内容
 
 输出格式严格为JSON：
 {{
@@ -657,21 +694,29 @@ class EcommerceService:
 }}
 """
             
-            response = await client.chat.completions.create(
-                model="gpt-4o",
-                messages=[{
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {"type": "image_url", "image_url": {"url": image_url}}
-                    ]
-                }],
-                max_tokens=500,
-                temperature=0.5
+            response = sync_requests.post(
+                f"{self.base_url}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "gpt-4-vision-preview",
+                    "messages": [{
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {"type": "image_url", "image_url": {"url": image_url}}
+                        ]
+                    }],
+                    "max_tokens": 500,
+                    "temperature": 0.5
+                },
+                timeout=60
             )
             
-            content = response.choices[0].message.content
-            result = json.loads(content)
+            result = response.json()
+            content = result["choices"][0]["message"]["content"]
             return result.get("product_name", "商品"), result.get("description", "")
             
         except Exception as e:
