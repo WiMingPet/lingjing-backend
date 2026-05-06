@@ -33,45 +33,95 @@ class EcommerceService:
         self.kling = KlingService()
 
     # ==================== 【修复2】自动选择预设形象 ====================
-    def _select_avatar_for_product(self, product_title: str, product_type: str = "") -> dict:
+    def _ai_select_avatar(self, product_title: str, product_description: str) -> dict:
         """
-        根据商品标题自动选择最合适的数字人形象
-        规则：
-        - 女装/女性相关 → 选择露西(美妆带货) 或 美娜(女教师)
-        - 男装/男性相关 → 选择宇航(成熟男性) 或 燃锋(潮流男生)
-        - 默认 → 露西(最通用的带货形象)
+        使用 AI 根据产品标题和描述，从预设形象库中自动选择最合适的形象。
+        如果 AI 调用失败，会降级到关键词规则。
         """
-        title_lower = product_title.lower()
-        
-        # 女性商品关键词
-        female_keywords = ["女", "裙", "连衣裙", "女装", "女士", "妈妈", "女性", "美妆", "护肤", "化妆", 
-                          "高跟鞋", "丝袜", "内衣", "文胸", "bra", "口红", "粉底", "眼影"]
-        # 男性商品关键词
-        male_keywords = ["男", "男装", "男士", "爸爸", "男性", "西装", "领带", "皮鞋", "剃须", "皮带"]
-        
-        is_female = any(kw in title_lower for kw in female_keywords)
-        is_male = any(kw in title_lower for kw in male_keywords)
-        
-        if is_male and not is_female:
-            # 选男性形象：优先燃锋(年轻潮流)，备选宇航(成熟稳重)
-            for avatar in PRESET_AVATARS:
-                if avatar["id"] == 5:  # 燃锋
-                    print(f"[DEBUG] 自动选择男性形象: {avatar['name']}")
-                    return avatar
-        elif is_female or "裤" in title_lower or "衣" in title_lower or "服装" in title_lower:
-            # 选女性带货形象：优先露西(美妆带货)，备选美娜
-            for avatar in PRESET_AVATARS:
-                if avatar["id"] == 12:  # 露西
-                    print(f"[DEBUG] 自动选择女性带货形象: {avatar['name']}")
-                    return avatar
-        
-        # 默认：露西
+        # 构建形象列表的描述文本
+        avatar_options = []
         for avatar in PRESET_AVATARS:
-            if avatar["id"] == 12:
-                print(f"[DEBUG] 使用默认带货形象: {avatar['name']}")
-                return avatar
+            avatar_options.append(f"ID:{avatar['id']}, 姓名:{avatar['name']}, 类别:{avatar['category']}, 描述:{avatar['description']}")
+        avatar_list_str = "\n".join(avatar_options)
         
-        return PRESET_AVATARS[0]  # 兜底
+        prompt = f"""
+你是一位顶尖的直播带货策划师。请根据以下产品信息，从形象列表中选出最合适的带货数字人形象。
+
+产品标题：{product_title}
+产品描述：{product_description}
+
+形象列表：
+{avatar_list_str}
+
+选择标准：
+1. 形象的气质、年龄、性别必须与产品的目标受众和风格完全匹配。
+2. 例如，美妆产品首选“露西”(ID:12)，男装或数码产品首选“燃锋”(ID:5)或“宇航”(ID:7)，知识付费首选“文慧”(ID:1)或“明悦”(ID:6)。
+3. 请只返回选中形象的 ID 数字，不要包含其他任何内容。
+"""
+        try:
+            client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url, timeout=30.0)
+            response = asyncio.run(client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=10,
+                temperature=0.3
+            ))
+            avatar_id = int(response.choices[0].message.content.strip())
+            # 查找并返回对应的形象
+            for avatar in PRESET_AVATARS:
+                if avatar["id"] == avatar_id:
+                    print(f"[AI决策] 选中形象: {avatar['name']} (ID:{avatar_id})")
+                    return avatar
+        except Exception as e:
+            print(f"[AI决策] 失败，降级为关键词规则: {e}")
+        
+        # 降级到原来的关键词规则
+        return self._select_avatar_for_product(product_title)
+
+    def _ai_select_voice(self, product_title: str, product_description: str, avatar: dict) -> str:
+        """
+        使用 AI 根据产品信息和已选形象，自动选择最合适的音色
+        返回音色名称（如"温柔女声"）
+        """
+        voice_options = [
+            {"name": "温柔女声", "desc": "温暖柔和，适合女性产品、情感类"},
+            {"name": "播报男声", "desc": "沉稳专业，适合男性产品、商务类"},
+            {"name": "钓系女友", "desc": "活泼俏皮，适合美妆、年轻时尚产品"},
+            {"name": "自然男声", "desc": "磁性有魅力，适合高端产品、男性受众"},
+            {"name": "知性女声", "desc": "知性优雅，适合知识科普、文艺产品"},
+        ]
+        voice_list_str = "\n".join([f"- {v['name']}: {v['desc']}" for v in voice_options])
+        
+        prompt = f"""
+请根据以下信息，从音色列表中选择最合适的音色。
+
+产品标题：{product_title}
+产品描述：{product_description}
+已选形象：{avatar['name']}（{avatar['description']}）
+
+音色列表：
+{voice_list_str}
+
+要求：只返回音色名称，不要包含其他内容。例如：温柔女声
+"""
+        try:
+            client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url, timeout=30.0)
+            response = asyncio.run(client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=10,
+                temperature=0.3
+            ))
+            voice_name = response.choices[0].message.content.strip()
+            print(f"[AI决策] 选中音色: {voice_name}")
+            return voice_name
+        except Exception as e:
+            print(f"[AI决策] 音色选择失败，使用默认值: {e}")
+        
+        # 降级：根据已选形象性别判断
+        if avatar["id"] in [5, 7]:  # 燃锋、宇航（男性）
+            return "播报男声"
+        return "温柔女声"
 
     # ==================== 本地解析抖音链接 ====================
     def _parse_douyin_from_url(self, url: str) -> Optional[dict]:
@@ -319,22 +369,27 @@ class EcommerceService:
         product: ProductInfo, 
         digital_image_url: str = None, 
         digital_human_id: Optional[int] = None,
-        user_token: str = None,  # 【新增】用户token，用于调用试穿接口
-        is_manual_mode: bool = False  # ✅ 保留
+        user_token: str = None,
+        is_manual_mode: bool = False
     ) -> dict:
         """生成完整带货视频"""
         
-        # 【修复2】自动选择预设形象
-        avatar = self._select_avatar_for_product(product.title)
+        # 自动选择预设形象
+        avatar = self._ai_select_avatar(product.title, product.description or "")
         digital_human_image = digital_image_url or avatar.get("model_image", "")
         print(f"[DEBUG] 使用数字人形象: {avatar['name']} - {digital_human_image}")
+        
+        # 自动选择音色
+        voice_name = self._ai_select_voice(product.title, product.description or "", avatar)
+        print(f"[DEBUG] 使用音色: {voice_name}")
         
         # 1. 生成数字人讲解视频
         print(f"[DEBUG] 开始生成数字人讲解视频...")
         digital_task_id = await self.kling.generate_digital_human(
             digital_human_id=digital_human_id,
             text=script.script,
-            image_url=digital_human_image
+            image_url=digital_human_image,
+            voice=voice_name
         )
         digital_video_url = await self._wait_for_video(digital_task_id)
         print(f"[DEBUG] 数字人视频生成完成")
@@ -350,12 +405,9 @@ class EcommerceService:
         ]
         is_fashion = any(keyword in product.title for keyword in fashion_keywords)
         
-        # 情况1：链接里有视频 → 直接用原视频
         if hasattr(product, 'video_url') and product.video_url:
             product_video_url = product.video_url
             print(f"[DEBUG] 使用链接内视频: {product_video_url}")
-        
-        # 情况2：手动模式 + 服装类 → 虚拟试穿
         elif is_manual_mode and is_fashion and product_images:
             print(f"[DEBUG] 手动模式+服装类：调用虚拟试穿...")
             product_video_url = await self._call_tryon_api(
@@ -366,8 +418,6 @@ class EcommerceService:
             if not product_video_url:
                 print(f"[DEBUG] 试穿失败，降级为原图展示...")
                 product_video_url = await self._image_to_video(product_images[0], duration=5)
-        
-        # 情况3：链接模式 + 服装类 → 虚拟试穿
         elif not is_manual_mode and is_fashion and product_images:
             print(f"[DEBUG] 链接模式+服装类：调用虚拟试穿...")
             product_video_url = await self._call_tryon_api(
@@ -378,8 +428,6 @@ class EcommerceService:
             if not product_video_url:
                 print(f"[DEBUG] 试穿失败，降级为原图展示...")
                 product_video_url = await self._image_to_video(product_images[0], duration=5)
-        
-        # 情况4：非服装类（无论手动还是链接）→ 原图展示
         elif product_images:
             print(f"[DEBUG] 非服装类商品，用原图生成展示视频...")
             product_video_url = await self._image_to_video(product_images[0], duration=5)

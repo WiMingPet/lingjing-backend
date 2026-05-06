@@ -263,7 +263,7 @@ class KlingService:
         raise Exception(f"虚拟试穿任务超时，task_id: {task_id}")
     
     # ========== 数字人分身 ==========
-    async def generate_digital_human(self, digital_human_id: Optional[int] = None, text: str = "", image_url: str = None, audio_url: str = None, prompt: str = None, name: str = None) -> str:
+        async def generate_digital_human(self, digital_human_id: Optional[int] = None, text: str = "", image_url: str = None, audio_url: str = None, prompt: str = None, name: str = None, voice: str = None) -> str:
         """
         数字人分身 - 照片+文字/音频生成视频
         支持两种模式：
@@ -281,7 +281,9 @@ class KlingService:
 
         # 如果没有提供 audio_url 但有 text，生成音频
         if not audio_url and text:
-            audio_data = tts_service.text_to_speech(text)
+            from app.services.tts_service import get_voice_type
+            voice_type = get_voice_type(voice) if voice else 101001
+            audio_data = tts_service.text_to_speech(text, voice_type)
             audio_url = await oss_service.upload_file(audio_data, "mp3", "digital_human/audio")
             print(f"[DEBUG] TTS 生成音频成功: {text[:50]}...")
 
