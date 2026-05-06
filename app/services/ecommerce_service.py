@@ -434,8 +434,7 @@ class EcommerceService:
             print(f"[ERROR] 图片转视频失败: {e}")
             return None
 
-    async def _call_tryon_api(self, ...):
-
+   
     # ==================== 【修复1】正确调用虚拟试穿接口 ====================
     async def _call_tryon_api(self, garment_image_url: str, model_image_url: str, user_token: str = None) -> Optional[str]:
         """
