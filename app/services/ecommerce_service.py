@@ -623,7 +623,7 @@ class EcommerceService:
         return None
 
     # ==================== 【修复4】优化轮询间隔 ====================
-    async def _wait_for_video(self, task_id: str, max_wait: int = 600) -> str:
+    async def _wait_for_video(self, task_id: str, max_wait: int = 1200) -> str:
         """
         轮询等待视频生成完成
         动态间隔：前10次5秒，之后10秒
@@ -659,7 +659,7 @@ class EcommerceService:
             interval = 5 if poll_count <= 10 else 10
             await asyncio.sleep(interval)
         
-        raise Exception(f"视频生成超时，共轮询{poll_count}次")
+        raise Exception(f"可灵平台高峰期排队中，视频生成超时（共轮询{poll_count}次），请稍后重试")
 
     async def _wait_for_videos(self, task_ids: List[str]) -> List[str]:
         urls = []
