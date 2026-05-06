@@ -263,7 +263,7 @@ class KlingService:
         raise Exception(f"虚拟试穿任务超时，task_id: {task_id}")
     
     # ========== 数字人分身 ==========
-        async def generate_digital_human(self, digital_human_id: Optional[int] = None, text: str = "", image_url: str = None, audio_url: str = None, prompt: str = None, name: str = None, voice: str = None) -> str:
+    async def generate_digital_human(self, digital_human_id: Optional[int] = None, text: str = "", image_url: str = None, audio_url: str = None, prompt: str = None, name: str = None, voice: str = None) -> str:
         """
         数字人分身 - 照片+文字/音频生成视频
         支持两种模式：
