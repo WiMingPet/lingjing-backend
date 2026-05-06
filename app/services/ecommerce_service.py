@@ -534,55 +534,40 @@ class EcommerceService:
     # ==================== 【修复1】正确调用虚拟试穿接口 ====================
     async def _call_tryon_api(self, garment_image_url: str, model_image_url: str, user_token: str = None) -> Optional[str]:
         """
-        通过URL调用虚拟试穿接口（内部新接口，无需下载图片）
+        直接调用 TryonService.generate_tryon()，和手动试穿走相同的流程
         """
-        import aiohttp
-        import os
+        from app.services.tryon_service import TryonService
+        from sqlalchemy.orm import Session as DbSession
         
         try:
-            print(f"[DEBUG] 通过URL调用试穿接口（无需下载图片）")
+            print(f"[DEBUG] 直接调用试穿服务（与手动试穿相同流程）")
             print(f"[DEBUG] 服装图: {garment_image_url[:80]}...")
             print(f"[DEBUG] 模特图: {model_image_url[:80]}...")
             
-            timeout = aiohttp.ClientTimeout(total=120)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                api_url = "https://lingjing.preview.aliyun-zeabur.cn/api/tryon/generate_by_url"
-                
-                payload = {
-                    "model_image_url": model_image_url,
-                    "garment_image_url": garment_image_url
-                }
-                
-                headers = {
-                    "Content-Type": "application/json",
-                    "X-Internal-Key": os.getenv("INTERNAL_API_KEY", "lingjing-internal-2026")
-                }
-                if user_token:
-                    headers["Authorization"] = f"Bearer {user_token}"
-                
-                print(f"[DEBUG] 调用试穿URL接口: {api_url}")
-                
-                async with session.post(api_url, json=payload, headers=headers) as resp:
-                    print(f"[DEBUG] 试穿API响应状态: {resp.status}")
-                    if resp.status == 200:
-                        result = await resp.json()
-                        task_data = result.get("data", {})
-                        task_id = task_data.get("id")
-                        if task_id:
-                            video_url = await self._wait_for_tryon_result(task_id, user_token)
-                            if video_url:
-                                print(f"[DEBUG] 虚拟试穿视频已生成")
-                                return video_url
-                    else:
-                        response_text = await resp.text()
-                        print(f"[DEBUG] 试穿API返回: {resp.status} - {response_text[:200]}")
-                        
-        except aiohttp.client_exceptions.ClientError as e:
-            print(f"[DEBUG] 试穿网络请求失败: {e}")
+            request_data = {
+                "model_image_url": model_image_url,
+                "garment_image_url": garment_image_url
+            }
+            
+            # 直接调用 TryonService，和手动试穿完全一致
+            from app.database import get_db
+            db = next(get_db.__wrapped__())
+            task = await TryonService.generate_tryon(db, 1, request_data)
+            
+            if task.status == "completed" and task.output_data:
+                video_url = task.output_data.get("video_url", "")
+                if video_url:
+                    print(f"[DEBUG] 虚拟试穿视频已生成: {video_url[:80]}...")
+                    return video_url
+            
+            print(f"[DEBUG] 试穿任务状态: {task.status}")
+            return None
+            
         except Exception as e:
             print(f"[DEBUG] 虚拟试穿异常: {e}")
-        
-        return None
+            import traceback
+            traceback.print_exc()
+            return None
 
     async def _wait_for_tryon_result(self, task_id: int, user_token: str = None, max_wait: int = 300) -> Optional[str]:
         """轮询等待试穿任务完成"""

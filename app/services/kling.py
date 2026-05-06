@@ -175,27 +175,41 @@ class KlingService:
         
         return result["data"]
     
-    def wait_for_video_result(self, task_id: str, max_wait: int = 300, 
-                              poll_interval: int = 5) -> Dict:
-        """轮询等待视频任务完成"""
-        start_time = time.time()
+    def wait_for_video_result(self, task_id: str, max_wait: int = 600, 
+                              poll_interval: int = 15) -> Dict:
+        """轮询等待视频任务完成（优化版：降低频率，避免并发限制）"""
+        import time as time_module
+        start_time = time_module.time()
         
-        while time.time() - start_time < max_wait:
-            status_data = self.get_video_task_status(task_id)
-            task_status = status_data.get("task_status")
-            print(f"[DEBUG] 视频任务状态: {task_status}")
+        # 初始轮询间隔15秒，逐步递增到30秒
+        current_interval = poll_interval
+        
+        while time_module.time() - start_time < max_wait:
+            try:
+                status_data = self.get_video_task_status(task_id)
+                task_status = status_data.get("task_status")
+                print(f"[DEBUG] 视频任务状态: {task_status}")
+                
+                if task_status == "succeed":
+                    task_result = status_data.get("task_result", {})
+                    videos = task_result.get("videos", [])
+                    if videos:
+                        status_data["task_result"]["video_url"] = videos[0].get("url", "")
+                    return status_data
+                elif task_status == "failed":
+                    error_msg = status_data.get("task_status_msg", "未知错误")
+                    raise Exception(f"视频任务失败: {error_msg}")
+            except Exception as e:
+                # 如果是并发限制错误，退避重试
+                if "parallel task" in str(e).lower() or "1303" in str(e):
+                    print(f"[DEBUG] 并发限制，稍后重试...")
+                    time_module.sleep(current_interval * 2)
+                    continue
+                raise e
             
-            if task_status == "succeed":
-                task_result = status_data.get("task_result", {})
-                videos = task_result.get("videos", [])
-                if videos:
-                    status_data["task_result"]["video_url"] = videos[0].get("url", "")
-                return status_data
-            elif task_status == "failed":
-                error_msg = status_data.get("task_status_msg", "未知错误")
-                raise Exception(f"视频任务失败: {error_msg}")
-            
-            time.sleep(poll_interval)
+            time_module.sleep(current_interval)
+            # 逐步递增间隔，最大30秒
+            current_interval = min(current_interval + 5, 30)
         
         raise Exception(f"视频任务超时，task_id: {task_id}")
     
@@ -242,23 +256,32 @@ class KlingService:
         
         return result["data"]
     
-    def wait_for_tryon_result(self, task_id: str, max_wait: int = 120, 
-                              poll_interval: int = 3) -> Dict:
+    def wait_for_tryon_result(self, task_id: str, max_wait: int = 300, 
+                              poll_interval: int = 15) -> Dict:
         """轮询等待虚拟试穿任务完成"""
         start_time = time.time()
+        current_interval = poll_interval
         
         while time.time() - start_time < max_wait:
-            status_data = self.get_tryon_task_status(task_id)
-            task_status = status_data.get("task_status")
-            print(f"[DEBUG] 虚拟试穿任务状态: {task_status}")
+            try:
+                status_data = self.get_tryon_task_status(task_id)
+                task_status = status_data.get("task_status")
+                print(f"[DEBUG] 虚拟试穿任务状态: {task_status}")
+                
+                if task_status == "succeed":
+                    return status_data
+                elif task_status == "failed":
+                    error_msg = status_data.get("task_status_msg", "未知错误")
+                    raise Exception(f"虚拟试穿任务失败: {error_msg}")
+            except Exception as e:
+                if "parallel task" in str(e).lower() or "1303" in str(e):
+                    print(f"[DEBUG] 并发限制，稍后重试...")
+                    time.sleep(current_interval * 2)
+                    continue
+                raise e
             
-            if task_status == "succeed":
-                return status_data
-            elif task_status == "failed":
-                error_msg = status_data.get("task_status_msg", "未知错误")
-                raise Exception(f"虚拟试穿任务失败: {error_msg}")
-            
-            time.sleep(poll_interval)
+            time.sleep(current_interval)
+            current_interval = min(current_interval + 5, 30)
         
         raise Exception(f"虚拟试穿任务超时，task_id: {task_id}")
     
@@ -336,28 +359,36 @@ class KlingService:
         
         return result["data"]
     
-    def wait_for_digital_human_result(self, task_id: str, max_wait: int = 600, 
-                                       poll_interval: int = 10) -> Dict:
+    def wait_for_digital_human_result(self, task_id: str, max_wait: int = 900, 
+                                       poll_interval: int = 15) -> Dict:
         """轮询等待数字人任务完成"""
         start_time = time.time()
+        current_interval = poll_interval
         
         while time.time() - start_time < max_wait:
-            status_data = self.get_digital_human_task_status(task_id)
-            task_status = status_data.get("task_status")
-            print(f"[DEBUG] 数字人任务状态: {task_status}")
+            try:
+                status_data = self.get_digital_human_task_status(task_id)
+                task_status = status_data.get("task_status")
+                print(f"[DEBUG] 数字人任务状态: {task_status}")
+                
+                if task_status == "succeed":
+                    task_result = status_data.get("task_result", {})
+                    videos = task_result.get("videos", [])
+                    if videos:
+                        status_data["task_result"]["video_url"] = videos[0].get("url", "")
+                    return status_data
+                elif task_status == "failed":
+                    error_msg = status_data.get("task_status_msg", "未知错误")
+                    raise Exception(f"数字人任务失败: {error_msg}")
+            except Exception as e:
+                if "parallel task" in str(e).lower() or "1303" in str(e):
+                    print(f"[DEBUG] 并发限制，稍后重试...")
+                    time.sleep(current_interval * 2)
+                    continue
+                raise e
             
-            if task_status == "succeed":
-                # 提取视频 URL
-                task_result = status_data.get("task_result", {})
-                videos = task_result.get("videos", [])
-                if videos:
-                    status_data["task_result"]["video_url"] = videos[0].get("url", "")
-                return status_data
-            elif task_status == "failed":
-                error_msg = status_data.get("task_status_msg", "未知错误")
-                raise Exception(f"数字人任务失败: {error_msg}")
-            
-            time.sleep(poll_interval)
+            time.sleep(current_interval)
+            current_interval = min(current_interval + 5, 30)
         
         raise Exception(f"数字人任务超时，task_id: {task_id}")
 
