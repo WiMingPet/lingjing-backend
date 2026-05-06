@@ -537,7 +537,7 @@ class EcommerceService:
         直接调用 TryonService.generate_tryon()，和手动试穿走相同的流程
         """
         from app.services.tryon_service import TryonService
-        from sqlalchemy.orm import Session as DbSession
+        from app.database import SessionLocal
         
         try:
             print(f"[DEBUG] 直接调用试穿服务（与手动试穿相同流程）")
@@ -549,21 +549,19 @@ class EcommerceService:
                 "garment_image_url": garment_image_url
             }
             
-            # 直接调用 TryonService，和手动试穿完全一致
-            from app.database import SessionLocal
             db = SessionLocal()
             try:
                 task = await TryonService.generate_tryon(db, 1, request_data)
+                
+                if task.output_data:
+                    video_url = task.output_data.get("video_url", "")
+                    if video_url:
+                        print(f"[DEBUG] 虚拟试穿视频已生成: {video_url[:80]}...")
+                        return video_url
             finally:
                 db.close()
             
-            if task.status == "completed" and task.output_data:
-                video_url = task.output_data.get("video_url", "")
-                if video_url:
-                    print(f"[DEBUG] 虚拟试穿视频已生成: {video_url[:80]}...")
-                    return video_url
-            
-            print(f"[DEBUG] 试穿任务状态: {task.status}")
+            print(f"[DEBUG] 试穿任务未获取到视频URL")
             return None
             
         except Exception as e:
