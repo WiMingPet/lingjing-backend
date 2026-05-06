@@ -42,9 +42,28 @@ class TryonService:
             print(f"[DEBUG] 服装图片URL: {garment_image_url}")
             
             # 1. 调用可灵虚拟试穿图生图接口
+            # 根据产品标题自动判断服装类别
+            def _detect_cloth_category(title: str) -> str:
+                title_lower = title.lower()
+                # 下装关键词
+                if any(kw in title_lower for kw in ["裤", "裙", "短裤", "长裤", "阔腿裤", "牛仔裤", "休闲裤"]):
+                    return "lower"
+                # 连衣裙/套装关键词
+                if any(kw in title_lower for kw in ["连衣裙", "套装", "连体", "裙子", "长裙", "短裙"]):
+                    return "dress"
+                # 上装关键词
+                if any(kw in title_lower for kw in ["衣", "T恤", "衬衫", "外套", "卫衣", "夹克", "羽绒", "马甲", "背心", "毛衣", "针织"]):
+                    return "upper"
+                # 默认
+                return "dress"
+            
+            cloth_category = _detect_cloth_category(request_data.get("title", ""))
+            print(f"[DEBUG] 自动识别服装类别: {cloth_category}")
+            
             api_task_id = kling_service.generate_tryon(
                 human_image_url=model_image_url,
                 cloth_image_url=garment_image_url,
+                cloth_category=cloth_category,
                 digital_human_id=digital_human_id
             )
             print(f"[DEBUG] 可灵虚拟试穿API返回任务ID: {api_task_id}")
@@ -66,7 +85,7 @@ class TryonService:
             # 2. 用试穿效果图生成动态展示视频
             print(f"[DEBUG] 第二步：调用可灵图生视频接口生成动态展示...")
             
-            video_prompt = "模特穿着服装自然展示，缓慢旋转展示服装细节，专业灯光，4K高清"
+            video_prompt = "模特全身入镜，自然站立，缓慢旋转展示全身服装细节，包括上衣和裤子，专业灯光，4K高清"
             
             video_task_id = kling_service.generate_video(
                 image_url=tryon_image_url,

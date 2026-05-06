@@ -482,7 +482,8 @@ class EcommerceService:
         
         # 3. 合并视频
         if product_video_url:
-            final_video_url = await self._merge_videos(digital_video_url, [product_video_url])
+            # 当有试穿展示视频时，直接把讲解音频合成进去
+            final_video_url = await self._merge_audio_to_video(product_video_url, digital_video_url)
         else:
             final_video_url = digital_video_url
         
@@ -729,6 +730,59 @@ class EcommerceService:
         except Exception as e:
             print(f"图片识别失败: {e}")
             return "时尚服装", "优质服装，版型好，面料舒适，性价比高"
+
+    async def _merge_audio_to_video(self, video_url: str, audio_video_url: str) -> str:
+        """将 audio_video_url 的音频合并到 video_url 的视频上"""
+        import subprocess
+        import aiohttp
+        
+        files_to_clean = []
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                # 下载试穿视频（我们需要的画面）
+                tmp_video = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+                async with session.get(video_url) as resp:
+                    tmp_video.write(await resp.read())
+                tmp_video.close()
+                files_to_clean.append(tmp_video.name)
+                
+                # 下载数字人视频（我们需要的音频）
+                tmp_audio_source = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+                async with session.get(audio_video_url) as resp:
+                    tmp_audio_source.write(await resp.read())
+                tmp_audio_source.close()
+                files_to_clean.append(tmp_audio_source.name)
+            
+            # 输出文件
+            output_file = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+            output_file.close()
+            files_to_clean.append(output_file.name)
+            
+            # ffmpeg 命令：从 video_url 取视频流，从 audio_video_url 取音频流，合并
+            cmd = [
+                "ffmpeg", "-i", tmp_video.name, "-i", tmp_audio_source.name,
+                "-c:v", "copy", "-c:a", "aac", "-map", "0:v:0", "-map", "1:a:0",
+                "-shortest", "-y", output_file.name
+            ]
+            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
+            # 上传到OSS
+            with open(output_file.name, "rb") as f:
+                return await oss_service.upload_file(f.read(), "mp4", "ecommerce_videos")
+        
+        except Exception as e:
+            print(f"[ERROR] 音频合并失败: {e}")
+            # 降级方案：返回原视频
+            return video_url
+        
+        finally:
+            for file_path in files_to_clean:
+                try:
+                    if os.path.exists(file_path):
+                        os.unlink(file_path)
+                except:
+                    pass
 
     async def _merge_videos(self, digital_video_url: str, product_video_urls: List[str]) -> str:
         """使用 ffmpeg 合并视频"""
