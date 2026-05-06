@@ -661,24 +661,25 @@ class EcommerceService:
             url = await self._wait_for_video(task_id)
             urls.append(url)
         return urls
+        
     async def _analyze_product_image(self, image_url: str, user_input: str = "") -> Tuple[str, str]:
         """
-        分析图片，返回 (product_name, detailed_description)
+        使用 Gemini 视觉模型分析图片，返回 (product_name, description)
         """
         import aiohttp
         import base64
         
         try:
-            # 下载图片并转为 base64
+            # 1. 下载图片并转 base64
             async with aiohttp.ClientSession() as session:
                 async with session.get(image_url) as resp:
                     image_data = await resp.read()
             image_base64 = base64.b64encode(image_data).decode('utf-8')
             
-            # 调用 OpenAI 视觉模型（使用同步 requests 方式，避免 asyncio 冲突）
+            # 2. 构建 Gemini 格式的请求体
             import requests as sync_requests
             
-            prompt = f"""
+            prompt = """
 请仔细分析这张产品图片，提取以下信息：
 1. 产品名称（具体到款式、类型）
 2. 核心卖点（至少3个）
@@ -687,11 +688,11 @@ class EcommerceService:
 5. 适用场景（至少2个）
 
 输出格式严格为JSON：
-{{
+{
   "product_name": "具体产品名称",
   "selling_points": "核心卖点，用中文逗号分隔",
   "description": "一段约100字的详细产品描述，包含材质、版型、风格"
-}}
+}
 """
             
             response = sync_requests.post(
@@ -701,14 +702,21 @@ class EcommerceService:
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "gpt-4o-mini",
-                    "messages": [{
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
-                        ]
-                    }],
+                    "model": "gemini-1.5-flash",
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": prompt},
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:image/jpeg;base64,{image_base64}"
+                                    }
+                                }
+                            ]
+                        }
+                    ],
                     "max_tokens": 500,
                     "temperature": 0.5
                 },
@@ -716,9 +724,17 @@ class EcommerceService:
             )
             
             result = response.json()
-            content = result["choices"][0]["message"]["content"]
-            parsed = json.loads(content)
-            return parsed.get("product_name", "时尚服装"), parsed.get("description", "优质服装，版型好，面料舒适，性价比高")
+            print(f"[DEBUG] Gemini 响应: {result}")
+            
+            # Gemini 的响应格式可能有所不同
+            choices = result.get("choices", [])
+            if choices:
+                content = choices[0].get("message", {}).get("content", "")
+                if content:
+                    parsed = json.loads(content)
+                    return parsed.get("product_name", "商品"), parsed.get("description", "")
+            
+            raise Exception(f"Gemini 返回格式异常: {result}")
             
         except Exception as e:
             print(f"图片识别失败: {e}")
