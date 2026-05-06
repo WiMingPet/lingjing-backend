@@ -717,7 +717,8 @@ class EcommerceService:
             
             result = response.json()
             content = result["choices"][0]["message"]["content"]
-            return result.get("product_name", "商品"), result.get("description", "")
+            parsed = json.loads(content)
+            return parsed.get("product_name", "时尚服装"), parsed.get("description", "优质服装，版型好，面料舒适，性价比高")
             
         except Exception as e:
             print(f"图片识别失败: {e}")
