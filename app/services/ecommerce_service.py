@@ -205,7 +205,6 @@ class EcommerceService:
                 if video_data.get("url_list"):
                     video_url = video_data["url_list"][0]
                 if not video_url:
-                    from urllib.parse import unquote
                     video_match = re.search(r'video_url=([^&]+)', unquote(final_url))
                     if video_match:
                         video_url = unquote(video_match.group(1))
@@ -730,7 +729,13 @@ class EcommerceService:
             if choices:
                 content = choices[0].get("message", {}).get("content", "")
                 if content:
-                    parsed = json.loads(content)
+                    # 清理掉可能存在的 ```json ... ``` 标记
+                    clean_content = content.strip()
+                    if clean_content.startswith('```'):
+                        clean_content = clean_content.split('\n', 1)[-1]
+                        if clean_content.endswith('```'):
+                            clean_content = clean_content[:-3]
+                    parsed = json.loads(clean_content)
                     return parsed.get("product_name", "商品"), parsed.get("description", "")
             
             raise Exception(f"返回格式异常: {result}")
