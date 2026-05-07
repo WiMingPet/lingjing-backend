@@ -409,6 +409,7 @@ class EcommerceService:
         
         # 第一步：生成商品展示视频
         product_video_url = None
+        tryon_image_url = None
         product_images = product.images or []
         
         fashion_keywords = [
@@ -423,7 +424,7 @@ class EcommerceService:
             print(f"[DEBUG] 使用链接内视频: {product_video_url}")
         elif is_manual_mode and is_fashion and product_images:
             print(f"[DEBUG] 手动模式+服装类：调用虚拟试穿...")
-            product_video_url = await self._call_tryon_api(
+            product_video_url, tryon_image_url = await self._call_tryon_api(
                 garment_image_url=product_images[0],
                 model_image_url=digital_human_image,
                 user_token=user_token
@@ -433,7 +434,7 @@ class EcommerceService:
                 product_video_url = await self._image_to_video(product_images[0], duration=5)
         elif not is_manual_mode and is_fashion and product_images:
             print(f"[DEBUG] 链接模式+服装类：调用虚拟试穿...")
-            product_video_url = await self._call_tryon_api(
+            product_video_url, tryon_image_url = await self._call_tryon_api(
                 garment_image_url=product_images[0],
                 model_image_url=digital_human_image,
                 user_token=user_token
@@ -445,19 +446,38 @@ class EcommerceService:
             print(f"[DEBUG] 非服装类商品，用原图生成展示视频...")
             product_video_url = await self._image_to_video(product_images[0], duration=5)
 
-        # 第二步：用 TTS 生成语音
-        print(f"[DEBUG] 开始生成TTS语音...")
-        from app.services.tts_service import tts_service, get_voice_type
-        voice_type = get_voice_type(voice_name) if voice_name else 101001
-        audio_bytes = tts_service.text_to_speech(script.script, voice_type)
-        audio_url = await oss_service.upload_file(audio_bytes, "mp3", "ecommerce_audio")
-        print(f"[DEBUG] TTS 语音生成完毕，音色ID: {voice_type}")
+        # 第二步：使用数字人API生成与文案同步的讲解视频
+        print(f"[DEBUG] 开始生成数字人口播视频...")
+        from app.services.tts_service import get_voice_type
         
-        # 第三步：把语音合成到试穿视频上
-        if product_video_url and audio_url:
-            final_video_url = await self._merge_audio_only(product_video_url, audio_url)
+        # 关键：使用试穿效果图作为数字人形象，而非原始预设形象
+        digital_human_image = tryon_image_url if tryon_image_url else digital_human_image
+        print(f"[DEBUG] 数字人形象使用: {'试穿效果图' if tryon_image_url else '预设形象'}")
+        
+        # 将脚本中的 voice_name 正确地传递给API
+        digital_task_id = await self.kling.generate_digital_human(
+            digital_human_id=digital_human_id,
+            text=script.script,
+            image_url=digital_human_image,
+            voice=voice_name
+        )
+        digital_video_url = await self._wait_for_video(digital_task_id)
+        print(f"[DEBUG] 数字人口播视频生成完成")
+        
+        # 第三步：合并视频。如果数字人生成失败，降级为将TTS音频合入试穿视频
+        if digital_video_url:
+            if product_video_url:
+                final_video_url = await self._merge_videos(digital_video_url, [product_video_url])
+            else:
+                final_video_url = digital_video_url
         elif product_video_url:
-            final_video_url = product_video_url
+            # 降级方案
+            print("[DEBUG] 数字人生成失败，使用TTS音频降级方案")
+            from app.services.tts_service import tts_service
+            voice_type = get_voice_type(voice_name) if voice_name else 101001
+            audio_bytes = tts_service.text_to_speech(script.script, voice_type)
+            audio_url = await oss_service.upload_file(audio_bytes, "mp3", "ecommerce_audio")
+            final_video_url = await self._merge_audio_only(product_video_url, audio_url)
         else:
             final_video_url = None
         
@@ -526,7 +546,8 @@ class EcommerceService:
                     video_url = task.output_data.get("video_url", "")
                     if video_url:
                         print(f"[DEBUG] 虚拟试穿视频已生成: {video_url[:80]}...")
-                        return video_url
+                        tryon_image_url = task.output_data.get("tryon_image_url", "")
+                        return video_url, tryon_image_url
             finally:
                 db.close()
             
@@ -537,7 +558,7 @@ class EcommerceService:
             print(f"[DEBUG] 虚拟试穿异常: {e}")
             import traceback
             traceback.print_exc()
-            return None
+            return None, None
 
     async def _wait_for_tryon_result(self, task_id: int, user_token: str = None, max_wait: int = 300) -> Optional[str]:
         import aiohttp
