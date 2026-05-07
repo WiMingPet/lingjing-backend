@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from app.schemas.ecommerce import ProductInfo, CopywritingScript
 from app.services.kling import KlingService
 from app.services.oss_service import oss_service
-from app.data.preset_avatars import PRESET_AVATARS  # 【新增】导入预设形象
+from app.data.preset_avatars import PRESET_AVATARS
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +33,7 @@ class EcommerceService:
         self.kling = KlingService()
 
     def _select_avatar_for_product(self, product_title: str) -> dict:
-        """降级方案：根据标题关键词选择形象"""
         title_lower = product_title.lower()
-        
         if any(kw in title_lower for kw in ["男", "男装", "数码", "汽车"]):
             for avatar in PRESET_AVATARS:
                 if avatar["id"] == 5:
@@ -48,19 +46,12 @@ class EcommerceService:
             for avatar in PRESET_AVATARS:
                 if avatar["id"] == 10:
                     return avatar
-        
         for avatar in PRESET_AVATARS:
             if avatar["id"] == 12:
                 return avatar
         return PRESET_AVATARS[0]
 
-    # ==================== 【修复2】自动选择预设形象 ====================
     def _ai_select_avatar(self, product_title: str, product_description: str) -> dict:
-        """
-        使用 AI 根据产品标题和描述，从预设形象库中自动选择最合适的形象。
-        如果 AI 调用失败，会降级到关键词规则。
-        """
-        # 构建形象列表的描述文本
         avatar_options = []
         for avatar in PRESET_AVATARS:
             avatar_options.append(f"ID:{avatar['id']}, 姓名:{avatar['name']}, 类别:{avatar['category']}, 描述:{avatar['description']}")
@@ -77,7 +68,7 @@ class EcommerceService:
 
 选择标准：
 1. 形象的气质、年龄、性别必须与产品的目标受众和风格完全匹配。
-2. 例如，美妆产品首选“露西”(ID:12)，男装或数码产品首选“燃锋”(ID:5)或“宇航”(ID:7)，知识付费首选“文慧”(ID:1)或“明悦”(ID:6)。
+2. 例如，美妆产品首选"露西"(ID:12)，男装或数码产品首选"燃锋"(ID:5)或"宇航"(ID:7)，知识付费首选"文慧"(ID:1)或"明悦"(ID:6)。
 3. 请只返回选中形象的 ID 数字，不要包含其他任何内容。
 """
         try:
@@ -99,14 +90,12 @@ class EcommerceService:
             )
             result = response.json()
             raw_response = result["choices"][0]["message"]["content"].strip()
-            # 提取其中的数字
             import re
             digits = re.findall(r'\d+', raw_response)
             if digits:
                 avatar_id = int(digits[0])
             else:
                 raise Exception(f"无法解析AI返回: {raw_response}")
-            # 查找并返回对应的形象
             for avatar in PRESET_AVATARS:
                 if avatar["id"] == avatar_id:
                     print(f"[AI决策] 选中形象: {avatar['name']} (ID:{avatar_id})")
@@ -114,14 +103,9 @@ class EcommerceService:
         except Exception as e:
             print(f"[AI决策] 失败，降级为关键词规则: {e}")
         
-        # 降级到原来的关键词规则
         return self._select_avatar_for_product(product_title)
 
     def _ai_select_voice(self, product_title: str, product_description: str, avatar: dict) -> str:
-        """
-        使用 AI 根据产品信息和已选形象，自动选择最合适的音色
-        返回音色名称（如"温柔女声"）
-        """
         voice_options = [
             {"name": "温柔女声", "desc": "温暖柔和，适合女性产品、情感类"},
             {"name": "播报男声", "desc": "沉稳专业，适合男性产品、商务类"},
@@ -167,14 +151,11 @@ class EcommerceService:
         except Exception as e:
             print(f"[AI决策] 音色选择失败，使用默认值: {e}")
         
-        # 降级：根据已选形象性别判断
-        if avatar["id"] in [5, 7]:  # 燃锋、宇航（男性）
+        if avatar["id"] in [5, 7]:
             return "播报男声"
         return "温柔女声"
 
-    # ==================== 本地解析抖音链接 ====================
     def _parse_douyin_from_url(self, url: str) -> Optional[dict]:
-        """从抖音分享链接的 URL 参数中直接提取商品信息"""
         final_url = url
         
         if "v.douyin.com" in url:
@@ -186,7 +167,6 @@ class EcommerceService:
                 print(f"[DEBUG] 短链接重定向失败: {e}")
                 return None
         
-        # 从 goods_detail 参数提取
         match = re.search(r'goods_detail=([^&]+)', final_url)
         if match:
             encoded_json = match.group(1)
@@ -199,7 +179,6 @@ class EcommerceService:
                 
                 title = goods_detail.get("title", "")
                 
-                # ========== 新增：提取视频 URL ==========
                 video_url = None
                 video_data = goods_detail.get("video", {})
                 if video_data.get("url_list"):
@@ -208,7 +187,6 @@ class EcommerceService:
                     video_match = re.search(r'video_url=([^&]+)', unquote(final_url))
                     if video_match:
                         video_url = unquote(video_match.group(1))
-                # ========== 提取结束 ==========
                 
                 print(f"[DEBUG] 本地解析成功: {title[:50]}...")
                 print(f"[DEBUG] 获取到 {len(images)} 张图片")
@@ -225,7 +203,6 @@ class EcommerceService:
             except Exception as e:
                 print(f"[DEBUG] goods_detail 解析异常: {e}")
         
-        # 备选：从 title 参数提取
         decoded_url = unquote(final_url)
         title_match = re.search(r'title=([^&]+)', decoded_url)
         if title_match:
@@ -244,11 +221,9 @@ class EcommerceService:
         return None
 
     async def parse_product_url(self, url: str) -> ProductInfo:
-        """解析商品链接"""
         import httpx
         import os
         
-        # 优先本地解析
         local_result = self._parse_douyin_from_url(url)
         if local_result and local_result.get("title"):
             print(f"[INFO] 本地解析成功: {local_result['title']}")
@@ -261,7 +236,6 @@ class EcommerceService:
                 platform="douyin"
             )
         
-        # 订单侠兜底
         print("[INFO] 本地解析失败，尝试订单侠...")
         apikey = os.environ.get("DINGDANXIA_APIKEY")
         if not apikey:
@@ -294,7 +268,6 @@ class EcommerceService:
             raise Exception(f"所有解析方式均失败: {str(e)}")
 
     def _extract_douyin_id(self, url: str) -> str:
-        """从抖音链接中提取商品ID"""
         if "v.douyin.com" in url:
             try:
                 response = requests.get(url, allow_redirects=True, timeout=10)
@@ -319,7 +292,6 @@ class EcommerceService:
         return "unknown"
 
     async def generate_product_demo_video(self, product: ProductInfo) -> Optional[str]:
-        """用商品图片生成展示视频"""
         if not product.images:
             return None
 
@@ -336,7 +308,6 @@ class EcommerceService:
         return video_url
 
     async def generate_copywriting(self, product: ProductInfo, is_manual_mode: bool = False) -> CopywritingScript:
-        """调用 OpenAI 生成带货口播文案"""
         client = AsyncOpenAI(
             api_key=self.api_key, 
             base_url=self.base_url,
@@ -344,31 +315,39 @@ class EcommerceService:
         )
     
         if is_manual_mode:
-            # 【核心】先让 AI 识别产品图片
             if product.images:
                 detected_name, detected_desc = await self._analyze_product_image(
                     product.images[0], 
                     user_input=product.description
                 )
-                # 用识别结果覆盖
                 product.title = detected_name or product.title
                 product.description = detected_desc or product.description
             
             prompt = f"""
-你是一位顶级的直播带货主播，需要根据以下产品信息，生成一段约60秒的直播口播文案。
+你是一个顶级的直播带货主播，正在镜头前给粉丝们推荐一款产品。请你像真人一样生动地讲解，语气要有感染力、互动感、号召力，多用"家人们"、"宝宝们"、"咱们"这类口语，自然地展示产品卖点和优点。
 
-产品信息：
-- 名称：{product.title}
-- 详细描述：{product.description}
+产品：{product.title}
+卖点：{product.description or '高品质，性价比超高'}
 
-创作要求：
-1. 风格：真实、有感染力、有购买号召力，像真人在直播间的即兴发挥。
-2. 结构：开场抓眼球（2秒内） -> 产品卖点介绍（材质、款式、解决什么痛点） -> 适合什么样的人群 -> 使用场景 -> 促销引导。
-3. 文案必须严格基于以上产品信息，不能编造。
-4. 输出格式为JSON：
+输出严格JSON格式：{{"script": "完整的口播文案（约300字，适合60秒讲解）"}}
+"""
+        else:
+            prompt = f"""
+你是一位顶级的直播带货主播，请根据以下商品信息，生成一段约60秒的口播文案和分镜描述。
+
+商品信息：
+- 标题：{product.title}
+- 价格：{product.price}
+- 描述：{product.description}
+
+要求：
+1. 口播文案需有吸引力，包含开场、产品介绍、痛点解决、促销引导。
+2. 分镜描述需指明每一段文案对应的画面建议。
+3. 输出格式为JSON：
    {{
-     "title": "抓眼球的视频标题",
-     "script": "完整的口播文案（约300字，保证能讲满60秒）"
+     "title": "视频标题",
+     "script": "完整口播文案",
+     "scenes": ["分镜1描述", "分镜2描述", ...]
    }}
 """
         
@@ -410,7 +389,6 @@ class EcommerceService:
                 print(f"AI重试也失败: {e2}")
                 raise Exception(f"AI文案生成失败，请稍后重试")
 
-    # ==================== 【修复1+2+3+4】完整的视频生成主流程 ====================
     async def create_product_video(
         self, 
         script: CopywritingScript, 
@@ -422,17 +400,14 @@ class EcommerceService:
     ) -> dict:
         """生成完整带货视频"""
         
-        # 自动选择预设形象
         avatar = self._ai_select_avatar(product.title, product.description or "")
         digital_human_image = digital_image_url or avatar.get("model_image", "")
         print(f"[DEBUG] 使用数字人形象: {avatar['name']} - {digital_human_image}")
         
-        # 自动选择音色
         voice_name = self._ai_select_voice(product.title, product.description or "", avatar)
         print(f"[DEBUG] 使用音色: {voice_name}")
         
-       
-        # 1. 生成商品展示视频
+        # 第一步：生成商品展示视频
         product_video_url = None
         product_images = product.images or []
         
@@ -470,27 +445,24 @@ class EcommerceService:
             print(f"[DEBUG] 非服装类商品，用原图生成展示视频...")
             product_video_url = await self._image_to_video(product_images[0], duration=5)
 
-        # 2. 生成数字人讲解视频
-        print(f"[DEBUG] 开始生成数字人讲解视频...")
-        digital_task_id = await self.kling.generate_digital_human(
-            digital_human_id=digital_human_id,
-            text=script.script,
-            image_url=digital_human_image,
-            voice=voice_name
-        )
-        digital_video_url = await self._wait_for_video(digital_task_id)
-        print(f"[DEBUG] 数字人视频生成完成")
+        # 第二步：用 TTS 生成语音
+        print(f"[DEBUG] 开始生成TTS语音...")
+        from app.services.tts_service import tts_service, get_voice_type
+        voice_type = get_voice_type(voice_name) if voice_name else 101001
+        audio_bytes = tts_service.text_to_speech(script.script, voice_type)
+        audio_url = await oss_service.upload_file(audio_bytes, "mp3", "ecommerce_audio")
+        print(f"[DEBUG] TTS 语音生成完毕，音色ID: {voice_type}")
         
-        # 3. 合并视频
-        if product_video_url:
-            # 当有试穿展示视频时，直接把讲解音频合成进去
-            final_video_url = await self._merge_audio_to_video(product_video_url, digital_video_url)
+        # 第三步：把语音合成到试穿视频上
+        if product_video_url and audio_url:
+            final_video_url = await self._merge_audio_only(product_video_url, audio_url)
+        elif product_video_url:
+            final_video_url = product_video_url
         else:
-            final_video_url = digital_video_url
+            final_video_url = None
         
         print(f"[DEBUG] 带货视频生成完成")
         return {
-            "task_id": digital_task_id,
             "video_url": final_video_url,
             "status": "completed"
         }
@@ -532,12 +504,7 @@ class EcommerceService:
             print(f"[ERROR] 图片转视频失败: {e}")
             return None
 
-   
-    # ==================== 【修复1】正确调用虚拟试穿接口 ====================
-    async def _call_tryon_api(self, garment_image_url: str, model_image_url: str, user_token: str = None) -> Optional[str]:
-        """
-        直接调用 TryonService.generate_tryon()，和手动试穿走相同的流程
-        """
+    async def _call_tryon_api(self, garment_image_url: str, model_image_url: str, user_token: str = None):
         from app.services.tryon_service import TryonService
         from app.database import SessionLocal
         
@@ -573,7 +540,6 @@ class EcommerceService:
             return None
 
     async def _wait_for_tryon_result(self, task_id: int, user_token: str = None, max_wait: int = 300) -> Optional[str]:
-        """轮询等待试穿任务完成"""
         import aiohttp
         
         start_time = time.time()
@@ -610,13 +576,7 @@ class EcommerceService:
         print(f"[DEBUG] 试穿任务超时")
         return None
 
-    # ==================== 【修复4】优化轮询间隔 ====================
     async def _wait_for_video(self, task_id: str, max_wait: int = 1200) -> str:
-        """
-        轮询等待视频生成完成
-        动态间隔：前10次5秒，之后10秒
-        总超时600秒（10分钟）
-        """
         start_time = time.time()
         poll_count = 0
         print(f"[DEBUG] 开始轮询视频任务: {task_id}")
@@ -657,9 +617,6 @@ class EcommerceService:
         return urls
         
     async def _analyze_product_image(self, image_url: str, user_input: str = "") -> Tuple[str, str]:
-        """
-        使用 GPT-4o 视觉模型分析图片，返回 (product_name, description)
-        """
         import aiohttp
         import base64
         
@@ -717,7 +674,6 @@ class EcommerceService:
             if choices:
                 content = choices[0].get("message", {}).get("content", "")
                 if content:
-                    # 清理掉可能存在的 ```json ... ``` 标记
                     clean_content = content.strip()
                     if clean_content.startswith('```'):
                         clean_content = clean_content.split('\n', 1)[-1]
@@ -732,8 +688,53 @@ class EcommerceService:
             print(f"图片识别失败: {e}")
             return "时尚服装", "优质服装，版型好，面料舒适，性价比高"
 
+    async def _merge_audio_only(self, video_url: str, audio_url: str) -> str:
+        """将音频合成到试穿视频上，保留原画面，替换声音"""
+        import subprocess
+        import aiohttp
+        
+        files_to_clean = []
+        try:
+            async with aiohttp.ClientSession() as session:
+                tmp_video = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+                async with session.get(video_url) as resp:
+                    tmp_video.write(await resp.read())
+                tmp_video.close()
+                files_to_clean.append(tmp_video.name)
+                
+                tmp_audio = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
+                async with session.get(audio_url) as resp:
+                    tmp_audio.write(await resp.read())
+                tmp_audio.close()
+                files_to_clean.append(tmp_audio.name)
+            
+            output_file = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+            output_file.close()
+            files_to_clean.append(output_file.name)
+            
+            cmd = [
+                "ffmpeg", "-i", tmp_video.name, "-i", tmp_audio.name,
+                "-c:v", "copy", "-c:a", "aac", "-map", "0:v:0", "-map", "1:a:0",
+                "-shortest", "-y", output_file.name
+            ]
+            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
+            with open(output_file.name, "rb") as f:
+                return await oss_service.upload_file(f.read(), "mp4", "ecommerce_videos")
+        
+        except Exception as e:
+            print(f"[ERROR] 音频合并失败: {e}")
+            return video_url
+        
+        finally:
+            for file_path in files_to_clean:
+                try:
+                    if os.path.exists(file_path):
+                        os.unlink(file_path)
+                except:
+                    pass
+
     async def _merge_audio_to_video(self, video_url: str, audio_video_url: str) -> str:
-        """将 audio_video_url 的音频合并到 video_url 的视频上"""
         import subprocess
         import aiohttp
         
@@ -741,26 +742,22 @@ class EcommerceService:
         
         try:
             async with aiohttp.ClientSession() as session:
-                # 下载试穿视频（我们需要的画面）
                 tmp_video = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
                 async with session.get(video_url) as resp:
                     tmp_video.write(await resp.read())
                 tmp_video.close()
                 files_to_clean.append(tmp_video.name)
                 
-                # 下载数字人视频（我们需要的音频）
                 tmp_audio_source = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
                 async with session.get(audio_video_url) as resp:
                     tmp_audio_source.write(await resp.read())
                 tmp_audio_source.close()
                 files_to_clean.append(tmp_audio_source.name)
             
-            # 输出文件
             output_file = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
             output_file.close()
             files_to_clean.append(output_file.name)
             
-            # ffmpeg 命令：从 video_url 取视频流，从 audio_video_url 取音频流，合并
             cmd = [
                 "ffmpeg", "-i", tmp_video.name, "-i", tmp_audio_source.name,
                 "-c:v", "copy", "-c:a", "aac", "-map", "0:v:0", "-map", "1:a:0",
@@ -768,13 +765,11 @@ class EcommerceService:
             ]
             subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
-            # 上传到OSS
             with open(output_file.name, "rb") as f:
                 return await oss_service.upload_file(f.read(), "mp4", "ecommerce_videos")
         
         except Exception as e:
             print(f"[ERROR] 音频合并失败: {e}")
-            # 降级方案：返回原视频
             return video_url
         
         finally:
@@ -786,7 +781,6 @@ class EcommerceService:
                     pass
 
     async def _merge_videos(self, digital_video_url: str, product_video_urls: List[str]) -> str:
-        """使用 ffmpeg 合并视频"""
         import subprocess
         import aiohttp
         
