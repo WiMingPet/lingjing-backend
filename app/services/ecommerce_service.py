@@ -454,22 +454,66 @@ class EcommerceService:
         digital_human_image = tryon_image_url if tryon_image_url else digital_human_image
         print(f"[DEBUG] 数字人形象使用: {'试穿效果图' if tryon_image_url else '预设形象'}")
         
-        # 将脚本中的 voice_name 正确地传递给API
-        digital_task_id = await self.kling.generate_digital_human(
-            digital_human_id=digital_human_id,
-            text=script.script,
-            image_url=digital_human_image,
-            voice=voice_name
-        )
-        digital_video_url = await self._wait_for_video(digital_task_id)
+        # 可灵API文案长度限制处理：长文案需要切片生成
+        MAX_TEXT_LENGTH = 100  # 可灵数字人单次支持的最大字数
+        full_script = script.script
+        digital_video_urls = []
+        
+        if len(full_script) > MAX_TEXT_LENGTH:
+            print(f"[DEBUG] 文案较长({len(full_script)}字)，切片处理")
+            # 按句号切分文案
+            sentences = full_script.replace('！', '。').replace('？', '。').split('。')
+            chunks = []
+            current_chunk = ""
+            
+            for sentence in sentences:
+                sentence = sentence.strip()
+                if not sentence:
+                    continue
+                if len(current_chunk) + len(sentence) < MAX_TEXT_LENGTH:
+                    current_chunk += sentence + "。"
+                else:
+                    if current_chunk:
+                        chunks.append(current_chunk)
+                    current_chunk = sentence + "。"
+            if current_chunk:
+                chunks.append(current_chunk)
+            
+            print(f"[DEBUG] 切分为{len(chunks)}段")
+            
+            # 逐段生成数字人视频
+            for i, chunk in enumerate(chunks):
+                print(f"[DEBUG] 生成第{i+1}/{len(chunks)}段...")
+                task_id = await self.kling.generate_digital_human(
+                    digital_human_id=digital_human_id,
+                    text=chunk,
+                    image_url=digital_human_image,
+                    voice=voice_name
+                )
+                video_url = await self._wait_for_video(task_id, max_wait=600)
+                if video_url:
+                    digital_video_urls.append(video_url)
+            
+            # 合并所有片段
+            if digital_video_urls:
+                digital_video_url = await self._merge_videos(digital_video_urls[0], digital_video_urls[1:]) if len(digital_video_urls) > 1 else digital_video_urls[0]
+            else:
+                digital_video_url = None
+        else:
+            # 短文案直接生成
+            digital_task_id = await self.kling.generate_digital_human(
+                digital_human_id=digital_human_id,
+                text=full_script,
+                image_url=digital_human_image,
+                voice=voice_name
+            )
+            digital_video_url = await self._wait_for_video(digital_task_id)
+        
         print(f"[DEBUG] 数字人口播视频生成完成")
         
-        # 第三步：合并视频。如果数字人生成失败，降级为将TTS音频合入试穿视频
+        # 第三步：直接使用数字人讲解视频（已经是带讲解的完整视频）
         if digital_video_url:
-            if product_video_url:
-                final_video_url = await self._merge_videos(digital_video_url, [product_video_url])
-            else:
-                final_video_url = digital_video_url
+            final_video_url = digital_video_url
         elif product_video_url:
             # 降级方案
             print("[DEBUG] 数字人生成失败，使用TTS音频降级方案")
@@ -525,40 +569,8 @@ class EcommerceService:
             return None
 
     async def _call_tryon_api(self, garment_image_url: str, model_image_url: str, user_token: str = None):
-        from app.services.tryon_service import TryonService
-        from app.database import SessionLocal
-        
-        try:
-            print(f"[DEBUG] 直接调用试穿服务（与手动试穿相同流程）")
-            print(f"[DEBUG] 服装图: {garment_image_url[:80]}...")
-            print(f"[DEBUG] 模特图: {model_image_url[:80]}...")
-            
-            request_data = {
-                "model_image_url": model_image_url,
-                "garment_image_url": garment_image_url
-            }
-            
-            db = SessionLocal()
-            try:
-                task = await TryonService.generate_tryon(db, 1, request_data)
-                
-                if task.output_data:
-                    video_url = task.output_data.get("video_url", "")
-                    if video_url:
-                        print(f"[DEBUG] 虚拟试穿视频已生成: {video_url[:80]}...")
-                        tryon_image_url = task.output_data.get("tryon_image_url", "")
-                        return video_url, tryon_image_url
-            finally:
-                db.close()
-            
-            print(f"[DEBUG] 试穿任务未获取到视频URL")
-            return None
-            
-        except Exception as e:
-            print(f"[DEBUG] 虚拟试穿异常: {e}")
-            import traceback
-            traceback.print_exc()
-            return None, None
+        """已弃用：改为直接用商品原图展示"""
+        return None, None
 
     async def _wait_for_tryon_result(self, task_id: int, user_token: str = None, max_wait: int = 300) -> Optional[str]:
         import aiohttp
@@ -792,6 +804,70 @@ class EcommerceService:
         except Exception as e:
             print(f"[ERROR] 音频合并失败: {e}")
             return video_url
+        
+        finally:
+            for file_path in files_to_clean:
+                try:
+                    if os.path.exists(file_path):
+                        os.unlink(file_path)
+                except:
+                    pass
+
+    async def _merge_live_stream(self, digital_video_url: str, product_image_url: str) -> str:
+        """
+        将数字人讲解视频和商品原图合并成直播带货效果
+        数字人在左侧讲解,商品原图在右侧展示,带动态切换效果
+        """
+        import subprocess
+        import aiohttp
+        
+        files_to_clean = []
+        try:
+            async with aiohttp.ClientSession() as session:
+                # 下载数字人视频
+                tmp_digital = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+                async with session.get(digital_video_url) as resp:
+                    tmp_digital.write(await resp.read())
+                tmp_digital.close()
+                files_to_clean.append(tmp_digital.name)
+                
+                # 下载商品原图
+                tmp_product = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+                async with session.get(product_image_url) as resp:
+                    tmp_product.write(await resp.read())
+                tmp_product.close()
+                files_to_clean.append(tmp_product.name)
+            
+            output_file = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+            output_file.close()
+            files_to_clean.append(output_file.name)
+            
+            # ffmpeg 画中画效果：数字人(左) + 商品图(右)
+            cmd = [
+                "ffmpeg",
+                "-i", tmp_digital.name,
+                "-i", tmp_product.name,
+                "-filter_complex",
+                # 将数字人视频缩放到60%宽度放在左侧
+                # 将商品图缩放到40%宽度放在右侧
+                "[1:v]scale=iw*0.4:ih*0.4[pimg];"
+                "[0:v]scale=iw*0.6:ih*0.6[pmain];"
+                "[pmain]pad=iw*1.5:ih:0:0:color=black[pexpanded];"
+                "[pexpanded][pimg]overlay=W-w:0",
+                "-c:v", "libx264",
+                "-c:a", "aac",
+                "-shortest",
+                "-y",
+                output_file.name
+            ]
+            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
+            with open(output_file.name, "rb") as f:
+                return await oss_service.upload_file(f.read(), "mp4", "ecommerce_videos")
+        
+        except Exception as e:
+            print(f"[ERROR] 直播合并失败: {e}")
+            return digital_video_url
         
         finally:
             for file_path in files_to_clean:
