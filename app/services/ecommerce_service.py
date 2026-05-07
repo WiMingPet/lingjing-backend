@@ -291,6 +291,22 @@ class EcommerceService:
             return "douyin"
         return "unknown"
 
+    async def generate_product_demo_video(self, product: ProductInfo) -> Optional[str]:
+        if not product.images:
+            return None
+
+        product_image_url = product.images[0]
+        prompt = f"展示商品{product.title}，从多个角度展示，突出卖点，自然光线，4K高清。"
+
+        task_id = self.kling.generate_video(
+            image_url=product_image_url,
+            prompt=prompt,
+            duration=5,
+            mode="std"
+        )
+        video_url = await self._wait_for_video(task_id)
+        return video_url
+
     async def generate_copywriting(self, product: ProductInfo, is_manual_mode: bool = False) -> CopywritingScript:
         client = AsyncOpenAI(
             api_key=self.api_key, 
@@ -386,34 +402,71 @@ class EcommerceService:
         
         avatar = self._ai_select_avatar(product.title, product.description or "")
         digital_human_image = digital_image_url or avatar.get("model_image", "")
-        print(f"[DEBUG] 使用数字人形象: {avatar['name']}")
+        print(f"[DEBUG] 使用数字人形象: {avatar['name']} - {digital_human_image}")
         
         voice_name = self._ai_select_voice(product.title, product.description or "", avatar)
         print(f"[DEBUG] 使用音色: {voice_name}")
         
-        # 生成商品原图视频
-        product_images = product.images or []
+        # 第一步：生成试穿展示视频
         product_video_url = None
+        tryon_image_url = None
+        product_images = product.images or []
         
-        if product_images:
+        fashion_keywords = [
+            "裤", "衣", "裙", "服装", "T恤", "衬衫", "外套", "卫衣",
+            "短袖", "长袖", "夹克", "羽绒", "马甲", "背心", "毛衣",
+            "针织", "风衣", "大衣", "棉服", "西服", "套装", "连体"
+        ]
+        is_fashion = any(keyword in product.title for keyword in fashion_keywords)
+        
+        if hasattr(product, 'video_url') and product.video_url:
+            product_video_url = product.video_url
+            print(f"[DEBUG] 使用链接内视频: {product_video_url}")
+        elif is_manual_mode and is_fashion and product_images:
+            print(f"[DEBUG] 手动模式+服装类：调用虚拟试穿...")
+            product_video_url, tryon_image_url = await self._call_tryon_api(
+                garment_image_url=product_images[0],
+                model_image_url=digital_human_image,
+                user_token=user_token
+            )
+            if not product_video_url:
+                print(f"[DEBUG] 试穿失败，降级为原图展示...")
+                product_video_url = await self._image_to_video(product_images[0], duration=5)
+        elif not is_manual_mode and is_fashion and product_images:
+            print(f"[DEBUG] 链接模式+服装类：调用虚拟试穿...")
+            product_video_url, tryon_image_url = await self._call_tryon_api(
+                garment_image_url=product_images[0],
+                model_image_url=digital_human_image,
+                user_token=user_token
+            )
+            if not product_video_url:
+                print(f"[DEBUG] 试穿失败，降级为原图展示...")
+                product_video_url = await self._image_to_video(product_images[0], duration=5)
+        elif product_images:
+            print(f"[DEBUG] 非服装类商品，用原图生成展示视频...")
             product_video_url = await self._image_to_video(product_images[0], duration=5)
-        
-        # 直接生成完整音频
+
+        # 第二步：用 TTS 生成完整讲解音频
         print(f"[DEBUG] 开始生成完整讲解音频...")
         from app.services.tts_service import tts_service, get_voice_type
-        voice_type = get_voice_type(voice_name) if voice_name else 101001
+        
+        # 关键：清理音色名称，去掉可能的换行符和空格
+        clean_voice_name = voice_name.strip().replace('\n', '').replace('\r', '')
+        voice_type = get_voice_type(clean_voice_name)
+        print(f"[DEBUG] 音色名称: '{clean_voice_name}' -> VoiceType: {voice_type}")
+        
         audio_bytes = tts_service.text_to_speech(script.script, voice_type)
         audio_url = await oss_service.upload_file(audio_bytes, "mp3", "ecommerce_audio")
-        print(f"[DEBUG] 讲解音频生成完毕，音色ID: {voice_type}")
+        print(f"[DEBUG] 讲解音频生成完毕，实际使用音色ID: {voice_type}")
         
-        # 商品原图 + 讲解音频 = 最终视频
+        # 第三步：试穿视频（循环播放）+ 完整讲解音频 = 最终视频
         final_video_url = None
         if product_video_url and audio_url:
             final_video_url = await self._merge_audio_only(product_video_url, audio_url)
-        elif audio_url:
-            final_video_url = await self._generate_video_with_audio(product_images[0] if product_images else "https://media.lingjing-media.com/%E4%BD%B3%E6%85%A7.png", audio_url)
-        else:
+        elif product_video_url:
             final_video_url = product_video_url
+        else:
+            final_video_url = None
         
         print(f"[DEBUG] 带货视频生成完成")
         return {
@@ -421,45 +474,8 @@ class EcommerceService:
             "status": "completed"
         }
 
-    async def _generate_video_with_audio(self, image_url: str, audio_url: str) -> str:
-        """商品原图 + 讲解音频 = 最终视频"""
-        import subprocess
-        import aiohttp
-        
-        files_to_clean = []
-        try:
-            async with aiohttp.ClientSession() as session:
-                tmp_image = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
-                async with session.get(image_url) as resp:
-                    tmp_image.write(await resp.read())
-                tmp_image.close()
-                files_to_clean.append(tmp_image.name)
-                
-                tmp_audio = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
-                async with session.get(audio_url) as resp:
-                    tmp_audio.write(await resp.read())
-                tmp_audio.close()
-                files_to_clean.append(tmp_audio.name)
-            
-            output_file = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
-            output_file.close()
-            files_to_clean.append(output_file.name)
-            
-            cmd = [
-                "ffmpeg", "-loop", "1", "-i", tmp_image.name, "-i", tmp_audio.name,
-                "-c:v", "libx264", "-c:a", "aac", "-shortest", "-pix_fmt", "yuv420p", "-y", output_file.name
-            ]
-            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            
-            with open(output_file.name, "rb") as f:
-                return await oss_service.upload_file(f.read(), "mp4", "ecommerce_videos")
-        
-        finally:
-            for f in files_to_clean:
-                try: os.unlink(f)
-                except: pass
-
     async def _image_to_video(self, image_url: str, duration: int = 5) -> str:
+        """把图片转成固定时长的视频"""
         import subprocess
         import aiohttp
         
@@ -475,7 +491,12 @@ class EcommerceService:
             tmp_video = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
             tmp_video.close()
             
-            cmd = ["ffmpeg", "-loop", "1", "-i", tmp_image.name, "-c:v", "libx264", "-t", str(duration), "-pix_fmt", "yuv420p", "-y", tmp_video.name]
+            cmd = [
+                "ffmpeg", "-loop", "1", "-i", tmp_image.name,
+                "-c:v", "libx264", "-t", str(duration),
+                "-pix_fmt", "yuv420p", "-y",
+                tmp_video.name
+            ]
             subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
             with open(tmp_video.name, "rb") as f:
@@ -483,11 +504,195 @@ class EcommerceService:
             
             os.unlink(tmp_image.name)
             os.unlink(tmp_video.name)
+            
             return result_url
-        except:
+            
+        except Exception as e:
+            print(f"[ERROR] 图片转视频失败: {e}")
             return None
 
+    async def _call_tryon_api(self, garment_image_url: str, model_image_url: str, user_token: str = None):
+        """调用虚拟试穿服务，返回 (展示视频URL, 效果图URL)"""
+        from app.services.tryon_service import TryonService
+        from app.database import SessionLocal
+        
+        try:
+            print(f"[DEBUG] 调用虚拟试穿服务...")
+            request_data = {
+                "model_image_url": model_image_url,
+                "garment_image_url": garment_image_url
+            }
+            
+            db = SessionLocal()
+            try:
+                task = await TryonService.generate_tryon(db, 1, request_data)
+                
+                if task.output_data:
+                    video_url = task.output_data.get("video_url", "")
+                    tryon_image_url = task.output_data.get("tryon_image_url", "")
+                    if video_url:
+                        print(f"[DEBUG] 虚拟试穿视频已生成")
+                        return video_url, tryon_image_url
+            finally:
+                db.close()
+            
+            return None, None
+            
+        except Exception as e:
+            print(f"[DEBUG] 虚拟试穿异常: {e}")
+            return None, None
+
+    async def _wait_for_tryon_result(self, task_id: int, user_token: str = None, max_wait: int = 300) -> Optional[str]:
+        import aiohttp
+        
+        start_time = time.time()
+        poll_count = 0
+        api_url = f"https://lingjing.preview.aliyun-zeabur.cn/api/tryon/task/{task_id}"
+        headers = {}
+        if user_token:
+            headers["Authorization"] = f"Bearer {user_token}"
+        
+        while time.time() - start_time < max_wait:
+            poll_count += 1
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(api_url, headers=headers) as resp:
+                        if resp.status == 200:
+                            result = await resp.json()
+                            data = result.get("data", {})
+                            status = data.get("status", "")
+                            output_data = data.get("output_data", {})
+                            video_url = output_data.get("video_url", "")
+                            
+                            print(f"[DEBUG] 试穿任务状态(轮询{poll_count}): {status}")
+                            
+                            if status == "completed" and video_url:
+                                return video_url
+                            elif status == "failed":
+                                return None
+            except Exception as e:
+                print(f"[DEBUG] 查询试穿状态异常: {e}")
+            
+            interval = 5 if poll_count <= 10 else 10
+            await asyncio.sleep(interval)
+        
+        print(f"[DEBUG] 试穿任务超时")
+        return None
+
+    async def _wait_for_video(self, task_id: str, max_wait: int = 1200) -> str:
+        start_time = time.time()
+        poll_count = 0
+        print(f"[DEBUG] 开始轮询视频任务: {task_id}")
+        while time.time() - start_time < max_wait:
+            poll_count += 1
+            try:
+                status = self.kling.get_digital_human_task_status(task_id)
+                task_status = status.get("task_status")
+                print(f"[DEBUG] 第{poll_count}次轮询，状态: {task_status}")
+                
+                if task_status == "succeed":
+                    task_result = status.get("task_result", {})
+                    videos = task_result.get("videos", [])
+                    if videos:
+                        video_url = videos[0].get("url")
+                    else:
+                        video_url = task_result.get("video_url")
+                    print(f"[DEBUG] 视频生成成功，共轮询{poll_count}次")
+                    return video_url
+                elif task_status == "failed":
+                    error_msg = status.get("task_status_msg", "未知错误")
+                    raise Exception(f"视频生成失败: {error_msg}")
+            except Exception as e:
+                if "失败" in str(e):
+                    raise
+                print(f"[DEBUG] 查询状态异常: {e}")
+            
+            interval = 5 if poll_count <= 10 else 10
+            await asyncio.sleep(interval)
+        
+        raise Exception(f"可灵平台高峰期排队中，视频生成超时（共轮询{poll_count}次），请稍后重试")
+
+    async def _wait_for_videos(self, task_ids: List[str]) -> List[str]:
+        urls = []
+        for task_id in task_ids:
+            url = await self._wait_for_video(task_id)
+            urls.append(url)
+        return urls
+        
+    async def _analyze_product_image(self, image_url: str, user_input: str = "") -> Tuple[str, str]:
+        import aiohttp
+        import base64
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(image_url) as resp:
+                    image_data = await resp.read()
+            image_base64 = base64.b64encode(image_data).decode('utf-8')
+            
+            import requests as sync_requests
+            
+            prompt = """
+请仔细分析这张产品图片，提取以下信息：
+1. 产品名称（具体到款式、类型）
+2. 核心卖点（至少3个）
+3. 材质/面料
+4. 适合人群（年龄、性别、风格偏好）
+5. 适用场景（至少2个）
+
+输出格式严格为JSON：
+{
+  "product_name": "具体产品名称",
+  "selling_points": "核心卖点，用中文逗号分隔",
+  "description": "一段约100字的详细产品描述，包含材质、版型、风格"
+}
+"""
+            
+            response = sync_requests.post(
+                f"{self.base_url}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "gpt-4o",
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": prompt},
+                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
+                            ]
+                        }
+                    ],
+                    "max_tokens": 500,
+                    "temperature": 0.5
+                },
+                timeout=60
+            )
+            
+            result = response.json()
+            print(f"[DEBUG] 图片识别响应: {result}")
+            
+            choices = result.get("choices", [])
+            if choices:
+                content = choices[0].get("message", {}).get("content", "")
+                if content:
+                    clean_content = content.strip()
+                    if clean_content.startswith('```'):
+                        clean_content = clean_content.split('\n', 1)[-1]
+                        if clean_content.endswith('```'):
+                            clean_content = clean_content[:-3]
+                    parsed = json.loads(clean_content)
+                    return parsed.get("product_name", "商品"), parsed.get("description", "")
+            
+            raise Exception(f"返回格式异常: {result}")
+            
+        except Exception as e:
+            print(f"图片识别失败: {e}")
+            return "时尚服装", "优质服装，版型好，面料舒适，性价比高"
+
     async def _merge_audio_only(self, video_url: str, audio_url: str) -> str:
+        """将音频合成到试穿视频上，保留原画面，替换声音"""
         import subprocess
         import aiohttp
         
@@ -510,103 +715,188 @@ class EcommerceService:
             output_file.close()
             files_to_clean.append(output_file.name)
             
-            cmd = ["ffmpeg", "-i", tmp_video.name, "-i", tmp_audio.name, "-c:v", "copy", "-c:a", "aac", "-map", "0:v:0", "-map", "1:a:0", "-shortest", "-y", output_file.name]
+            cmd = [
+                "ffmpeg",
+                "-stream_loop", "-1", "-i", tmp_video.name,
+                "-i", tmp_audio.name,
+                "-c:v", "libx264",
+                "-c:a", "aac",
+                "-map", "0:v:0", "-map", "1:a:0",
+                "-shortest", "-y", output_file.name
+            ]
             subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
             with open(output_file.name, "rb") as f:
                 return await oss_service.upload_file(f.read(), "mp4", "ecommerce_videos")
+        
+        except Exception as e:
+            print(f"[ERROR] 音频合并失败: {e}")
+            return video_url
+        
         finally:
-            for f in files_to_clean:
-                try: os.unlink(f)
-                except: pass
+            for file_path in files_to_clean:
+                try:
+                    if os.path.exists(file_path):
+                        os.unlink(file_path)
+                except:
+                    pass
 
-    async def _analyze_product_image(self, image_url: str, user_input: str = "") -> Tuple[str, str]:
+    async def _merge_audio_to_video(self, video_url: str, audio_video_url: str) -> str:
+        import subprocess
         import aiohttp
-        import base64
+        
+        files_to_clean = []
         
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(image_url) as resp:
-                    image_data = await resp.read()
-            image_base64 = base64.b64encode(image_data).decode('utf-8')
+                tmp_video = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+                async with session.get(video_url) as resp:
+                    tmp_video.write(await resp.read())
+                tmp_video.close()
+                files_to_clean.append(tmp_video.name)
+                
+                tmp_audio_source = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+                async with session.get(audio_video_url) as resp:
+                    tmp_audio_source.write(await resp.read())
+                tmp_audio_source.close()
+                files_to_clean.append(tmp_audio_source.name)
             
-            import requests as sync_requests
-            prompt = """请仔细分析这张产品图片，提取以下信息：\n1. 产品名称（具体到款式、类型）\n2. 核心卖点（至少3个）\n3. 材质/面料\n4. 适合人群（年龄、性别、风格偏好）\n5. 适用场景（至少2个）\n\n输出格式严格为JSON：\n{\n  "product_name": "具体产品名称",\n  "selling_points": "核心卖点，用中文逗号分隔",\n  "description": "一段约100字的详细产品描述，包含材质、版型、风格"\n}"""
+            output_file = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+            output_file.close()
+            files_to_clean.append(output_file.name)
             
-            response = sync_requests.post(
-                f"{self.base_url}/chat/completions",
-                headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
-                json={"model": "gpt-4o", "messages": [{"role": "user", "content": [{"type": "text", "text": prompt}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}]}], "max_tokens": 500, "temperature": 0.5},
-                timeout=60
-            )
-            result = response.json()
-            choices = result.get("choices", [])
-            if choices:
-                content = choices[0].get("message", {}).get("content", "")
-                if content:
-                    clean = content.strip()
-                    if clean.startswith('```'): clean = clean.split('\n', 1)[-1][:-3]
-                    parsed = json.loads(clean)
-                    return parsed.get("product_name", "商品"), parsed.get("description", "")
-            raise Exception(f"格式异常")
+            cmd = [
+                "ffmpeg", "-i", tmp_video.name, "-i", tmp_audio_source.name,
+                "-c:v", "copy", "-c:a", "aac", "-map", "0:v:0", "-map", "1:a:0",
+                "-y", output_file.name
+            ]
+            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
+            with open(output_file.name, "rb") as f:
+                return await oss_service.upload_file(f.read(), "mp4", "ecommerce_videos")
+        
         except Exception as e:
-            print(f"图片识别失败: {e}")
-            return "时尚服装", "优质服装，版型好，面料舒适，性价比高"
+            print(f"[ERROR] 音频合并失败: {e}")
+            return video_url
+        
+        finally:
+            for file_path in files_to_clean:
+                try:
+                    if os.path.exists(file_path):
+                        os.unlink(file_path)
+                except:
+                    pass
 
-    async def _call_tryon_api(self, garment_image_url: str, model_image_url: str, user_token: str = None):
-        return None, None
-
-    async def _wait_for_video(self, task_id: str, max_wait: int = 600) -> str:
-        start_time = time.time()
-        poll_count = 0
-        while time.time() - start_time < max_wait:
-            poll_count += 1
-            try:
-                status = self.kling.get_digital_human_task_status(task_id)
-                task_status = status.get("task_status")
-                print(f"[DEBUG] 第{poll_count}次轮询，状态: {task_status}")
-                if task_status == "succeed":
-                    videos = status.get("task_result", {}).get("videos", [])
-                    return videos[0].get("url") if videos else status.get("task_result", {}).get("video_url", "")
-                elif task_status == "failed":
-                    raise Exception(f"视频生成失败: {status.get('task_status_msg')}")
-            except Exception as e:
-                if "失败" in str(e): raise
-            await asyncio.sleep(5 if poll_count <= 10 else 10)
-        raise Exception(f"视频生成超时，共轮询{poll_count}次")
+    async def _merge_live_stream(self, digital_video_url: str, product_image_url: str) -> str:
+        """
+        将数字人讲解视频和商品原图合并成直播带货效果
+        数字人在左侧讲解,商品原图在右侧展示,带动态切换效果
+        """
+        import subprocess
+        import aiohttp
+        
+        files_to_clean = []
+        try:
+            async with aiohttp.ClientSession() as session:
+                # 下载数字人视频
+                tmp_digital = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+                async with session.get(digital_video_url) as resp:
+                    tmp_digital.write(await resp.read())
+                tmp_digital.close()
+                files_to_clean.append(tmp_digital.name)
+                
+                # 下载商品原图
+                tmp_product = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+                async with session.get(product_image_url) as resp:
+                    tmp_product.write(await resp.read())
+                tmp_product.close()
+                files_to_clean.append(tmp_product.name)
+            
+            output_file = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+            output_file.close()
+            files_to_clean.append(output_file.name)
+            
+            # ffmpeg 画中画效果：数字人(左) + 商品图(右)
+            cmd = [
+                "ffmpeg",
+                "-i", tmp_digital.name,
+                "-i", tmp_product.name,
+                "-filter_complex",
+                # 将数字人视频缩放到60%宽度放在左侧
+                # 将商品图缩放到40%宽度放在右侧
+                "[1:v]scale=iw*0.4:ih*0.4[pimg];"
+                "[0:v]scale=iw*0.6:ih*0.6[pmain];"
+                "[pmain]pad=iw*1.5:ih:0:0:color=black[pexpanded];"
+                "[pexpanded][pimg]overlay=W-w:0",
+                "-c:v", "libx264",
+                "-c:a", "aac",
+                "-shortest",
+                "-y",
+                output_file.name
+            ]
+            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
+            with open(output_file.name, "rb") as f:
+                return await oss_service.upload_file(f.read(), "mp4", "ecommerce_videos")
+        
+        except Exception as e:
+            print(f"[ERROR] 直播合并失败: {e}")
+            return digital_video_url
+        
+        finally:
+            for file_path in files_to_clean:
+                try:
+                    if os.path.exists(file_path):
+                        os.unlink(file_path)
+                except:
+                    pass
 
     async def _merge_videos(self, digital_video_url: str, product_video_urls: List[str]) -> str:
-        import subprocess, aiohttp
-        files = []
+        import subprocess
+        import aiohttp
+        
+        files_to_clean = []
+        
         try:
+            video_files = []
             urls = [digital_video_url] + product_video_urls
-            async with aiohttp.ClientSession() as s:
+            
+            async with aiohttp.ClientSession() as session:
                 for url in urls:
                     tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
-                    async with s.get(url) as r: tmp.write(await r.read())
-                    tmp.close(); files.append(tmp.name)
+                    async with session.get(url) as resp:
+                        tmp.write(await resp.read())
+                    tmp.close()
+                    video_files.append(tmp.name)
+                    files_to_clean.append(tmp.name)
+            
             list_file = tempfile.NamedTemporaryFile(suffix=".txt", delete=False, mode="w")
-            for vf in files: list_file.write(f"file '{vf}'\n")
-            list_file.close(); files.append(list_file.name)
-            out = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False); out.close(); files.append(out.name)
-            subprocess.run(["ffmpeg", "-f", "concat", "-safe", "0", "-i", list_file.name, "-c", "copy", out.name, "-y"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            with open(out.name, "rb") as f: return await oss_service.upload_file(f.read(), "mp4", "ecommerce_videos")
+            for vf in video_files:
+                list_file.write(f"file '{vf}'\n")
+            list_file.close()
+            files_to_clean.append(list_file.name)
+            
+            output_file = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+            output_file.close()
+            files_to_clean.append(output_file.name)
+            
+            cmd = [
+                "ffmpeg", "-f", "concat", "-safe", "0", "-i", list_file.name,
+                "-c", "copy", output_file.name, "-y"
+            ]
+            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
+            with open(output_file.name, "rb") as f:
+                return await oss_service.upload_file(f.read(), "mp4", "ecommerce_videos")
+        
+        except Exception as e:
+            print(f"[ERROR] 视频合并失败: {e}")
+            raise
+        
         finally:
-            for f in files:
-                try: os.unlink(f)
-                except: pass
-
-    async def _merge_audio_to_video(self, video_url: str, audio_video_url: str) -> str:
-        import subprocess, aiohttp
-        files = []
-        try:
-            async with aiohttp.ClientSession() as s:
-                vf = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False); vf.write(await (await s.get(video_url)).read()); vf.close(); files.append(vf.name)
-                af = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False); af.write(await (await s.get(audio_video_url)).read()); af.close(); files.append(af.name)
-            out = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False); out.close(); files.append(out.name)
-            subprocess.run(["ffmpeg", "-i", vf.name, "-i", af.name, "-c:v", "copy", "-c:a", "aac", "-map", "0:v:0", "-map", "1:a:0", "-y", out.name], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            with open(out.name, "rb") as f: return await oss_service.upload_file(f.read(), "mp4", "ecommerce_videos")
-        finally:
-            for f in files:
-                try: os.unlink(f)
-                except: pass
+            for file_path in files_to_clean:
+                try:
+                    if os.path.exists(file_path):
+                        os.unlink(file_path)
+                except:
+                    pass
