@@ -53,6 +53,38 @@ class TTSService:
         audio_data = base64.b64decode(resp.Audio)
         print(f"[DEBUG] 腾讯云TTS成功，音色ID: {voice_type}, 音频大小: {len(audio_data)} bytes")
         return audio_data
+    
+    def text_to_long_speech(self, text: str, voice_type: int = 101001) -> bytes:
+        """支持长文本的TTS，自动分段生成后拼接"""
+        if len(text) <= 150:
+            return self.text_to_speech(text, voice_type)
+        
+        sentences = text.replace('！', '。').replace('？', '。').split('。')
+        chunks = []
+        current_chunk = ""
+        
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+            if len(current_chunk) + len(sentence) < 150:
+                current_chunk += sentence + "。"
+            else:
+                if current_chunk:
+                    chunks.append(current_chunk)
+                current_chunk = sentence + "。"
+        if current_chunk:
+            chunks.append(current_chunk)
+        
+        print(f"[DEBUG] TTS 长文本切分为 {len(chunks)} 段")
+        
+        audio_chunks = []
+        for i, chunk in enumerate(chunks):
+            print(f"[DEBUG] TTS 生成第 {i+1}/{len(chunks)} 段...")
+            audio_data = self.text_to_speech(chunk, voice_type)
+            audio_chunks.append(audio_data)
+        
+        return b''.join(audio_chunks)
 
 
 tts_service = TTSService()
