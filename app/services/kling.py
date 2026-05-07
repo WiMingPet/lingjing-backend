@@ -302,14 +302,15 @@ class KlingService:
         base_url = self._get_base_url()
         url = f"{base_url}/videos/avatar/image2video"
 
-        # 不再强制要求音频文件，让可灵用内置音色生成
-        if not audio_url and not text:
+        # 生成音频（支持长文本分段）
+        if not audio_url and text:
+            from app.services.tts_service import tts_service
+            audio_data = tts_service.text_to_long_speech(text)
+            audio_url = await oss_service.upload_file(audio_data, "mp3", "digital_human/audio")
+            print(f"[DEBUG] TTS 生成音频成功: {text[:50]}...")
+
+        if not audio_url:
             raise Exception("请提供文字内容或音频文件")
-        
-        if audio_url:
-            print(f"[DEBUG] 使用外部音频")
-        else:
-            print(f"[DEBUG] 由可灵内置音色生成音频")
 
         # ========== 强制生成唯一的 external_task_id ==========
         # 忽略前端传入的 name，使用 UUID + 时间戳生成唯一 ID
@@ -319,12 +320,11 @@ class KlingService:
 
         payload = {
             "image": image_url,
+            "sound_file": audio_url,
             "mode": "std",
             "with_audio": True,
             "external_task_id": unique_task_id
         }
-        if audio_url:
-            payload["sound_file"] = audio_url
 
         if prompt and prompt != "string":
             payload["prompt"] = prompt
