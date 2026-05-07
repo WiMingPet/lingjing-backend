@@ -329,7 +329,7 @@ class EcommerceService:
 产品：{product.title}
 卖点：{product.description or '高品质，性价比超高'}
 
-输出严格JSON格式：{{"script": "完整的口播文案（约300字，适合60秒讲解）"}}
+输出严格JSON格式：{{"script": "完整的口播文案（约100字，适合30秒讲解）"}}
 """
         else:
             prompt = f"""
@@ -446,25 +446,23 @@ class EcommerceService:
             print(f"[DEBUG] 非服装类商品，用原图生成展示视频...")
             product_video_url = await self._image_to_video(product_images[0], duration=5)
 
-        # 第二步：用 TTS 生成完整讲解音频
-        print(f"[DEBUG] 开始生成完整讲解音频...")
-        from app.services.tts_service import tts_service, get_voice_type
+        # 第二步：用数字人API生成嘴型同步的讲解视频
+        print(f"[DEBUG] 开始生成数字人口播视频...")
+        digital_task_id = await self.kling.generate_digital_human(
+            digital_human_id=digital_human_id,
+            text=script.script,
+            image_url=digital_human_image,
+            voice=voice_name
+        )
+        digital_video_url = await self._wait_for_video(digital_task_id, max_wait=600)
+        print(f"[DEBUG] 数字人口播视频生成完成")
         
-        # 关键：清理音色名称，去掉可能的换行符和空格
-        clean_voice_name = voice_name.strip().replace('\n', '').replace('\r', '')
-        voice_type = get_voice_type(clean_voice_name)
-        print(f"[DEBUG] 音色名称: '{clean_voice_name}' -> VoiceType: {voice_type}")
-        
-        audio_bytes = tts_service.text_to_speech(script.script, voice_type)
-        audio_url = await oss_service.upload_file(audio_bytes, "mp3", "ecommerce_audio")
-        print(f"[DEBUG] 讲解音频生成完毕，实际使用音色ID: {voice_type}")
-        
-        # 第三步：试穿视频（循环播放）+ 完整讲解音频 = 最终视频
+        # 第三步：试穿视频 + 数字人讲解视频 = 最终视频
         final_video_url = None
-        if product_video_url and audio_url:
-            final_video_url = await self._merge_audio_only(product_video_url, audio_url)
-        elif product_video_url:
-            final_video_url = product_video_url
+        if product_video_url and digital_video_url:
+            final_video_url = await self._merge_videos(digital_video_url, [product_video_url])
+        elif digital_video_url:
+            final_video_url = digital_video_url
         else:
             final_video_url = None
         

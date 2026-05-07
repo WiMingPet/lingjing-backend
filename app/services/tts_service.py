@@ -10,15 +10,15 @@ from app.config import settings
 
 # ========== 音色映射表：名字 → 腾讯云 VoiceType ==========
 VOICE_MAP = {
-    "温柔女声": 101001,
-    "播报男声": 101002,
-    "钓系女友": 101003,
-    "自然男声": 101004,
-    "知性女声": 101005,
+    "温柔女声": 101001,   # 智瑜 - 温柔女声
+    "播报男声": 101002,   # 智聆 - 通用男声
+    "钓系女友": 101004,   # 智云 - 活泼女声
+    "自然男声": 101003,   # 智德 - 磁性男声
+    "知性女声": 101005,   # 智莉 - 知性女声
     "晓晓": 101001,
     "云希": 101002,
-    "晓伊": 101003,
-    "云健": 101004,
+    "晓伊": 101004,
+    "云健": 101003,
     "晓悠": 101005,
 }
 
@@ -36,8 +36,9 @@ class TTSService:
         self.client = tts_client.TtsClient(self.cred, "ap-guangzhou")
     
     def text_to_speech(self, text: str, voice_type: int = 101001) -> bytes:
-        if len(text) > 150:
-            text = text[:150]
+        # 支持更长的文本（带货文案约300字）
+        if len(text) > 300:
+            text = text[:300]
         
         req = models.TextToVoiceRequest()
         req.Text = text
