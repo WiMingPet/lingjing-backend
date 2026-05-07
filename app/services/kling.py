@@ -302,12 +302,13 @@ class KlingService:
         base_url = self._get_base_url()
         url = f"{base_url}/videos/avatar/image2video"
 
-        # 生成音频（支持长文本分段）
+        # 生成音频（支持长文本分段，传入音色参数）
         if not audio_url and text:
-            from app.services.tts_service import tts_service
-            audio_data = tts_service.text_to_long_speech(text)
+            from app.services.tts_service import tts_service, get_voice_type
+            voice_type = get_voice_type(voice) if voice else 101004
+            audio_data = tts_service.text_to_long_speech(text, voice_type)
             audio_url = await oss_service.upload_file(audio_data, "mp3", "digital_human/audio")
-            print(f"[DEBUG] TTS 生成音频成功: {text[:50]}...")
+            print(f"[DEBUG] TTS 生成音频成功, 音色ID: {voice_type}, 文本: {text[:50]}...")
 
         if not audio_url:
             raise Exception("请提供文字内容或音频文件")

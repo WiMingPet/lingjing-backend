@@ -460,7 +460,7 @@ class EcommerceService:
         # 第三步：试穿视频 + 数字人讲解视频 = 最终视频
         final_video_url = None
         if product_video_url and digital_video_url:
-            final_video_url = await self._merge_videos(digital_video_url, [product_video_url])
+            final_video_url = await self._merge_videos(product_video_url, [digital_video_url])
         elif digital_video_url:
             final_video_url = digital_video_url
         else:

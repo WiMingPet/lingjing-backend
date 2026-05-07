@@ -73,16 +73,12 @@ async def _generate_video_background(
             is_manual_mode=is_manual
         )
         
-        # 4. 保存历史记录
-        history = History(
-            user_id=user_id,
-            url=result["video_url"],
-            type="AI带货视频",
-            thumbnail=None,
-            created_at=datetime.datetime.utcnow()
-        )
-        db.add(history)
-        db.commit()
+
+        # 视频生成成功后才扣点
+        from app.utils.credits import check_and_deduct_credits
+        user = db.query(User).filter(User.id == user_id).first()
+        if user:
+            check_and_deduct_credits(user, db, 20, "AI带货视频")
         
         task_store[task_id] = {
             "status": "completed",
@@ -103,8 +99,7 @@ async def generate_video(
     current_user: User = Depends(get_current_user)
 ):
     """提交AI带货视频生成任务（异步后台执行）"""
-    # ✅ 检查并扣除 20 灵境点
-    check_and_deduct_credits(current_user, db, 20, "AI带货视频")
+
     import uuid
     task_id = str(uuid.uuid4())
     
