@@ -577,7 +577,7 @@ class EcommerceService:
         print(f"[DEBUG] 试穿任务超时")
         return None
 
-    async def _wait_for_video(self, task_id: str, max_wait: int = 1200) -> str:
+    async def _wait_for_video(self, task_id: str, max_wait: int = 300) -> str:
         start_time = time.time()
         poll_count = 0
         print(f"[DEBUG] 开始轮询视频任务: {task_id}")
@@ -605,7 +605,8 @@ class EcommerceService:
                     raise
                 print(f"[DEBUG] 查询状态异常: {e}")
             
-            interval = 5 if poll_count <= 10 else 10
+            # 指数退避：5s → 10s → 20s → 40s → 60s（最大）
+            interval = min(5 * (2 ** min(poll_count - 1, 4)), 60)
             await asyncio.sleep(interval)
         
         raise Exception(f"可灵平台高峰期排队中，视频生成超时（共轮询{poll_count}次），请稍后重试")
