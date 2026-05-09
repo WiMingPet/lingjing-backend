@@ -21,6 +21,7 @@ async def save_history(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    print(f"[DEBUG] 收到保存请求: type={request.type}, url={request.url[:50]}...")
     # 自动生成封面（如果是视频且未提供封面）
     thumbnail_url = request.thumbnail
     if not thumbnail_url and request.type in ["数字人分身", "视频生成", "AI带货视频", "虚拟试穿"]:

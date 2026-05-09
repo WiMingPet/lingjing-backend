@@ -465,13 +465,10 @@ class EcommerceService:
         digital_video_url = await self._wait_for_video(digital_task_id, max_wait=600)
         print(f"[DEBUG] 数字人口播视频生成完成")
         
-        # 第三步：合并视频，试穿展示在前，数字人讲解在后
+        # 第三步：画中画合并。数字人讲解全屏，试穿展示在右下角
         final_video_url = None
         if product_video_url and digital_video_url:
-            # 先拼接两段视频
-            merged = await self._merge_videos(product_video_url, [digital_video_url])
-            # 把数字人讲解的音频铺到整段视频上
-            final_video_url = await self._merge_audio_to_video(merged, digital_video_url)
+            final_video_url = await self._merge_pip(digital_video_url, product_video_url)
         elif digital_video_url:
             final_video_url = digital_video_url
         elif product_video_url:
@@ -483,6 +480,63 @@ class EcommerceService:
             "video_url": final_video_url,
             "status": "completed"
         }
+
+    async def _merge_pip(self, main_video_url: str, pip_video_url: str) -> str:
+        """画中画合并：主画面全屏，小窗在右下角，小窗循环播放直到主画面结束"""
+        import subprocess
+        import aiohttp
+        
+        files_to_clean = []
+        try:
+            async with aiohttp.ClientSession() as session:
+                # 下载主讲视频
+                tmp_main = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+                async with session.get(main_video_url) as resp:
+                    tmp_main.write(await resp.read())
+                tmp_main.close()
+                files_to_clean.append(tmp_main.name)
+                
+                # 下载试穿视频
+                tmp_pip = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+                async with session.get(pip_video_url) as resp:
+                    tmp_pip.write(await resp.read())
+                tmp_pip.close()
+                files_to_clean.append(tmp_pip.name)
+            
+            output_file = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+            output_file.close()
+            files_to_clean.append(output_file.name)
+            
+            # 画中画：试穿视频缩小放在右下角，循环播放
+            cmd = [
+                "ffmpeg",
+                "-i", tmp_main.name,
+                "-stream_loop", "-1", "-i", tmp_pip.name,
+                "-filter_complex",
+                "[1:v]scale=iw*0.25:ih*0.25[pip];[0:v][pip]overlay=W-w-10:H-h-10:shortest=1",
+                "-c:v", "libx264",
+                "-c:a", "aac",
+                "-map", "0:a:0",
+                "-shortest",
+                "-y",
+                output_file.name
+            ]
+            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
+            with open(output_file.name, "rb") as f:
+                return await oss_service.upload_file(f.read(), "mp4", "ecommerce_videos")
+        
+        except Exception as e:
+            print(f"[ERROR] 画中画合并失败: {e}")
+            return main_video_url
+        
+        finally:
+            for file_path in files_to_clean:
+                try:
+                    if os.path.exists(file_path):
+                        os.unlink(file_path)
+                except:
+                    pass
 
     async def _image_to_video(self, image_url: str, duration: int = 5) -> str:
         """把图片转成固定时长的视频"""
