@@ -8,52 +8,40 @@ from tencentcloud.tts.v20190823 import tts_client, models
 from app.config import settings
 
 
-# ========== 音色映射表：名字 → 可灵官方 Voice ID ==========
 VOICE_MAP = {
-    # 少年/儿童
-    "阳光少年": "genshin_vindi2",
-    "懂事小弟": "zhinen_xuesheng",
-    "运动少年": "tiyuxi_xuedi",
-    "活泼男童": "cartoon-boy-07",
-    "俏皮女童": "cartoon-girl-01",
-    "乖巧正太": "mengwa-v1",
-    # 少女/女生
-    "青春少女": "ai_shatang",
-    "温柔小妹": "genshin_klee2",
-    "元气少女": "genshin_kirara",
-    "甜美邻家": "girlfriend_1_speech02",
-    # 男性
-    "阳光男生": "ai_kaiya",
-    "幽默小哥": "tiexin_nanyou",
-    "文艺小哥": "ai_chenjiahao_712",
-    "稳重老爸": "ai_huangyaoshi_712",
-    "严肃上司": "ai_laoguowang_712",
-    "慈祥爷爷": "zhuxi_speech02",
-    "唠叨爷爷": "uk_oldman3",
-    "东北老铁": "dongbeilaotie_speech02",
-    "重庆小伙": "chongqingxiaohuo_speech02",
-    "潮汕大叔": "chaoshandashu_speech02",
-    "台湾男生": "ai_taiwan_man2_speech02",
-    "西安掌柜": "xianzhanggui_speech02",
-    "新闻播报男": "diyinnansang_DB_CN_M_04-v2",
-    "译制片男": "yizhipiannan-v1",
-    "刀片烟嗓": "daopianyansang-v1",
-    # 女性
-    "温柔姐姐": "chat1_female_new-3",
-    "职场女青": "girlfriend_2_speech02",
-    "温柔妈妈": "you_pingjing",
-    "优雅贵妇": "chengshu_jiejie",
-    "唠叨奶奶": "laopopo_speech02",
-    "和蔼奶奶": "heainainai_speech02",
-    "四川妹子": "chuanmeizi_speech02",
-    "天津姐姐": "tianjinjiejie_speech02",
-    "撒娇女友": "tianmeixuemei-v1",
-    # 保留兼容旧名称
-    "钓系女友": "tianmeixuemei-v1",
-    "温柔女声": "you_pingjing",
-    "播报男声": "diyinnansang_DB_CN_M_04-v2",
-    "自然男声": "ai_kaiya",
-    "知性女声": "chengshu_jiejie",
+    # ========== 腾讯云音色（全部实测验证） ==========
+    "智小柔": 502001,
+    "智小敏": 502003,
+    "智小虎": 502007,
+    "智小悟": 502006,
+    "智小满": 502004,
+    "智希": 101026,
+    "暖心阿灿": 602004,
+    "专业梓欣": 602005,
+    "随和老李": 603003,
+    "温柔小柠": 603004,
+    "知心大林": 603005,
+    "爱小悠": 602003,
+    "爱小川": 601011,
+    "爱小芊": 601009,
+    "爱小娇": 601010,
+    "月华": 501004,
+    "浅草": 501007,
+    "飞狼": 601002,
+    "千键": 601003,
+    "爱小家": 601005,
+    
+    # ========== 保留旧名称兼容 ==========
+    "温柔女声": 502001,
+    "播报男声": 502006,
+    "钓系女友": 502003,
+    "自然男声": 601011,
+    "知性女声": 602003,
+    "晓晓": 502001,
+    "云希": 502006,
+    "晓伊": 502003,
+    "云健": 601011,
+    "晓悠": 602003,
 }
 
 def get_voice_type(voice_name: str) -> int:
