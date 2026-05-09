@@ -308,47 +308,31 @@ class EcommerceService:
         return video_url
 
     async def generate_copywriting(self, product: ProductInfo, is_manual_mode: bool = False) -> CopywritingScript:
-        client = AsyncOpenAI(
-            api_key=self.api_key, 
-            base_url=self.base_url,
-            timeout=60.0
-        )
+        client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url, timeout=60.0)
     
-        if is_manual_mode:
-            if product.images:
-                detected_name, detected_desc = await self._analyze_product_image(
-                    product.images[0], 
-                    user_input=product.description
-                )
+        # 先进行图片识别（两种模式都需要）
+        if product.images:
+            detected_name, detected_desc = await self._analyze_product_image(
+                product.images[0], 
+                user_input=product.description
+            )
+            if is_manual_mode:
+                # 手动模式：直接用识别结果
                 product.title = detected_name or product.title
                 product.description = detected_desc or product.description
-            
-            prompt = f"""
+            else:
+                # 解析链接模式：结合链接标题 + 图片识别结果
+                link_title = product.title
+                product.title = link_title or detected_name or "商品"
+                product.description = f"产品名称：{link_title}。详情：{detected_desc or product.description}"
+        
+        prompt = f"""
 你是一个顶级的直播带货主播，正在镜头前给粉丝们推荐一款产品。请你像真人一样生动地讲解，语气要有感染力、互动感、号召力，多用"家人们"、"宝宝们"、"咱们"这类口语，自然地展示产品卖点和优点。
 
 产品：{product.title}
 卖点：{product.description or '高品质，性价比超高'}
 
 输出严格JSON格式：{{"script": "完整的口播文案（约100字，适合30秒讲解）"}}
-"""
-        else:
-            prompt = f"""
-你是一位顶级的直播带货主播，请根据以下商品信息，生成一段约60秒的口播文案和分镜描述。
-
-商品信息：
-- 标题：{product.title}
-- 价格：{product.price}
-- 描述：{product.description}
-
-要求：
-1. 口播文案需有吸引力，包含开场、产品介绍、痛点解决、促销引导。
-2. 分镜描述需指明每一段文案对应的画面建议。
-3. 输出格式为JSON：
-   {{
-     "title": "视频标题",
-     "script": "完整口播文案",
-     "scenes": ["分镜1描述", "分镜2描述", ...]
-   }}
 """
         
         try:
@@ -358,36 +342,14 @@ class EcommerceService:
                 response_format={"type": "json_object"},
                 temperature=0.7
             )
-        
             content = response.choices[0].message.content
             if not content:
                 raise Exception("AI返回内容为空")
-        
             result = json.loads(content)
-            return CopywritingScript(
-                title=result.get("title", "AI带货视频"),
-                script=result.get("script", ""),
-                scenes=result.get("scenes", [])
-            )
+            return CopywritingScript(title=result.get("title", "AI带货视频"), script=result.get("script", ""), scenes=[])
         except Exception as e:
-            print(f"AI生成失败 (重试一次): {e}")
-            try:
-                response = await client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=500,
-                    temperature=0.8
-                )
-                content = response.choices[0].message.content
-                result = json.loads(content)
-                return CopywritingScript(
-                    title=result.get("title", "AI带货视频"),
-                    script=result.get("script", ""),
-                    scenes=result.get("scenes", [])
-                )
-            except Exception as e2:
-                print(f"AI重试也失败: {e2}")
-                raise Exception(f"AI文案生成失败，请稍后重试")
+            print(f"AI生成失败: {e}")
+            raise
 
     async def create_product_video(
         self, 
