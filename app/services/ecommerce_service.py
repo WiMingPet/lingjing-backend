@@ -406,6 +406,7 @@ class EcommerceService:
         
         voice_name = self._ai_select_voice(product.title, product.description or "", avatar)
         print(f"[DEBUG] 使用音色: {voice_name}")
+
         
         # 第一步：生成试穿展示视频
         product_video_url = None
@@ -418,6 +419,8 @@ class EcommerceService:
             "针织", "风衣", "大衣", "棉服", "西服", "套装", "连体"
         ]
         is_fashion = any(keyword in product.title for keyword in fashion_keywords)
+        if is_fashion:
+            voice_name = "钓系女友"
         
         if hasattr(product, 'video_url') and product.video_url:
             product_video_url = product.video_url

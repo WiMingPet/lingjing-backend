@@ -8,18 +8,52 @@ from tencentcloud.tts.v20190823 import tts_client, models
 from app.config import settings
 
 
-# ========== 音色映射表：名字 → 腾讯云 VoiceType ==========
+# ========== 音色映射表：名字 → 可灵官方 Voice ID ==========
 VOICE_MAP = {
-    "温柔女声": 101001,   # 智瑜 - 温柔女声
-    "播报男声": 101002,   # 智聆 - 通用男声
-    "钓系女友": 101004,   # 智云 - 活泼女声
-    "自然男声": 101003,   # 智德 - 磁性男声
-    "知性女声": 101005,   # 智莉 - 知性女声
-    "晓晓": 101001,
-    "云希": 101002,
-    "晓伊": 101004,
-    "云健": 101003,
-    "晓悠": 101005,
+    # 少年/儿童
+    "阳光少年": "genshin_vindi2",
+    "懂事小弟": "zhinen_xuesheng",
+    "运动少年": "tiyuxi_xuedi",
+    "活泼男童": "cartoon-boy-07",
+    "俏皮女童": "cartoon-girl-01",
+    "乖巧正太": "mengwa-v1",
+    # 少女/女生
+    "青春少女": "ai_shatang",
+    "温柔小妹": "genshin_klee2",
+    "元气少女": "genshin_kirara",
+    "甜美邻家": "girlfriend_1_speech02",
+    # 男性
+    "阳光男生": "ai_kaiya",
+    "幽默小哥": "tiexin_nanyou",
+    "文艺小哥": "ai_chenjiahao_712",
+    "稳重老爸": "ai_huangyaoshi_712",
+    "严肃上司": "ai_laoguowang_712",
+    "慈祥爷爷": "zhuxi_speech02",
+    "唠叨爷爷": "uk_oldman3",
+    "东北老铁": "dongbeilaotie_speech02",
+    "重庆小伙": "chongqingxiaohuo_speech02",
+    "潮汕大叔": "chaoshandashu_speech02",
+    "台湾男生": "ai_taiwan_man2_speech02",
+    "西安掌柜": "xianzhanggui_speech02",
+    "新闻播报男": "diyinnansang_DB_CN_M_04-v2",
+    "译制片男": "yizhipiannan-v1",
+    "刀片烟嗓": "daopianyansang-v1",
+    # 女性
+    "温柔姐姐": "chat1_female_new-3",
+    "职场女青": "girlfriend_2_speech02",
+    "温柔妈妈": "you_pingjing",
+    "优雅贵妇": "chengshu_jiejie",
+    "唠叨奶奶": "laopopo_speech02",
+    "和蔼奶奶": "heainainai_speech02",
+    "四川妹子": "chuanmeizi_speech02",
+    "天津姐姐": "tianjinjiejie_speech02",
+    "撒娇女友": "tianmeixuemei-v1",
+    # 保留兼容旧名称
+    "钓系女友": "tianmeixuemei-v1",
+    "温柔女声": "you_pingjing",
+    "播报男声": "diyinnansang_DB_CN_M_04-v2",
+    "自然男声": "ai_kaiya",
+    "知性女声": "chengshu_jiejie",
 }
 
 def get_voice_type(voice_name: str) -> int:
