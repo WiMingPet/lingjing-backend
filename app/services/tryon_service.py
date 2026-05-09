@@ -85,7 +85,7 @@ class TryonService:
             # 2. 用试穿效果图生成动态展示视频
             print(f"[DEBUG] 第二步：调用可灵图生视频接口生成动态展示...")
             
-            video_prompt = "模特全身入镜，自然站立，缓慢旋转展示全身服装细节，包括上衣和裤子，专业灯光，4K高清"
+            video_prompt = "模特全身入镜，自然站立。先正面展示3秒，然后用手轻轻捏起衣角展示面料细节，接着缓慢旋转360度展示全身服装各角度，包括上衣、裤子、背面。最后恢复正面站姿。整个过程自然流畅，专业灯光，4K高清"
             
             video_task_id = kling_service.generate_video(
                 image_url=tryon_image_url,

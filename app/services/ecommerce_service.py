@@ -465,10 +465,20 @@ class EcommerceService:
         digital_video_url = await self._wait_for_video(digital_task_id, max_wait=600)
         print(f"[DEBUG] 数字人口播视频生成完成")
         
-        # 第三步：直接使用数字人讲解视频（已经是完整的试穿+讲解视频）
-        final_video_url = digital_video_url
+        # 第三步：合并视频，试穿展示在前，数字人讲解在后
+        final_video_url = None
+        if product_video_url and digital_video_url:
+            # 先拼接两段视频
+            merged = await self._merge_videos(product_video_url, [digital_video_url])
+            # 把数字人讲解的音频铺到整段视频上
+            final_video_url = await self._merge_audio_to_video(merged, digital_video_url)
+        elif digital_video_url:
+            final_video_url = digital_video_url
+        elif product_video_url:
+            final_video_url = product_video_url
         
         print(f"[DEBUG] 带货视频生成完成")
+        print(f"[DEBUG] 最终视频链接: {final_video_url}")
         return {
             "video_url": final_video_url,
             "status": "completed"
