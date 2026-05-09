@@ -79,6 +79,16 @@ async def _generate_video_background(
             "message": "视频生成成功",
             "video_url": result["video_url"]
         }
+        # 保存历史记录
+        history = History(
+            user_id=user_id,
+            url=result["video_url"],
+            type="AI带货视频",
+            thumbnail=None,
+            created_at=datetime.datetime.utcnow()
+        )
+        db.add(history)
+        db.commit()
         
     except Exception as e:
         logger.error(f"后台生成视频失败: {str(e)}")

@@ -448,23 +448,21 @@ class EcommerceService:
 
         # 第二步：用数字人API生成嘴型同步的讲解视频
         print(f"[DEBUG] 开始生成数字人口播视频...")
+        # 关键：如果有试穿效果图，数字人就穿上试穿后的衣服进行讲解
+        digital_avatar_image = tryon_image_url if tryon_image_url else digital_human_image
+        print(f"[DEBUG] 数字人讲解形象: {'试穿效果图' if tryon_image_url else '预设形象'}")
+        
         digital_task_id = await self.kling.generate_digital_human(
             digital_human_id=digital_human_id,
             text=script.script,
-            image_url=digital_human_image,
+            image_url=digital_avatar_image,
             voice=voice_name
         )
         digital_video_url = await self._wait_for_video(digital_task_id, max_wait=600)
         print(f"[DEBUG] 数字人口播视频生成完成")
         
-        # 第三步：试穿视频 + 数字人讲解视频 = 最终视频
-        final_video_url = None
-        if product_video_url and digital_video_url:
-            final_video_url = await self._merge_videos(product_video_url, [digital_video_url])
-        elif digital_video_url:
-            final_video_url = digital_video_url
-        else:
-            final_video_url = None
+        # 第三步：直接使用数字人讲解视频（已经是完整的试穿+讲解视频）
+        final_video_url = digital_video_url
         
         print(f"[DEBUG] 带货视频生成完成")
         return {
