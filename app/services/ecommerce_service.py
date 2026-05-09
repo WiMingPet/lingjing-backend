@@ -460,7 +460,8 @@ class EcommerceService:
             digital_human_id=digital_human_id,
             text=script.script,
             image_url=digital_avatar_image,
-            voice=voice_name
+            voice=voice_name,
+            prompt="手势自然，偶尔轻抬手指向产品，大部分时间手自然放下，动作与讲解内容协调"
         )
         digital_video_url = await self._wait_for_video(digital_task_id, max_wait=600)
         print(f"[DEBUG] 数字人口播视频生成完成")
