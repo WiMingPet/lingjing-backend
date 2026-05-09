@@ -322,14 +322,10 @@ class KlingService:
         payload = {
             "image": image_url,
             "mode": "std",
+            "sound_file": audio_url,
             "with_audio": True,
             "external_task_id": unique_task_id
         }
-        if audio_url:
-            payload["sound_file"] = audio_url
-        else:
-            payload["audio_id"] = voice_id
-            payload["text"] = text
 
         if prompt and prompt != "string":
             payload["prompt"] = prompt
