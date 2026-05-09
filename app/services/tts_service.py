@@ -69,15 +69,14 @@ class TTSService:
         )
         self.client = tts_client.TtsClient(self.cred, "ap-guangzhou")
     
-    def text_to_speech(self, text: str, voice_type: int = 101001) -> bytes:
-        # 支持更长的文本（带货文案约300字）
+    def text_to_speech(self, text: str, voice_type: str = "you_pingjing") -> bytes:
         if len(text) > 300:
             text = text[:300]
         
         req = models.TextToVoiceRequest()
         req.Text = text
         req.SessionId = str(hash(text))[:32]
-        req.VoiceType = voice_type
+        req.VoiceType = voice_type  # 直接传字符串ID
         req.Codec = "mp3"
         req.Speed = 0
         req.Volume = 0

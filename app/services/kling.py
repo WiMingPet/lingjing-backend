@@ -302,12 +302,15 @@ class KlingService:
         base_url = self._get_base_url()
         url = f"{base_url}/videos/avatar/image2video"
 
-        # 使用可灵内置音色，不再依赖腾讯云TTS
-        from app.services.tts_service import get_voice_type
-        voice_id = get_voice_type(voice) if voice else "you_pingjing"
-        print(f"[DEBUG] 使用可灵内置音色: {voice_id}, 文本: {text[:50] if text else 'N/A'}...")
-        
-        if not text and not audio_url:
+        # 使用可灵官方音色生成TTS音频
+        if not audio_url and text:
+            from app.services.tts_service import tts_service, get_voice_type
+            voice_id = get_voice_type(voice) if voice else "you_pingjing"
+            audio_data = tts_service.text_to_long_speech(text, voice_type=voice_id)
+            audio_url = await oss_service.upload_file(audio_data, "mp3", "digital_human/audio")
+            print(f"[DEBUG] TTS 生成音频成功, 可灵音色ID: {voice_id}, 文本: {text[:50]}...")
+
+        if not audio_url:
             raise Exception("请提供文字内容或音频文件")
 
         # ========== 强制生成唯一的 external_task_id ==========
