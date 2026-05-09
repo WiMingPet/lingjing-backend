@@ -305,8 +305,8 @@ class KlingService:
         # 使用可灵官方音色生成TTS音频
         if not audio_url and text:
             from app.services.tts_service import tts_service, get_voice_type
-            voice_id = get_voice_type(voice) if voice else "you_pingjing"
-            audio_data = tts_service.text_to_long_speech(text, voice_type=voice_id)
+            voice_type = get_voice_type(voice) if voice else 502001
+            audio_data = tts_service.text_to_long_speech(text, voice_type)
             audio_url = await oss_service.upload_file(audio_data, "mp3", "digital_human/audio")
             print(f"[DEBUG] TTS 生成音频成功, 可灵音色ID: {voice_id}, 文本: {text[:50]}...")
 
