@@ -451,6 +451,7 @@ class EcommerceService:
         # 关键：如果有试穿效果图，数字人就穿上试穿后的衣服进行讲解
         digital_avatar_image = tryon_image_url if tryon_image_url else digital_human_image
         print(f"[DEBUG] 数字人讲解形象: {'试穿效果图' if tryon_image_url else '预设形象'}")
+        print(f"[DEBUG] 传给数字人的音色: '{voice_name}'")
         
         digital_task_id = await self.kling.generate_digital_human(
             digital_human_id=digital_human_id,
