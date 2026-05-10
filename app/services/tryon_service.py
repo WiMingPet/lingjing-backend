@@ -46,7 +46,11 @@ class TryonService:
             def _detect_cloth_category(title: str) -> str:
                 title_lower = title.lower()
                 # 下装关键词
-                if any(kw in title_lower for kw in ["裤", "裙", "短裤", "长裤", "阔腿裤", "牛仔裤", "休闲裤"]):
+                if any(kw in title_lower for kw in [
+                    "裤", "裙", "短裤", "长裤", "阔腿裤", "牛仔裤", "休闲裤",
+                    "热裤", "牛仔短裤", "牛仔长裤", "半身裙", "百褶裙", "包臀裙",
+                    "下装", "裤子", "五分裤", "七分裤", "九分裤", "直筒裤", "工装裤"
+                ]):
                     return "lower"
                 # 连衣裙/套装关键词
                 if any(kw in title_lower for kw in ["连衣裙", "套装", "连体", "裙子", "长裙", "短裙"]):
@@ -58,6 +62,8 @@ class TryonService:
                 return "dress"
             
             cloth_category = _detect_cloth_category(request_data.get("title", ""))
+            if cloth_category == "lower":
+                cloth_category = "dress"
             print(f"[DEBUG] 自动识别服装类别: {cloth_category}")
             
             api_task_id = kling_service.generate_tryon(
