@@ -392,6 +392,7 @@ class EcommerceService:
             product_video_url, tryon_image_url = await self._call_tryon_api(
                 garment_image_url=product_images[0],
                 model_image_url=digital_human_image,
+                product_title=product.title,
                 user_token=user_token
             )
             if not product_video_url:
@@ -402,6 +403,7 @@ class EcommerceService:
             product_video_url, tryon_image_url = await self._call_tryon_api(
                 garment_image_url=product_images[0],
                 model_image_url=digital_human_image,
+                product_title=product.title,
                 user_token=user_token
             )
             if not product_video_url:
@@ -538,7 +540,7 @@ class EcommerceService:
             print(f"[ERROR] 图片转视频失败: {e}")
             return None
 
-    async def _call_tryon_api(self, garment_image_url: str, model_image_url: str, user_token: str = None):
+    async def _call_tryon_api(self, garment_image_url: str, model_image_url: str, product_title: str = "", user_token: str = None):
         """调用虚拟试穿服务，返回 (展示视频URL, 效果图URL)"""
         from app.services.tryon_service import TryonService
         from app.database import SessionLocal
@@ -547,7 +549,8 @@ class EcommerceService:
             print(f"[DEBUG] 调用虚拟试穿服务...")
             request_data = {
                 "model_image_url": model_image_url,
-                "garment_image_url": garment_image_url
+                "garment_image_url": garment_image_url,
+                "title": product_title if 'product_title' in dir() else ""
             }
             
             db = SessionLocal()
