@@ -214,7 +214,7 @@ class KlingService:
         raise Exception(f"视频任务超时，task_id: {task_id}")
     
     # ========== 虚拟试穿（独立API）==========
-    def generate_tryon(self, human_image_url: str, cloth_image_url: str, cloth_category: str = "dress", digital_human_id: str = None) -> str:
+    def generate_tryon(self, human_image_url: str, cloth_image_url: str, cloth_category: str = None, digital_human_id: str = None) -> str:
         """
         虚拟试穿 - 使用独立API
         参数名严格按照官方文档: human_image, cloth_image
@@ -226,9 +226,10 @@ class KlingService:
         payload = {
             "model_name": "kolors-virtual-try-on-v1-5",
             "human_image": human_image_url,
-            "cloth_image": cloth_image_url,
-            "cloth_category": cloth_category
+            "cloth_image": cloth_image_url
         }
+        if cloth_category:
+            payload["cloth_category"] = cloth_category
         # 如果有数字人ID，添加到请求中（如果API支持）
         if digital_human_id:
             payload["digital_human_id"] = digital_human_id

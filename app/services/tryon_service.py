@@ -68,9 +68,9 @@ class TryonService:
             title = request_data.get("title", "")
             combo_keywords = ["套装", "搭配", "套", "组合", "配", "两件套", "三件套", "上衣", "衬衫", "T恤", "卫衣", "外套", "夹克", "羽绒", "马甲", "背心", "毛衣", "针织", "衣", "连体", "连衣裙"]
             if any(kw in title for kw in combo_keywords):
-                cloth_category = "dress"
+                cloth_category = None
                 model_image_url = "https://media.lingjing-media.com/%E5%AE%B6%E9%A6%A8.png"
-                print(f"[DEBUG] 检测到套装/组合产品，使用专用模特: 家馨")
+                print(f"[DEBUG] 检测到套装/组合产品，不传cloth_category，让可灵自动识别")
             
             api_task_id = kling_service.generate_tryon(
                 human_image_url=model_image_url,
