@@ -389,10 +389,14 @@ class EcommerceService:
             print(f"[DEBUG] 使用链接内视频: {product_video_url}")
         elif is_manual_mode and is_fashion and product_images:
             print(f"[DEBUG] 手动模式+服装类：调用虚拟试穿...")
-            # 如果是下装，使用下装专用模特图
-            lower_keywords = ["裤", "短裤", "长裤", "阔腿裤", "牛仔裤", "休闲裤", "热裤", "直筒裤", "工装裤"]
-            if any(kw in product.title for kw in lower_keywords):
-                model_for_tryon = "https://media.lingjing-media.com/%E8%B6%85%E6%A8%A1.jpg"
+            # 严格判定单件下装：有下装关键词，且不包含任何组合/套装/搭配词
+            lower_keywords = ["裤", "短裤", "长裤", "阔腿裤", "牛仔裤", "休闲裤", "热裤", "直筒裤", "工装裤", "半身裙", "百褶裙", "包臀裙"]
+            combo_keywords = ["套装", "搭配", "套", "组合", "配", "两件套", "三件套", "上衣", "衬衫", "T恤", "卫衣", "外套", "夹克", "羽绒", "马甲", "背心", "毛衣", "针织", "衣", "连体", "连衣裙"]
+            is_lower = any(kw in product.title for kw in lower_keywords)
+            is_combo = any(kw in product.title for kw in combo_keywords)
+            
+            if is_lower and not is_combo:
+                model_for_tryon = "https://media.lingjing-media.com/%E5%AE%B6%E9%A6%A8.png"
             else:
                 model_for_tryon = digital_human_image
             
@@ -407,10 +411,14 @@ class EcommerceService:
                 product_video_url = await self._image_to_video(product_images[0], duration=5)
         elif not is_manual_mode and is_fashion and product_images:
             print(f"[DEBUG] 链接模式+服装类：调用虚拟试穿...")
-            # 如果是下装，使用下装专用模特图
-            lower_keywords = ["裤", "短裤", "长裤", "阔腿裤", "牛仔裤", "休闲裤", "热裤", "直筒裤", "工装裤"]
-            if any(kw in product.title for kw in lower_keywords):
-                model_for_tryon = "https://media.lingjing-media.com/%E8%B6%85%E6%A8%A1.jpg"
+            # 严格判定单件下装：有下装关键词，且不包含任何组合/套装/搭配词
+            lower_keywords = ["裤", "短裤", "长裤", "阔腿裤", "牛仔裤", "休闲裤", "热裤", "直筒裤", "工装裤", "半身裙", "百褶裙", "包臀裙"]
+            combo_keywords = ["套装", "搭配", "套", "组合", "配", "两件套", "三件套", "上衣", "衬衫", "T恤", "卫衣", "外套", "夹克", "羽绒", "马甲", "背心", "毛衣", "针织", "衣", "连体", "连衣裙"]
+            is_lower = any(kw in product.title for kw in lower_keywords)
+            is_combo = any(kw in product.title for kw in combo_keywords)
+            
+            if is_lower and not is_combo:
+                model_for_tryon = "https://media.lingjing-media.com/%E5%AE%B6%E9%A6%A8.png"
             else:
                 model_for_tryon = digital_human_image
             

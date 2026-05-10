@@ -67,23 +67,9 @@ async def generate_image(
     print(f"[DEBUG] 图片生成请求 - prompt: {prompt[:50]}...")
     print(f"[DEBUG] 参考图 URL: {reference_image_url}")
 
-    # 临时使用固定用户 ID 1
-    user_id = 1
-    
-    # ========== 确保用户存在，如果不存在则自动创建 ==========
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        from datetime import datetime
-        user = User(
-            id=user_id,
-            phone=f"temp_{user_id}@example.com",
-            username=f"user_{user_id}",
-            password_hash="auto_created_temp_hash"
-        )
-        db.add(user)
-        db.commit()
-        print(f"[DEBUG] 自动创建了用户: id={user.id}")
-    # ========== 新增代码结束 ==========
+    # ✅ 使用当前登录用户
+    user = current_user
+    user_id = current_user.id
 
     # ✅ 检查并扣除 5 点灵境点
     check_and_deduct_credits(user, db, 5, "图片生成")
