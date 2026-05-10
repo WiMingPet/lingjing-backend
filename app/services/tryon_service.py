@@ -61,7 +61,7 @@ class TryonService:
                 # 默认
                 return "dress"
             
-            cloth_category = _detect_cloth_category(request_data.get("title", ""))
+            cloth_category = request_data.get("cloth_category") or _detect_cloth_category(request_data.get("title", ""))
             print(f"[DEBUG] 自动识别服装类别: {cloth_category}")
             
             api_task_id = kling_service.generate_tryon(

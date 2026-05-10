@@ -36,6 +36,7 @@ async def generate_tryon(
     garment_image: UploadFile = File(...),
     digital_human_id: Optional[int] = Form(None),
     title: Optional[str] = Form(None),
+    cloth_category: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -57,7 +58,8 @@ async def generate_tryon(
         "model_image_url": model_image_url,
         "garment_image_url": garment_image_url,
         "digital_human_id": digital_human_id,
-        "title": title or ""
+        "title": title or "",
+        "cloth_category": cloth_category or ""
     }
     
     # ✅ 直接使用当前登录用户
@@ -123,7 +125,8 @@ async def generate_tryon_by_url(
     request_data = {
         "model_image_url": request.model_image_url,
         "garment_image_url": request.garment_image_url,
-        "title": ""
+        "title": "",
+        "cloth_category": ""
     }
     
     task = await TryonService.generate_tryon(db, current_user.id if current_user else 1, request_data)
