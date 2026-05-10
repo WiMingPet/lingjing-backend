@@ -389,9 +389,16 @@ class EcommerceService:
             print(f"[DEBUG] 使用链接内视频: {product_video_url}")
         elif is_manual_mode and is_fashion and product_images:
             print(f"[DEBUG] 手动模式+服装类：调用虚拟试穿...")
+            # 如果是下装，使用下装专用模特图
+            lower_keywords = ["裤", "短裤", "长裤", "阔腿裤", "牛仔裤", "休闲裤", "热裤", "直筒裤", "工装裤"]
+            if any(kw in product.title for kw in lower_keywords):
+                model_for_tryon = "https://media.lingjing-media.com/%E8%B6%85%E6%A8%A1.jpg"
+            else:
+                model_for_tryon = digital_human_image
+            
             product_video_url, tryon_image_url = await self._call_tryon_api(
                 garment_image_url=product_images[0],
-                model_image_url=digital_human_image,
+                model_image_url=model_for_tryon,
                 product_title=product.title,
                 user_token=user_token
             )
@@ -400,9 +407,16 @@ class EcommerceService:
                 product_video_url = await self._image_to_video(product_images[0], duration=5)
         elif not is_manual_mode and is_fashion and product_images:
             print(f"[DEBUG] 链接模式+服装类：调用虚拟试穿...")
+            # 如果是下装，使用下装专用模特图
+            lower_keywords = ["裤", "短裤", "长裤", "阔腿裤", "牛仔裤", "休闲裤", "热裤", "直筒裤", "工装裤"]
+            if any(kw in product.title for kw in lower_keywords):
+                model_for_tryon = "https://media.lingjing-media.com/%E8%B6%85%E6%A8%A1.jpg"
+            else:
+                model_for_tryon = digital_human_image
+            
             product_video_url, tryon_image_url = await self._call_tryon_api(
                 garment_image_url=product_images[0],
-                model_image_url=digital_human_image,
+                model_image_url=model_for_tryon,
                 product_title=product.title,
                 user_token=user_token
             )
