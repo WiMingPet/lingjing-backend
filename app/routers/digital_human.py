@@ -233,7 +233,7 @@ async def generate_digital_human(
     audio_url = None
     if text:
         # 文字转语音
-        audio_data = tts_service.text_to_speech(text)
+        audio_data = tts_service.text_to_speech(text, voice_type=502001)
         audio_url = await oss_service.upload_file(audio_data, "mp3", "digital_human/audio")
         print(f"[DEBUG] TTS 生成音频成功: {text[:50]}...")
     elif audio:
