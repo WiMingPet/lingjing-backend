@@ -65,11 +65,18 @@ async def generate_tryon(
     # ✅ 直接使用当前登录用户
     user = current_user
     user_id = current_user.id
-    
-    # ✅ 检查并扣除 10 点灵境点
-    check_and_deduct_credits(user, db, 10, "虚拟试穿")
-    
+
+    # ✅ 生成前检查余额（不扣除）
+    if user.credits < 10:
+        raise HTTPException(status_code=403, detail="虚拟试穿需要10灵境点，当前余额不足，请充值")
+        
     task = await TryonService.generate_tryon(db, user_id, request_data)
+    
+    if task.status != "completed":
+        raise HTTPException(500, detail=task.error_message or "虚拟试穿失败")
+    
+    # ✅ 生成成功后扣点
+    check_and_deduct_credits(user, db, 10, "虚拟试穿")
     
     return APIResponse(
         code=200,

@@ -60,11 +60,17 @@ async def generate_video(
     else:
         cost = 10  # 默认5秒的消耗
     
-    # ✅ 检查并扣除灵境点
-    check_and_deduct_credits(user, db, cost, f"{duration}秒视频生成")
-    
+    # ✅ 生成前检查余额
+    if user.credits < cost:
+        raise HTTPException(status_code=403, detail=f"{duration}秒视频生成需要{cost}灵境点，当前余额不足，请充值")
     # ========== 5. 调用视频生成服务 ==========
     task = await VideoService.generate_video(db, user_id, request_data)
+    
+    if task.status != "completed":
+        raise HTTPException(500, detail=task.error_message or "视频生成失败")
+    
+    # ✅ 生成成功后扣点
+    check_and_deduct_credits(user, db, cost, f"{duration}秒视频生成")
     
     return APIResponse(
         code=200,

@@ -407,8 +407,8 @@ class EcommerceService:
                 user_token=user_token
             )
             if not product_video_url:
-                print(f"[DEBUG] 试穿失败，降级为原图展示...")
-                product_video_url = await self._image_to_video(product_images[0], duration=5)
+                print(f"[DEBUG] 试穿失败，降级为图片生成动态视频...")
+                product_video_url = await self.generate_product_demo_video(product)
         elif not is_manual_mode and is_fashion and product_images:
             print(f"[DEBUG] 链接模式+服装类：调用虚拟试穿...")
             # 严格判定单件下装：有下装关键词，且不包含任何组合/套装/搭配词
@@ -429,8 +429,8 @@ class EcommerceService:
                 user_token=user_token
             )
             if not product_video_url:
-                print(f"[DEBUG] 试穿失败，降级为原图展示...")
-                product_video_url = await self._image_to_video(product_images[0], duration=5)
+                print(f"[DEBUG] 试穿失败，降级为图片生成动态视频...")
+                product_video_url = await self.generate_product_demo_video(product)
         elif product_images:
             print(f"[DEBUG] 非服装类商品，用原图生成展示视频...")
             product_video_url = await self._image_to_video(product_images[0], duration=5)
@@ -452,7 +452,7 @@ class EcommerceService:
         digital_video_url = await self._wait_for_video(digital_task_id, max_wait=600)
         print(f"[DEBUG] 数字人口播视频生成完成")
         
-        # 第三步：画中画合并。数字人讲解全屏，试穿展示在右下角
+        # 第三步：画中画合并。数字人讲解全屏，服装展示在右下角循环
         final_video_url = None
         if product_video_url and digital_video_url:
             final_video_url = await self._merge_pip(digital_video_url, product_video_url)

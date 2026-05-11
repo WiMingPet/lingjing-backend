@@ -67,11 +67,17 @@ async def recommend_size(
             print(f"[DEBUG] 自动创建了用户: id={user.id}")
         # ========== 新增代码结束 ==========
         
-        # ✅ 检查并扣除 2 点灵境点
-        check_and_deduct_credits(user, db, 2, "尺码推荐")
-        
         # 调用尺码推荐服务，传入图片路径、身高和 OSS URL
+        # ✅ 生成前检查余额（不扣除）
+        if user.credits < 2:
+            raise HTTPException(status_code=403, detail="尺码推荐需要2灵境点，当前余额不足，请充值")
         task = await SizeService.recommend_size(db, user_id, image_path, height, image_url)
+        
+        if task.status != "completed":
+            raise HTTPException(500, detail=task.error_message or "尺码推荐失败")
+        
+        # ✅ 生成成功后扣点
+        check_and_deduct_credits(user, db, 2, "尺码推荐")
         
         return APIResponse(
             code=200,

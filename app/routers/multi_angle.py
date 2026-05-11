@@ -29,13 +29,14 @@ async def generate_unified_character(
     - **description**: 描述文字（可选）
     """
     from app.services.kling import kling_service
-    
+
+    # ✅ 生成前先检查余额
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user or user.credits < 10:
+        raise HTTPException(status_code=403, detail="多角度试穿需要10灵境点，当前余额不足，请充值")
     # 验证图片数量
     if len(images) < 2 or len(images) > 4:
         raise HTTPException(status_code=400, detail="请上传2-4张不同角度的照片")
-    
-    # ✅ 检查并扣除 10 点灵境点
-    check_and_deduct_credits(current_user, db, 10, "多角度试穿")
     
     # 1. 上传所有图片到 OSS
     image_urls = []
@@ -70,6 +71,12 @@ async def generate_unified_character(
     print(f"[DEBUG] 开始合并 {len(video_urls)} 个角度视频...")
     final_video_url = await _merge_angle_videos(video_urls)
     print(f"[DEBUG] 多角度视频合成完成: {final_video_url}")
+
+    if not final_video_url:
+        raise HTTPException(500, detail="多角度视频合成失败")
+
+    # ✅ 生成成功后扣点
+    check_and_deduct_credits(current_user, db, 10, "多角度试穿")
     
     return APIResponse(
         code=200,
