@@ -74,12 +74,19 @@ async def _generate_video_background(
         )
         
         
-        # 保存历史记录（只在此处保存，前端不再重复保存）
+        # 4. 保存历史记录（带封面图）
+        thumbnail_url = None
+        try:
+            from app.services.video_service import VideoService
+            thumbnail_url = await VideoService.extract_thumbnail(result["video_url"])
+        except Exception as e:
+            print(f"[DEBUG] 封面图生成失败: {e}")
+        
         history = History(
             user_id=user_id,
             url=result["video_url"],
             type="AI带货视频",
-            thumbnail=None,
+            thumbnail=thumbnail_url,
             created_at=datetime.datetime.utcnow()
         )
         db.add(history)
