@@ -73,8 +73,7 @@ async def _generate_video_background(
             is_manual_mode=is_manual
         )
         
-        
-        # 4. 保存历史记录（带封面图）
+        # 4. 生成封面图
         thumbnail_url = None
         try:
             from app.services.video_service import VideoService
@@ -82,20 +81,11 @@ async def _generate_video_background(
         except Exception as e:
             print(f"[DEBUG] 封面图生成失败: {e}")
         
-        history = History(
-            user_id=user_id,
-            url=result["video_url"],
-            type="AI带货视频",
-            thumbnail=thumbnail_url,
-            created_at=datetime.datetime.utcnow()
-        )
-        db.add(history)
-        db.commit()
-        
         task_store[task_id] = {
             "status": "completed",
             "message": "视频生成成功",
-            "video_url": result["video_url"]
+            "video_url": result["video_url"],
+            "thumbnail": thumbnail_url
         }
         
     except Exception as e:
