@@ -70,7 +70,12 @@ class VideoService:
                         "videos"
                     )
                     print(f"[DEBUG] 视频已上传到 OSS: {oss_video_url}")
-                    video_url = oss_video_url  # 替换成 OSS URL
+                    
+                    # 添加AI水印
+                    oss_video_url = await VideoService.add_watermark(oss_video_url)
+                    print(f"[DEBUG] 水印已添加: {oss_video_url}")
+                    
+                    video_url = oss_video_url
                 except Exception as e:
                     print(f"[DEBUG] OSS 上传失败，使用原始 URL: {e}")
             # ========== OSS 上传结束 ==========

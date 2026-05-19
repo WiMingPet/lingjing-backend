@@ -72,6 +72,19 @@ async def generate_video(
     # ✅ 生成成功后扣点
     check_and_deduct_credits(user, db, cost, f"{duration}秒视频生成")
     
+    # ✅ 新增：后端自动保存历史记录
+    from app.models.history import History
+    import datetime
+    history = History(
+        user_id=user_id,
+        url=task.output_data["video_url"],
+        type="视频生成",
+        thumbnail=None,
+        created_at=datetime.datetime.utcnow()
+    )
+    db.add(history)
+    db.commit()
+    
     return APIResponse(
         code=200,
         message="视频生成任务已提交",
