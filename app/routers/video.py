@@ -75,11 +75,18 @@ async def generate_video(
     # ✅ 新增：后端自动保存历史记录
     from app.models.history import History
     import datetime
+    # 生成封面图
+    thumbnail_url = None
+    try:
+        thumbnail_url = await VideoService.extract_thumbnail(task.output_data["video_url"])
+    except Exception as e:
+        print(f"[DEBUG] 封面图生成失败: {e}")
+    
     history = History(
         user_id=user_id,
         url=task.output_data["video_url"],
         type="视频生成",
-        thumbnail=None,
+        thumbnail=thumbnail_url,
         created_at=datetime.datetime.utcnow()
     )
     db.add(history)
