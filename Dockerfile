@@ -8,7 +8,7 @@ WORKDIR /app
 # 只安装 ffmpeg（视频处理必需）
 RUN apt-get update && apt-get install -y \
     ffmpeg \
-    fonts-wqy-microhei \
+    fonts-wqy-zenhei \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

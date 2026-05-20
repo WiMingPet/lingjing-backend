@@ -198,7 +198,7 @@ class VideoService:
             
             cmd = [
                 "ffmpeg", "-i", tmp_input.name,
-                "-vf", f"drawtext=text='{text}':fontfile=/usr/share/fonts/truetype/wqy/wqy-microhei.ttc:fontcolor=white:fontsize=24:box=1:boxcolor=black@0.5:boxborderw=5:x=w-tw-10:y=h-th-10",
+                "-vf", f"drawtext=text='{text}':fontfile=/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc:fontcolor=white:fontsize=24:box=1:boxcolor=black@0.5:boxborderw=5:x=w-tw-10:y=h-th-10",
                 "-codec:a", "copy",
                 "-y", tmp_output.name
             ]
