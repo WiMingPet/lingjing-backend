@@ -82,10 +82,6 @@ class ImageService:
                 real_url = images[0].get("url")
                 print(f"[DEBUG] 真实图片URL: {real_url}")
                 
-                # 添加AI水印到生成的图片
-                real_url = await ImageService.add_watermark_to_image(real_url)
-                print(f"[DEBUG] 图片水印已添加: {real_url}")
-                
                 output_data = {
                     "task_id": api_task_id,
                     "images": [{"url": real_url}],
@@ -96,7 +92,7 @@ class ImageService:
                 output_data = ImageService.mock_image_generation(task.id)
             
             print(f"[DEBUG] 最终 output_data: {output_data}")
-
+            
             task.status = "completed"
             task.progress = 100
             task.output_data = output_data
@@ -146,58 +142,3 @@ class ImageService:
     def get_task_result(db: Session, task_id: int) -> Optional[Task]:
         """获取任务结果"""
         return db.query(Task).filter(Task.id == task_id).first()
-
-    @staticmethod
-    async def add_watermark_to_image(image_url: str, text: str = "AI生成") -> str:
-        """在图片右下角添加文字水印，返回新的图片URL"""
-        import aiohttp
-        import tempfile
-        import os
-        from PIL import Image, ImageDraw, ImageFont
-        
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(image_url) as resp:
-                    image_data = await resp.read()
-            
-            tmp_input = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
-            tmp_input.write(image_data)
-            tmp_input.close()
-            
-            img = Image.open(tmp_input.name)
-            draw = ImageDraw.Draw(img)
-            
-            # 字体大小根据图片宽度自适应
-            font_size = max(img.width // 20, 14)
-            try:
-                font = ImageFont.truetype("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc", font_size)
-            except:
-                font = ImageFont.load_default()
-            
-            # 文字位置：右下角
-            text_bbox = draw.textbbox((0, 0), text, font=font)
-            text_width = text_bbox[2] - text_bbox[0]
-            text_height = text_bbox[3] - text_bbox[1]
-            x = img.width - text_width - 10
-            y = img.height - text_height - 10
-            
-            # 半透明背景
-            draw.rectangle([x-5, y-5, x+text_width+5, y+text_height+5], fill=(0, 0, 0, 128))
-            draw.text((x, y), text, fill=(255, 255, 255), font=font)
-            
-            tmp_output = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
-            tmp_output.close()
-            img.save(tmp_output.name, "JPEG")
-            
-            from app.services.oss_service import oss_service
-            with open(tmp_output.name, "rb") as f:
-                result_url = await oss_service.upload_file(f.read(), "jpg", "watermarked_images")
-            
-            os.unlink(tmp_input.name)
-            os.unlink(tmp_output.name)
-            
-            return result_url
-            
-        except Exception as e:
-            print(f"[ERROR] 图片添加水印失败: {e}")
-            return image_url

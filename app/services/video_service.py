@@ -70,12 +70,7 @@ class VideoService:
                         "videos"
                     )
                     print(f"[DEBUG] 视频已上传到 OSS: {oss_video_url}")
-                    
-                    # 添加AI水印
-                    oss_video_url = await VideoService.add_watermark(oss_video_url)
-                    print(f"[DEBUG] 水印已添加: {oss_video_url}")
-                    
-                    video_url = oss_video_url
+                    video_url = oss_video_url  # 替换成 OSS URL
                 except Exception as e:
                     print(f"[DEBUG] OSS 上传失败，使用原始 URL: {e}")
             # ========== OSS 上传结束 ==========
@@ -175,43 +170,6 @@ class VideoService:
                 if os.path.exists(tmp_thumbnail.name):
                     os.unlink(tmp_thumbnail.name)
                 return None
-
-    @staticmethod
-    async def add_watermark(video_url: str, text: str = "AI生成") -> str:
-        """在视频右下角添加文字水印，返回新的视频URL"""
-        import subprocess
-        import tempfile
-        import os
-        import aiohttp
-        
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(video_url) as resp:
-                    video_data = await resp.read()
-            
-            tmp_input = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
-            tmp_input.write(video_data)
-            tmp_input.close()
-            
-            tmp_output = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
-            tmp_output.close()
-            
-            cmd = [
-                "ffmpeg", "-i", tmp_input.name,
-                "-vf", f"drawtext=text='{text}':fontfile=/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc:fontcolor=white:fontsize=24:box=1:boxcolor=black@0.5:boxborderw=5:x=w-tw-10:y=h-th-10",
-                "-codec:a", "copy",
-                "-y", tmp_output.name
-            ]
-            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            
-            with open(tmp_output.name, "rb") as f:
-                result_url = await oss_service.upload_file(f.read(), "mp4", "watermarked_videos")
-            
-            os.unlink(tmp_input.name)
-            os.unlink(tmp_output.name)
-            
-            return result_url
-            
-        except Exception as e:
-            print(f"[ERROR] 添加水印失败: {e}")
-            return video_url
+        else:
+            print("[DEBUG] 提取的封面文件不存在或为空")
+            return None

@@ -462,11 +462,6 @@ class EcommerceService:
         elif product_video_url:
             final_video_url = product_video_url
         
-        # 添加AI水印到视频
-        if final_video_url:
-            final_video_url = await self.add_watermark(final_video_url)
-            print(f"[DEBUG] 水印已添加: {final_video_url}")
-        
         print(f"[DEBUG] 带货视频生成完成")
         print(f"[DEBUG] 最终视频链接: {final_video_url}")
         return {
