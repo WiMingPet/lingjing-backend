@@ -4,6 +4,7 @@
 from typing import Optional, Dict
 from sqlalchemy.orm import Session
 from app.models.task import Task
+from app.services.video_service import VideoService
 
 
 class TryonService:
@@ -117,6 +118,12 @@ class TryonService:
                 video_url = tryon_image_url
             
             print(f"[DEBUG] 试穿展示视频: {video_url}")
+            
+            # 添加AI水印
+            if video_url:
+                from app.services.video_service import VideoService
+                video_url = await VideoService.add_watermark(video_url)
+                print(f"[DEBUG] 试穿视频水印已添加: {video_url}")
             
             output_data = {
                 "task_id": api_task_id,
