@@ -75,10 +75,11 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://lingjing-media.com",
-        "https://www.lingjing-media.com",          # ← 添加 www 子域名
-        "https://media.lingjing-media.com",        # ← 添加 OSS 域名
+        "https://www.lingjing-media.com",
+        "https://media.lingjing-media.com",
         "https://lingji.preview.aliyun-zeabur.cn",
         "https://lingjing.preview.aliyun-zeabur.cn",
+        "https://lingjing.zeabur.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -95,6 +96,7 @@ async def options_handler(request: Request):
         "https://www.lingjing-media.com",
         "https://lingji.preview.aliyun-zeabur.cn",
         "https://lingjing.preview.aliyun-zeabur.cn",
+        "https://lingjing.zeabur.app",
     ]
     if origin in allowed_origins:
         return Response(
