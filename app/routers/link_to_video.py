@@ -41,7 +41,7 @@ async def generate_video_from_link(
         
         # 3a. 虚拟试穿（用商品主图作为服装图）
         # 注意：这里需要一张模特图，可以用默认的或从其他地方获取
-        default_model_image = "https://lingjing-media.oss-cn-shenzhen.aliyuncs.com/default/model.jpg"
+        default_model_image = "https://media.lingjing-media.com/default/model.jpg"
         tryon_task = await kling.generate_tryon(
             human_image_url=default_model_image,
             cloth_image_url=product["image_url"]
