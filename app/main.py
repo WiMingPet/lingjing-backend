@@ -79,7 +79,6 @@ app.add_middleware(
         "https://media.lingjing-media.com",
         "https://lingji.preview.aliyun-zeabur.cn",
         "https://lingjing.preview.aliyun-zeabur.cn",
-        "https://lingjing.zeabur.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -96,7 +95,6 @@ async def options_handler(request: Request):
         "https://www.lingjing-media.com",
         "https://lingji.preview.aliyun-zeabur.cn",
         "https://lingjing.preview.aliyun-zeabur.cn",
-        "https://lingjing.zeabur.app",
     ]
     if origin in allowed_origins:
         return Response(
