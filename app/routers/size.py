@@ -22,61 +22,25 @@ async def recommend_size(
     image: UploadFile = File(...),
     height: Optional[float] = Form(170.0),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),  # ✅ 新增：从token获取用户
+    current_user: User = Depends(get_current_user),
 ):
-    """
-    尺码推荐
-
-    - **image**: 全身照片（必填）
-    - **height**: 身高（厘米），默认170
-    """
-    # ========== 上传用户图片到 OSS ==========
-    # 上传图片到 OSS，获取公网 URL
     image_url, image_id = await upload_file_helper(image, "size")
-    print(f"[DEBUG] 图片已上传到 OSS: {image_url}")
-    # ========== OSS 上传结束 ==========
-    
-    # 保存上传的图片到临时文件（用于 MediaPipe 处理）
-    # 注意：upload_file_helper 已经读取过一次文件内容，需要重新读取
     content = await image.read()
     
-    # 创建临时文件
     with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as f:
         f.write(content)
         image_path = f.name
     
-    print(f"[DEBUG] 图片已保存到临时文件: {image_path}")
-    print(f"[DEBUG] 身高: {height}cm")
-    print(f"[DEBUG] OSS URL: {image_url}")
-    
     try:
-        user_id = 1
+        user = current_user  # 用当前登录用户
         
-        # ========== 确保用户存在，如果不存在则自动创建 ==========
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
-            from datetime import datetime
-            user = User(
-                id=user_id,
-                phone=f"temp_{user_id}@example.com",
-                username=f"user_{user_id}",
-                password_hash="auto_created_temp_hash"
-            )
-            db.add(user)
-            db.commit()
-            print(f"[DEBUG] 自动创建了用户: id={user.id}")
-        # ========== 新增代码结束 ==========
-        
-        # 调用尺码推荐服务，传入图片路径、身高和 OSS URL
-        # ✅ 生成前检查余额（不扣除）
         if user.credits < 2:
             raise HTTPException(status_code=403, detail="尺码推荐需要2灵境点，当前余额不足，请充值")
-        task = await SizeService.recommend_size(db, user_id, image_path, height, image_url)
+        task = await SizeService.recommend_size(db, user.id, image_path, height, image_url)
         
         if task.status != "completed":
             raise HTTPException(500, detail=task.error_message or "尺码推荐失败")
         
-        # ✅ 生成成功后扣点
         check_and_deduct_credits(user, db, 2, "尺码推荐")
         
         return APIResponse(
@@ -85,11 +49,9 @@ async def recommend_size(
             data=TaskResponse.model_validate(task)
         )
     finally:
-        # 清理临时文件
         if os.path.exists(image_path):
             try:
                 os.unlink(image_path)
-                print(f"[DEBUG] 临时文件已删除: {image_path}")
             except:
                 pass
 
