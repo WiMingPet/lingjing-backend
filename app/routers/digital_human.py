@@ -265,12 +265,6 @@ async def generate_digital_human(
     result = kling_service.wait_for_digital_human_result(task_id)
     video_url = result.get("task_result", {}).get("video_url", "")
     print(f"[DEBUG] 数字人视频URL: {video_url}")
-    
-    # 添加AI水印
-    if video_url:
-        from app.services.video_service import VideoService
-        video_url = await VideoService.add_watermark(video_url)
-        print(f"[DEBUG] 水印已添加: {video_url}")
 
     return APIResponse(
         code=200,
