@@ -31,7 +31,7 @@ async def generate_unified_character(
     from app.services.kling import kling_service
 
     # ✅ 生成前先检查余额
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).filter(User.id == current_user.id).first()
     if not user or user.credits < 10:
         raise HTTPException(status_code=403, detail="多角度试穿需要10灵境点，当前余额不足，请充值")
     # 验证图片数量
