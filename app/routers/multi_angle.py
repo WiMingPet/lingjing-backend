@@ -77,11 +77,20 @@ async def generate_unified_character(
 
     # ✅ 生成成功后扣点
     check_and_deduct_credits(current_user, db, 10, "多角度试穿")
+
+    # 提取封面图
+    thumbnail_url = None
+    try:
+        from app.services.video_service import VideoService
+        thumbnail_url = await VideoService.extract_thumbnail(final_video_url)
+        print(f"[DEBUG] 多角度封面已生成: {thumbnail_url}")
+    except Exception as e:
+        print(f"[DEBUG] 多角度封面提取失败（不影响主流程）: {e}")
     
     return APIResponse(
         code=200,
         message="多角度视频生成成功",
-        data={"video_url": final_video_url}
+        data={"video_url": final_video_url, "thumbnail": thumbnail_url}
     )
 
 
