@@ -56,7 +56,7 @@ async def generate_unified_character(
         task_id = kling_service.generate_video(
             image_url=img_url,
             prompt=f"{prompt}，第{i+1}个角度",
-            duration=3,
+            duration=5,
             mode="std"
         )
         video_url = kling_service.wait_for_video_result(task_id, max_wait=300)
