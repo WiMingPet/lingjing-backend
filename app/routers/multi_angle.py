@@ -59,7 +59,7 @@ async def generate_unified_character(
             duration=5,
             mode="std"
         )
-        video_url = kling_service.wait_for_video_result(task_id, max_wait=300)
+        video_url = kling_service.wait_for_video_result(task_id, max_wait=600)
         if video_url.get("task_result", {}).get("video_url"):
             video_urls.append(video_url["task_result"]["video_url"])
         print(f"[DEBUG] 第{i+1}个角度视频: {video_urls[-1] if video_urls else 'failed'}")
