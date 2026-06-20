@@ -154,7 +154,28 @@ async def parse_url(
     current_user: User = Depends(get_current_user)
 ):
     """解析商品链接"""
-    url = request.url
+    import re
+    raw = request.url.strip()
+    logger.info(f"原始输入: {raw}")
+    
+    # 匹配抖音多种链接格式
+    douyin_patterns = [
+        r'https?://v\.douyin\.com/\w+',
+        r'https?://www\.douyin\.com/video/\d+',
+        r'https?://www\.iesdouyin\.com/share/video/\d+',
+    ]
+    
+    url = None
+    for pattern in douyin_patterns:
+        match = re.search(pattern, raw)
+        if match:
+            url = match.group(0)
+            break
+    
+    if not url:
+        raise HTTPException(status_code=400, detail="未识别到有效的抖音链接，请复制完整链接")
+    
+    logger.info(f"提取后的链接: {url}")
     service = EcommerceService()
     
     try:
@@ -172,4 +193,4 @@ async def parse_url(
         }
     except Exception as e:
         logger.error(f"解析失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="解析失败，请确认链接有效后重试")
