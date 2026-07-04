@@ -1,8 +1,7 @@
 """
-可灵AI API 调用服务 - 基于官方文档一次性修复
+可灵AI API 调用服务 - Kling 3.0 + Bearer Token 认证
 """
 import requests
-import jwt
 import time
 from typing import Dict, Optional, List
 from app.config import settings
@@ -14,25 +13,12 @@ class KlingService:
     
     def __init__(self):
         self.api_url = settings.KLING_API_URL
-        self.access_key = settings.KLING_API_KEY
-        self.secret_key = settings.KLING_API_SECRET
-    
-    def _generate_token(self) -> str:
-        """生成JWT Token"""
-        headers = {"alg": "HS256", "typ": "JWT"}
-        payload = {
-            "iss": self.access_key,
-            "exp": int(time.time()) + 1800,
-            "nbf": int(time.time()) - 5
-        }
-        token = jwt.encode(payload, self.secret_key, algorithm="HS256", headers=headers)
-        return token
+        self.api_key = settings.KLING_API_KEY
     
     def _get_headers(self) -> Dict:
-        """获取请求头"""
-        token = self._generate_token()
+        """获取请求头 - Bearer Token 方式"""
         return {
-            "Authorization": f"Bearer {token}",
+            "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         }
     
@@ -67,7 +53,7 @@ class KlingService:
         
         # 构建请求参数
         payload = {
-            "model_name": "kling-v2-1",
+            "model_name": "kling-v3",
             "prompt": prompt,
             "negative_prompt": negative_prompt,
             "aspect_ratio": aspect_ratio,
@@ -137,7 +123,7 @@ class KlingService:
         url = f"{base_url}/videos/image2video"
         
         payload = {
-            "model_name": "kling-v2-6",
+            "model_name": "kling-v3",
             "prompt": prompt,
             "duration": str(duration),
             "mode": mode,
@@ -215,24 +201,17 @@ class KlingService:
     
     # ========== 虚拟试穿（独立API）==========
     def generate_tryon(self, human_image_url: str, cloth_image_url: str, cloth_category: str = None, digital_human_id: str = None) -> str:
-        """
-        虚拟试穿 - 使用独立API
-        参数名严格按照官方文档: human_image, cloth_image
-        返回 task_id
-        """
         base_url = self._get_base_url()
-        url = f"{base_url}/images/kolors-virtual-try-on"
+        url = f"{base_url}/images/generations"
         
         payload = {
-            "model_name": "kolors-virtual-try-on-v1-5",
-            "human_image": human_image_url,
-            "cloth_image": cloth_image_url
+            "model_name": "kling-v3",
+            "prompt": f"虚拟试穿效果图，服装类型：{cloth_category or '服装'}，模特穿着效果展示",
+            "image": human_image_url,
+            "reference_image": cloth_image_url,
+            "aspect_ratio": "1:1",
+            "n": 1
         }
-        if cloth_category:
-            payload["cloth_category"] = cloth_category
-        # 如果有数字人ID，添加到请求中（如果API支持）
-        if digital_human_id:
-            payload["digital_human_id"] = digital_human_id
         
         print(f"[DEBUG] 虚拟试穿请求URL: {url}")
         print(f"[DEBUG] 虚拟试穿请求参数: {payload}")
@@ -248,7 +227,7 @@ class KlingService:
     def get_tryon_task_status(self, task_id: str) -> Dict:
         """查询虚拟试穿任务状态"""
         base_url = self._get_base_url()
-        url = f"{base_url}/images/kolors-virtual-try-on/{task_id}"
+        url = f"{base_url}/images/generations/{task_id}"
         response = requests.get(url, headers=self._get_headers())
         result = response.json()
         

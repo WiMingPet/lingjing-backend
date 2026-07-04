@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/ai_creative")
     REDIS_URL: str = "redis://localhost:6379/0"
+    # DashScope 通义千问
+    DASHSCOPE_API_KEY: str = os.getenv("DASHSCOPE_API_KEY", "sk-42dfbcc5faf74e0ead60b1d415efd6f3")
 
     # JWT
     SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-here-change-in-production")
@@ -19,12 +21,10 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     # Third Party APIs
-    KLING_API_KEY: str = ""
-    KLING_API_SECRET: str = ""
+    KLING_API_KEY: str = os.getenv("KLING_API_KEY", "api-key-kling-eSYfb8AQsDHPX1etCUgKKRUeT9Ovkts6gVkqc1PBk3U")
+    KLING_API_SECRET: str = os.getenv("KLING_API_SECRET", "")
     KLING_API_URL: str = "https://api-beijing.klingai.com/v1"
     
-    # DashScope TTS
-    DASHSCOPE_API_KEY: str = ""
 
     # 腾讯云 TTS
     TENCENT_SECRET_ID: str = ""
@@ -58,6 +58,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"
 
 
 settings = Settings()

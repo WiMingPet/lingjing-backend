@@ -8,7 +8,7 @@ import requests
 import re
 from typing import List, Optional, Tuple
 from urllib.parse import unquote
-from openai import AsyncOpenAI
+
 from pydantic import BaseModel, Field
 
 from app.schemas.ecommerce import ProductInfo, CopywritingScript
@@ -16,6 +16,7 @@ from app.services.kling import KlingService
 from app.services.oss_service import oss_service
 from app.data.preset_avatars import PRESET_AVATARS
 from app.services.video_service import VideoService
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +30,6 @@ class ProductSchema(BaseModel):
 
 class EcommerceService:
     def __init__(self):
-        self.api_key = "sk-xS3B_2aEVaLpvM7zAju_xA"
-        self.base_url = "https://hnd1.aihub.zeabur.ai/v1"
         self.kling = KlingService()
 
     def _select_avatar_for_product(self, product_title: str) -> dict:
@@ -59,30 +58,30 @@ class EcommerceService:
         avatar_list_str = "\n".join(avatar_options)
         
         prompt = f"""
-你是一位顶尖的直播带货策划师。请根据以下产品信息，从形象列表中选出最合适的带货数字人形象。
+    你是一位顶尖的直播带货策划师。请根据以下产品信息，从形象列表中选出最合适的带货数字人形象。
 
-产品标题：{product_title}
-产品描述：{product_description}
+    产品标题：{product_title}
+    产品描述：{product_description}
 
-形象列表：
-{avatar_list_str}
+    形象列表：
+    {avatar_list_str}
 
-选择标准：
-1. 形象的气质、年龄、性别必须与产品的目标受众和风格完全匹配。
-2. 例如，美妆产品首选"露西"(ID:12)，男装或数码产品首选"燃锋"(ID:5)或"宇航"(ID:7)，知识付费首选"文慧"(ID:1)或"明悦"(ID:6)。
-3. 请只返回选中形象的 ID 数字，不要包含其他任何内容。
-"""
+    选择标准：
+    1. 形象的气质、年龄、性别必须与产品的目标受众和风格完全匹配。
+    2. 例如，美妆产品首选"露西"(ID:12)，男装或数码产品首选"燃锋"(ID:5)或"宇航"(ID:7)，知识付费首选"文慧"(ID:1)或"明悦"(ID:6)。
+    3. 请只返回选中形象的 ID 数字，不要包含其他任何内容。
+    """
         try:
             import requests as sync_requests
             
             response = sync_requests.post(
-                f"{self.base_url}/chat/completions",
+                "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
                 headers={
-                    "Authorization": f"Bearer {self.api_key}",
+                    "Authorization": f"Bearer {settings.DASHSCOPE_API_KEY}",
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "gpt-4o-mini",
+                    "model": "qwen3.7-plus",
                     "messages": [{"role": "user", "content": prompt}],
                     "max_tokens": 10,
                     "temperature": 0.3
@@ -117,28 +116,28 @@ class EcommerceService:
         voice_list_str = "\n".join([f"- {v['name']}: {v['desc']}" for v in voice_options])
         
         prompt = f"""
-请根据以下信息，从音色列表中选择最合适的音色。
+    请根据以下信息，从音色列表中选择最合适的音色。
 
-产品标题：{product_title}
-产品描述：{product_description}
-已选形象：{avatar['name']}（{avatar['description']}）
+    产品标题：{product_title}
+    产品描述：{product_description}
+    已选形象：{avatar['name']}（{avatar['description']}）
 
-音色列表：
-{voice_list_str}
+    音色列表：
+    {voice_list_str}
 
-要求：只返回音色名称，不要包含其他内容。例如：温柔女声
-"""
+    要求：只返回音色名称，不要包含其他内容。例如：温柔女声
+    """
         try:
             import requests as sync_requests
             
             response = sync_requests.post(
-                f"{self.base_url}/chat/completions",
+                "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
                 headers={
-                    "Authorization": f"Bearer {self.api_key}",
+                    "Authorization": f"Bearer {settings.DASHSCOPE_API_KEY}",
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "gpt-4o-mini",
+                    "model": "qwen3.7-plus",
                     "messages": [{"role": "user", "content": prompt}],
                     "max_tokens": 10,
                     "temperature": 0.3
@@ -309,8 +308,8 @@ class EcommerceService:
         return video_url
 
     async def generate_copywriting(self, product: ProductInfo, is_manual_mode: bool = False) -> CopywritingScript:
-        client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url, timeout=60.0)
-    
+        import requests as sync_requests
+
         # 先进行图片识别（两种模式都需要）
         if product.images:
             detected_name, detected_desc = await self._analyze_product_image(
@@ -318,38 +317,59 @@ class EcommerceService:
                 user_input=product.description
             )
             if is_manual_mode:
-                # 手动模式：直接用识别结果
                 product.title = detected_name or product.title
                 product.description = detected_desc or product.description
             else:
-                # 解析链接模式：结合链接标题 + 图片识别结果
                 link_title = product.title
-                product.title = link_title or detected_name or "商品"
-                product.description = f"产品名称：{link_title}。详情：{detected_desc or product.description}"
+                # ✅ 修复：确保 link_title 和 detected_name 都有效
+                if link_title and link_title.strip():
+                    product.title = link_title
+                elif detected_name and detected_name.strip():
+                    product.title = detected_name
+                else:
+                    product.title = "商品"
+                
+                product.description = f"产品名称：{product.title}。详情：{detected_desc or product.description}"
         
-        prompt = f"""
-你是一个顶级的直播带货主播，正在镜头前给粉丝们推荐一款产品。请你像真人一样生动地讲解，语气要有感染力、互动感、号召力，多用"家人们"、"宝宝们"、"咱们"这类口语，自然地展示产品卖点和优点。
+        prompt = f"""你是一个顶级的直播带货主播，正在镜头前给粉丝们推荐一款产品。请你像真人一样生动地讲解，语气要有感染力、互动感、号召力，多用"家人们"、"宝宝们"、"咱们"这类口语，自然地展示产品卖点和优点。
 
-产品：{product.title}
-卖点：{product.description or '高品质，性价比超高'}
+    产品：{product.title}
+    卖点：{product.description or '高品质，性价比超高'}
 
-输出严格JSON格式：{{"script": "完整的口播文案（约100字，适合30秒讲解）"}}
-"""
+    输出严格JSON格式：{{"script": "完整的口播文案（约100字，适合30秒讲解）"}}"""
         
         try:
-            response = await client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
-                response_format={"type": "json_object"},
-                temperature=0.7
+            # ===== 替换成通义千问 Qwen3.7-Plus =====
+            response = sync_requests.post(
+                "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {settings.DASHSCOPE_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "qwen3.7-plus",
+                    "messages": [
+                        {"role": "system", "content": "你是一个顶级的直播带货主播，擅长撰写口语化、有感染力的口播文案。"},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": 0.7
+                },
+                timeout=60
             )
-            content = response.choices[0].message.content
+            
+            content = response.json().get("choices", [{}])[0].get("message", {}).get("content", "")
             if not content:
-                raise Exception("AI返回内容为空")
-            result = json.loads(content)
+                raise Exception("Qwen返回内容为空")
+            
+            clean_content = content.strip()
+            if clean_content.startswith('```'):
+                clean_content = clean_content.split('\n', 1)[-1]
+                if clean_content.endswith('```'):
+                    clean_content = clean_content[:-3]
+            result = json.loads(clean_content)
             return CopywritingScript(title=result.get("title", "AI带货视频"), script=result.get("script", ""), scenes=[])
         except Exception as e:
-            print(f"AI生成失败: {e}")
+            print(f"Qwen文案生成失败: {e}")
             raise
 
     async def create_product_video(
@@ -362,6 +382,14 @@ class EcommerceService:
         is_manual_mode: bool = False
     ) -> dict:
         """生成完整带货视频"""
+
+        # ========== 调试日志 ==========
+        print(f"[DEBUG] ========== 带货视频参数 ==========")
+        print(f"[DEBUG] product.title: '{product.title}'")
+        print(f"[DEBUG] product.title 长度: {len(product.title) if product.title else 0}")
+        print(f"[DEBUG] product.images: {product.images}")
+        print(f"[DEBUG] is_manual_mode: {is_manual_mode}")
+        print(f"[DEBUG] ====================================")
         
         avatar = self._ai_select_avatar(product.title, product.description or "")
         digital_human_image = digital_image_url or avatar.get("model_image", "")
@@ -382,6 +410,11 @@ class EcommerceService:
             "针织", "风衣", "大衣", "棉服", "西服", "套装", "连体"
         ]
         is_fashion = any(keyword in product.title for keyword in fashion_keywords)
+        # ========== 日志2：服装判断 ==========
+        print(f"[DEBUG] ========== 服装判断 ==========")
+        print(f"[DEBUG] is_fashion: {is_fashion}")
+        print(f"[DEBUG] 匹配到的关键词: {[kw for kw in fashion_keywords if kw in product.title]}")
+        print(f"[DEBUG] =================================")
         if is_fashion:
             voice_name = "钓系女友"
         
@@ -433,6 +466,14 @@ class EcommerceService:
                 print(f"[DEBUG] 试穿失败，降级为图片生成动态视频...")
                 product_video_url = await self.generate_product_demo_video(product)
         elif product_images:
+
+            # ========== 日志3：进入非服装类 ==========
+            print(f"[DEBUG] ❌ 进入了非服装类分支！")
+            print(f"[DEBUG] is_manual_mode: {is_manual_mode}")
+            print(f"[DEBUG] is_fashion: {is_fashion}")
+            print(f"[DEBUG] product_images 有值: {bool(product_images)}")
+            print(f"[DEBUG] 条件详情: not is_manual_mode={not is_manual_mode}, is_fashion={is_fashion}, product_images={bool(product_images)}")
+            print(f"[DEBUG] ===========================================")
             print(f"[DEBUG] 非服装类商品，用原图生成展示视频...")
             product_video_url = await self._image_to_video(product_images[0], duration=5)
 
@@ -686,39 +727,36 @@ class EcommerceService:
             
             import requests as sync_requests
             
-            prompt = """
-请仔细分析这张产品图片，提取以下信息：
-1. 产品名称（具体到款式、类型）
-2. 核心卖点（至少3个）
-3. 材质/面料
-4. 适合人群（年龄、性别、风格偏好）
-5. 适用场景（至少2个）
+            prompt = """请仔细分析这张产品图片，提取以下信息：
+    1. 产品名称（具体到款式、类型）
+    2. 核心卖点（至少3个）
+    3. 材质/面料
+    4. 适合人群（年龄、性别、风格偏好）
+    5. 适用场景（至少2个）
 
-输出格式严格为JSON：
-{
-  "product_name": "具体产品名称",
-  "selling_points": "核心卖点，用中文逗号分隔",
-  "description": "一段约100字的详细产品描述，包含材质、版型、风格"
-}
-"""
+    输出格式严格为JSON：
+    {
+    "product_name": "具体产品名称",
+    "selling_points": "核心卖点，用中文逗号分隔",
+    "description": "一段约100字的详细产品描述，包含材质、版型、风格"
+    }"""
             
+            # ===== 替换成通义千问 Qwen-VL Plus =====
             response = sync_requests.post(
-                f"{self.base_url}/chat/completions",
+                "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
                 headers={
-                    "Authorization": f"Bearer {self.api_key}",
+                    "Authorization": f"Bearer {settings.DASHSCOPE_API_KEY}",
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "gpt-4o",
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "text", "text": prompt},
-                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
-                            ]
-                        }
-                    ],
+                    "model": "qwen-vl-plus",
+                    "messages": [{
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
+                        ]
+                    }],
                     "max_tokens": 500,
                     "temperature": 0.5
                 },
@@ -726,7 +764,7 @@ class EcommerceService:
             )
             
             result = response.json()
-            print(f"[DEBUG] 图片识别响应: {result}")
+            print(f"[DEBUG] Qwen图片识别响应: {result}")
             
             choices = result.get("choices", [])
             if choices:
@@ -738,8 +776,13 @@ class EcommerceService:
                         if clean_content.endswith('```'):
                             clean_content = clean_content[:-3]
                     parsed = json.loads(clean_content)
+                    print(f"[DEBUG] ========== _analyze_product_image 解析结果 ==========")
+                    print(f"[DEBUG] parsed: {parsed}")
+                    print(f"[DEBUG] product_name: '{parsed.get('product_name')}'")
+                    print(f"[DEBUG] description: '{parsed.get('description')}'")
+                    print(f"[DEBUG] =====================================================")
                     return parsed.get("product_name", "商品"), parsed.get("description", "")
-            
+
             raise Exception(f"返回格式异常: {result}")
             
         except Exception as e:

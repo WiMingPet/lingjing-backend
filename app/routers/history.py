@@ -21,7 +21,18 @@ async def save_history(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    print(f"[DEBUG] 收到保存请求: type={request.type}, url={request.url[:50]}...")
+    print(f"[DEBUG] 收到保存请求: type={request.type}, url={request.url[:50] if request.url else 'None'}...")
+    
+    # ========== ✅ 去重检查 ==========
+    if request.url:
+        existing = db.query(History).filter(
+            History.user_id == current_user.id,
+            History.url == request.url,
+            History.type == request.type
+        ).first()
+        if existing:
+            print(f"[DEBUG] 记录已存在，跳过保存: {request.url[:50]}...")
+            return {"code": 200, "message": "记录已存在"}
     # 自动生成封面（如果是视频且未提供封面）
     thumbnail_url = request.thumbnail
     if not thumbnail_url and request.type in ["数字人分身", "视频生成", "AI带货视频", "虚拟试穿"]:
