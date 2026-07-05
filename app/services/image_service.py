@@ -96,6 +96,31 @@ class ImageService:
             task.status = "completed"
             task.progress = 100
             task.output_data = output_data
+            
+            # ========== 自动保存历史记录 ==========
+            from app.models.history import History
+            
+            for img in images:
+                img_url = img.get("url", "")
+                if not img_url:
+                    continue
+                
+                existing = db.query(History).filter(
+                    History.user_id == user_id,
+                    History.url == img_url,
+                    History.type == "图片生成"
+                ).first()
+                
+                if not existing:
+                    history = History(
+                        user_id=user_id,
+                        url=img_url,
+                        type="图片生成",
+                        thumbnail=img_url  # 图片直接用自身做缩略图
+                    )
+                    db.add(history)
+            # ========================================
+            
             db.commit()
             print("[DEBUG] ========== 图片生成成功 ==========")
             

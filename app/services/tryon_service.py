@@ -129,6 +129,33 @@ class TryonService:
             task.status = "completed"
             task.progress = 100
             task.output_data = output_data
+            
+            # ========== 自动保存历史记录 ==========
+            from app.models.history import History
+            from app.services.video_service import VideoService
+            
+            existing = db.query(History).filter(
+                History.user_id == user_id,
+                History.url == video_url,
+                History.type == "虚拟试穿"
+            ).first()
+            
+            if not existing:
+                thumbnail = None
+                try:
+                    thumbnail = await VideoService.extract_thumbnail(video_url)
+                except Exception as e:
+                    print(f"[DEBUG] 封面生成失败: {e}")
+                
+                history = History(
+                    user_id=user_id,
+                    url=video_url,
+                    type="虚拟试穿",
+                    thumbnail=thumbnail
+                )
+                db.add(history)
+            # ========================================
+            
             db.commit()
             print("[DEBUG] ========== 虚拟试穿完成 ==========")
             
