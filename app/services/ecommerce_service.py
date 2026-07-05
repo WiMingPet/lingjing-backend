@@ -218,18 +218,35 @@ class EcommerceService:
             except:
                 pass
         
-        # 备用解析：从分享文本中提取标题（如"【抖音商城】https://... 商品标题"格式）
-        title_from_text = re.search(r'抖音商城】\s*https?://\S+\s+(.+?)(?:\n|长按复制|$)', url)
-        if title_from_text:
-            title = title_from_text.group(1).strip()
-            print(f"[DEBUG] 从分享文本提取标题: {title[:50]}...")
-            return {
-                "title": title,
-                "price": "0",
-                "description": title,
-                "images": [],
-                "platform": "douyin"
-            }
+        # 兜底：从HTML页面提取标题和封面图
+        try:
+            response = requests.get(final_url, headers={
+                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15"
+            }, timeout=10)
+            html = response.text
+            
+            img_match = re.search(r'<meta[^>]+property="og:image"[^>]+content="([^"]+)"', html)
+            if not img_match:
+                img_match = re.search(r'poster="([^"]+)"', html)
+            if not img_match:
+                img_match = re.search(r'cover="([^"]+)"', html)
+            
+            title_match = re.search(r'<title>(.*?)</title>', html)
+            
+            title = title_match.group(1).strip() if title_match else ""
+            images = [img_match.group(1)] if img_match else []
+            
+            if title or images:
+                print(f"[DEBUG] HTML兜底解析: title={title[:50] if title else '无'}, images={len(images)}张")
+                return {
+                    "title": title or "抖音视频",
+                    "price": "0",
+                    "description": title,
+                    "images": images,
+                    "platform": "douyin"
+                }
+        except Exception as e:
+            print(f"[DEBUG] HTML兜底解析失败: {e}")
         
         return None
 
