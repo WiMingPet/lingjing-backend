@@ -202,13 +202,18 @@ class KlingService:
     # ========== 虚拟试穿（独立API）==========
     def generate_tryon(self, human_image_url: str, cloth_image_url: str, cloth_category: str = None, digital_human_id: str = None) -> str:
         base_url = self._get_base_url()
-        url = f"{base_url}/images/generations"
+        url = f"{base_url}/images/omni-image"
+        
+        prompt = "让<<image_2>>中的模特穿上<<image_1>>中的服装，保持模特的姿势和背景不变，服装细节保持不变，专业电商试穿效果"
         
         payload = {
-            "model_name": "kling-v3",
-            "prompt": f"虚拟试穿效果图，服装类型：{cloth_category or '服装'}，模特穿着效果展示",
-            "image": human_image_url,
-            "reference_image": cloth_image_url,
+            "model_name": "kling-v3-omni",
+            "prompt": prompt,
+            "image_list": [
+                {"image": cloth_image_url},   # image_1 = 服装
+                {"image": human_image_url}    # image_2 = 模特
+            ],
+            "resolution": "2k",
             "aspect_ratio": "1:1",
             "n": 1
         }
@@ -227,7 +232,7 @@ class KlingService:
     def get_tryon_task_status(self, task_id: str) -> Dict:
         """查询虚拟试穿任务状态"""
         base_url = self._get_base_url()
-        url = f"{base_url}/images/generations/{task_id}"
+        url = f"{base_url}/images/omni-image/{task_id}"
         response = requests.get(url, headers=self._get_headers())
         result = response.json()
         
