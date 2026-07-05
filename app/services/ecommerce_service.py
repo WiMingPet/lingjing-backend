@@ -218,6 +218,19 @@ class EcommerceService:
             except:
                 pass
         
+        # 备用解析：从分享文本中提取标题（如"【抖音商城】https://... 商品标题"格式）
+        title_from_text = re.search(r'抖音商城】\s*https?://\S+\s+(.+?)(?:\n|长按复制|$)', url)
+        if title_from_text:
+            title = title_from_text.group(1).strip()
+            print(f"[DEBUG] 从分享文本提取标题: {title[:50]}...")
+            return {
+                "title": title,
+                "price": "0",
+                "description": title,
+                "images": [],
+                "platform": "douyin"
+            }
+        
         return None
 
     async def parse_product_url(self, url: str) -> ProductInfo:
