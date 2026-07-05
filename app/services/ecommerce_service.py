@@ -320,12 +320,10 @@ class EcommerceService:
                 product.title = detected_name or product.title
                 product.description = detected_desc or product.description
             else:
-                link_title = product.title
-                # ✅ 修复：确保 link_title 和 detected_name 都有效
-                if link_title and link_title.strip():
-                    product.title = link_title
-                elif detected_name and detected_name.strip():
+                if detected_name and detected_name.strip():
                     product.title = detected_name
+                elif product.title and product.title.strip() and len(product.title) > 2:
+                    pass  # 保留原始标题
                 else:
                     product.title = "商品"
                 
@@ -568,7 +566,6 @@ class EcommerceService:
                     pass
 
     async def _image_to_video(self, image_url: str, duration: int = 5) -> str:
-        """把图片转成固定时长的视频"""
         import subprocess
         import aiohttp
         
@@ -586,6 +583,7 @@ class EcommerceService:
             
             cmd = [
                 "ffmpeg", "-loop", "1", "-i", tmp_image.name,
+                "-vf", f"scale=800:800:force_original_aspect_ratio=decrease,pad=800:800:(ow-iw)/2:(oh-ih)/2,rotate=2*PI*t/{duration}:ow=800:oh=800:c=none",
                 "-c:v", "libx264", "-t", str(duration),
                 "-pix_fmt", "yuv420p", "-y",
                 tmp_video.name
@@ -599,7 +597,6 @@ class EcommerceService:
             os.unlink(tmp_video.name)
             
             return result_url
-            
         except Exception as e:
             print(f"[ERROR] 图片转视频失败: {e}")
             return None

@@ -81,7 +81,6 @@ async def generate_tryon(
     # ========== ✅ 后端自动保存历史记录 ==========
     try:
         from app.routers.history import save_history
-        from app.schemas.history import SaveHistoryRequest
         
         output_data = task.output_data or {}
         video_url = output_data.get("video_url")
