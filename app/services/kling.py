@@ -204,14 +204,14 @@ class KlingService:
         base_url = self._get_base_url()
         url = f"{base_url}/images/omni-image"
         
-        prompt = "让<<image_2>>中的模特穿上<<image_1>>中的服装，保持模特的姿势和背景不变，服装细节保持不变，专业电商试穿效果"
+        prompt = "给<<image_1>>中的模特穿上<<image_2>>中的服装，配饰的细节如：图案，款式保持不变，保持模特的姿势和背景不变，专业电商试穿效果"
         
         payload = {
             "model_name": "kling-v3-omni",
             "prompt": prompt,
             "image_list": [
-                {"image": cloth_image_url},   # image_1 = 服装
-                {"image": human_image_url}    # image_2 = 模特
+                {"image": human_image_url},    # image_1 = 模特
+                {"image": cloth_image_url}     # image_2 = 服装
             ],
             "resolution": "2k",
             "aspect_ratio": "1:1",
