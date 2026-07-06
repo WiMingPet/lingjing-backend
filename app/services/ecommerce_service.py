@@ -156,19 +156,16 @@ class EcommerceService:
         return "温柔女声"
 
     def _parse_douyin_from_url(self, url: str) -> Optional[dict]:
-        """使用 f2 库解析抖音链接"""
         import re
         from urllib.parse import unquote
         
-        # 1. 预处理：从各种格式中提取纯链接
+        # 1. 提取纯链接
         clean_url = url
         if not url.startswith("http"):
-            # 从分享文本中提取 https 链接
             http_match = re.search(r'(https?://[^\s]+)', url)
             if http_match:
                 clean_url = http_match.group(1)
             else:
-                # 尝试 aweme:// 协议提取
                 aweme_match = re.search(r'url=(https?%3A%2F%2F[^&]+)', url)
                 if aweme_match:
                     clean_url = unquote(aweme_match.group(1))
@@ -177,30 +174,65 @@ class EcommerceService:
             return None
         
         try:
-            from f2.apps.douyin.handler import DouyinHandler
+            headers = {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)"}
+            resp = requests.get(clean_url, headers=headers, allow_redirects=True, timeout=10)
+            final_url = resp.url
+        except:
+            final_url = clean_url
+        
+        # 2. 优先尝试 goods_detail 解析（抖音商城链接）
+        match = re.search(r'goods_detail=([^&]+)', final_url)
+        if match:
+            try:
+                import json
+                encoded_json = match.group(1)
+                decoded_json = unquote(encoded_json)
+                goods_detail = json.loads(decoded_json)
+                price_fen = goods_detail.get("min_price", 0)
+                img_data = goods_detail.get("img", {})
+                images = img_data.get("url_list", [])
+                title = goods_detail.get("title", "")
+                
+                if title and images:
+                    print(f"[INFO] goods_detail解析成功: {title[:50]}...，{len(images)}张图")
+                    return {
+                        "title": title,
+                        "price": price_fen / 100 if price_fen else 0,
+                        "description": title,
+                        "images": images,
+                        "video_url": None,
+                        "platform": "douyin"
+                    }
+            except Exception as e:
+                print(f"[DEBUG] goods_detail解析异常: {e}")
+        
+        # 3. 兜底：调用抖音公开API
+        try:
+            aweme_id = None
+            id_match = re.search(r'/video/(\d+)|/note/(\d+)|aweme_id=(\d+)|item_id=(\d+)', final_url)
+            if id_match:
+                aweme_id = next(g for g in id_match.groups() if g)
             
-            handler = DouyinHandler()
-            # 提取 aweme_id
-            aweme_id = handler.get_aweme_id(clean_url)
             if not aweme_id:
                 return None
             
-            # 获取视频/图集详情
-            aweme_data = handler.fetch_one_aweme(aweme_id)
-            if not aweme_data:
+            api_url = f"https://www.iesdouyin.com/web/api/v2/aweme/iteminfo/?item_ids={aweme_id}"
+            resp = requests.get(api_url, headers=headers, timeout=10)
+            data = resp.json()
+            
+            item_list = data.get("item_list", [])
+            if not item_list:
                 return None
             
-            title = aweme_data.get("desc", "抖音视频")
+            item = item_list[0]
+            title = item.get("desc", "抖音视频")
+            
             images = []
+            cover_list = item.get("video", {}).get("cover", {}).get("url_list", [])
+            if cover_list:
+                images.append(cover_list[0])
             
-            # 提取封面图
-            cover = aweme_data.get("video", {}).get("cover", {}).get("url_list", [])
-            if cover:
-                images.append(cover[0])
-            
-            # 如果是图集，提取所有图片
-            images_data = aweme_data.get("images", [])
-            for img in images_data:
+            for img in item.get("images", []):
                 url_list = img.get("url_list", [])
                 if url_list:
                     images.append(url_list[0])
@@ -208,7 +240,7 @@ class EcommerceService:
             if not images:
                 return None
             
-            print(f"[INFO] f2 解析成功: {title[:50]}...，{len(images)}张图")
+            print(f"[INFO] API解析成功: {title[:50]}...，{len(images)}张图")
             return {
                 "title": title,
                 "price": "0",
@@ -218,11 +250,8 @@ class EcommerceService:
                 "platform": "douyin"
             }
             
-        except ImportError:
-            print("[ERROR] f2 库未安装，请执行: pip install f2")
-            return None
         except Exception as e:
-            print(f"[ERROR] f2 解析失败: {e}")
+            print(f"[ERROR] API解析失败: {e}")
             return None
 
     async def parse_product_url(self, url: str) -> ProductInfo:
