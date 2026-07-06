@@ -170,12 +170,11 @@ class EcommerceService:
         
         if "v.douyin.com" in final_url:
             try:
-                response = requests.get(url, allow_redirects=True, timeout=10)
+                response = requests.get(final_url, allow_redirects=True, timeout=10)
                 final_url = response.url
                 print(f"[DEBUG] 短链接重定向后: {final_url}")
             except Exception as e:
-                print(f"[DEBUG] 短链接重定向失败: {e}")
-                return None
+                print(f"[DEBUG] 短链接重定向失败: {e}, 继续解析")
         
         match = re.search(r'goods_detail=([^&]+)', final_url)
         if match:
@@ -265,7 +264,7 @@ class EcommerceService:
             video_id = video_id_match.group(1)
             print(f"[DEBUG] RSS兜底开始, video_id: {video_id}")
             try:
-                api_url = f"https://www.iesdouyin.com/web/api/v2/aweme/iteminfo/?item_ids={video_id}"
+                api_url = f"https://www.douyin.com/aweme/v1/web/aweme/detail/?aweme_id={video_id}"
                 resp = requests.get(api_url, headers={
                     "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)"
                 }, timeout=10)
