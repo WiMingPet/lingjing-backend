@@ -219,6 +219,7 @@ class EcommerceService:
                 pass
         
         # 兜底：从HTML页面提取标题和封面图
+        print(f"[DEBUG] HTML兜底开始, final_url: {final_url[:100]}")
         try:
             response = requests.get(final_url, headers={
                 "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15"
@@ -252,6 +253,7 @@ class EcommerceService:
         video_id_match = re.search(r'/video/(\d+)', final_url)
         if video_id_match:
             video_id = video_id_match.group(1)
+            print(f"[DEBUG] RSS兜底开始, video_id: {video_id}")
             try:
                 api_url = f"https://www.iesdouyin.com/web/api/v2/aweme/iteminfo/?item_ids={video_id}"
                 resp = requests.get(api_url, headers={
