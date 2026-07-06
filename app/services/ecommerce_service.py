@@ -156,137 +156,74 @@ class EcommerceService:
         return "温柔女声"
 
     def _parse_douyin_from_url(self, url: str) -> Optional[dict]:
-        final_url = url
-        print(f"[DEBUG] 收到的原始url前200字符: {url[:200]}")
+        """使用 f2 库解析抖音链接"""
+        import re
+        from urllib.parse import unquote
         
-        if final_url.startswith("aweme://"):
-            nested = re.search(r'url=(https?%3A%2F%2F[^&]+)', final_url)
-            if nested:
-                final_url = unquote(nested.group(1))
-                print(f"[DEBUG] 从aweme提取真实URL: {final_url[:100]}")
+        # 1. 预处理：从各种格式中提取纯链接
+        clean_url = url
+        if not url.startswith("http"):
+            # 从分享文本中提取 https 链接
+            http_match = re.search(r'(https?://[^\s]+)', url)
+            if http_match:
+                clean_url = http_match.group(1)
             else:
-                print(f"[DEBUG] aweme链接无法提取真实URL")
-                return None
+                # 尝试 aweme:// 协议提取
+                aweme_match = re.search(r'url=(https?%3A%2F%2F[^&]+)', url)
+                if aweme_match:
+                    clean_url = unquote(aweme_match.group(1))
         
-        if "v.douyin.com" in final_url:
-            try:
-                response = requests.get(final_url, allow_redirects=True, timeout=10)
-                final_url = response.url
-                print(f"[DEBUG] 短链接重定向后: {final_url}")
-            except Exception as e:
-                print(f"[DEBUG] 短链接重定向失败: {e}, 继续解析")
+        if not clean_url.startswith("http"):
+            return None
         
-        match = re.search(r'goods_detail=([^&]+)', final_url)
-        if match:
-            encoded_json = match.group(1)
-            decoded_json = unquote(encoded_json)
-            try:
-                goods_detail = json.loads(decoded_json)
-                price_fen = goods_detail.get("min_price", 0)
-                img_data = goods_detail.get("img", {})
-                images = img_data.get("url_list", [])
-                
-                title = goods_detail.get("title", "")
-                
-                video_url = None
-                video_data = goods_detail.get("video", {})
-                if video_data.get("url_list"):
-                    video_url = video_data["url_list"][0]
-                if not video_url:
-                    video_match = re.search(r'video_url=([^&]+)', unquote(final_url))
-                    if video_match:
-                        video_url = unquote(video_match.group(1))
-                
-                print(f"[DEBUG] 本地解析成功: {title[:50]}...")
-                print(f"[DEBUG] 获取到 {len(images)} 张图片")
-                if video_url:
-                    print(f"[DEBUG] 获取到视频: {video_url[:80]}...")
-                
-                return {
-                    "title": title,
-                    "price": price_fen / 100 if price_fen else 0,
-                    "description": title,
-                    "images": images,
-                    "video_url": video_url
-                }
-            except Exception as e:
-                print(f"[DEBUG] goods_detail 解析异常: {e}")
-        
-        decoded_url = unquote(final_url)
-        title_match = re.search(r'title=([^&]+)', decoded_url)
-        if title_match:
-            try:
-                title = unquote(title_match.group(1))
-                print(f"[DEBUG] 从 title 参数提取: {title[:50]}...")
-                return {
-                    "title": title,
-                    "price": "0",
-                    "description": title,
-                    "images": []
-                }
-            except:
-                pass
-        
-        # 兜底：从HTML页面提取标题和封面图
-        print(f"[DEBUG] HTML兜底开始, final_url: {final_url[:100]}")
         try:
-            response = requests.get(final_url, headers={
-                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15"
-            }, timeout=10)
-            html = response.text
+            from f2.apps.douyin.handler import DouyinHandler
             
-            img_match = re.search(r'<meta[^>]+property="og:image"[^>]+content="([^"]+)"', html)
-            if not img_match:
-                img_match = re.search(r'poster="([^"]+)"', html)
-            if not img_match:
-                img_match = re.search(r'cover="([^"]+)"', html)
+            handler = DouyinHandler()
+            # 提取 aweme_id
+            aweme_id = handler.get_aweme_id(clean_url)
+            if not aweme_id:
+                return None
             
-            title_match = re.search(r'<title>(.*?)</title>', html)
+            # 获取视频/图集详情
+            aweme_data = handler.fetch_one_aweme(aweme_id)
+            if not aweme_data:
+                return None
             
-            title = title_match.group(1).strip() if title_match else ""
-            images = [img_match.group(1)] if img_match else []
+            title = aweme_data.get("desc", "抖音视频")
+            images = []
             
-            if title or images:
-                print(f"[DEBUG] HTML兜底解析: title={title[:50] if title else '无'}, images={len(images)}张")
-                return {
-                    "title": title or "抖音视频",
-                    "price": "0",
-                    "description": title,
-                    "images": images,
-                    "platform": "douyin"
-                }
+            # 提取封面图
+            cover = aweme_data.get("video", {}).get("cover", {}).get("url_list", [])
+            if cover:
+                images.append(cover[0])
+            
+            # 如果是图集，提取所有图片
+            images_data = aweme_data.get("images", [])
+            for img in images_data:
+                url_list = img.get("url_list", [])
+                if url_list:
+                    images.append(url_list[0])
+            
+            if not images:
+                return None
+            
+            print(f"[INFO] f2 解析成功: {title[:50]}...，{len(images)}张图")
+            return {
+                "title": title,
+                "price": "0",
+                "description": title,
+                "images": images[:9],
+                "video_url": None,
+                "platform": "douyin"
+            }
+            
+        except ImportError:
+            print("[ERROR] f2 库未安装，请执行: pip install f2")
+            return None
         except Exception as e:
-            print(f"[DEBUG] HTML兜底解析失败: {e}")
-        
-        # RSS兜底：从视频ID解析
-        video_id_match = re.search(r'/video/(\d+)', final_url)
-        if video_id_match:
-            video_id = video_id_match.group(1)
-            print(f"[DEBUG] RSS兜底开始, video_id: {video_id}")
-            try:
-                api_url = f"https://www.douyin.com/aweme/v1/web/aweme/detail/?aweme_id={video_id}"
-                resp = requests.get(api_url, headers={
-                    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)"
-                }, timeout=10)
-                data = resp.json()
-                item_list = data.get("item_list", [])
-                if item_list:
-                    item = item_list[0]
-                    title = item.get("desc", "抖音视频")
-                    cover = item.get("video", {}).get("cover", {}).get("url_list", [""])[0]
-                    images = [cover] if cover else []
-                    print(f"[DEBUG] RSS解析成功: {title[:50]}...")
-                    return {
-                        "title": title,
-                        "price": "0",
-                        "description": title,
-                        "images": images,
-                        "platform": "douyin"
-                    }
-            except Exception as e:
-                print(f"[DEBUG] RSS解析失败: {e}")
-        
-        return None
+            print(f"[ERROR] f2 解析失败: {e}")
+            return None
 
     async def parse_product_url(self, url: str) -> ProductInfo:
         local_result = self._parse_douyin_from_url(url)
