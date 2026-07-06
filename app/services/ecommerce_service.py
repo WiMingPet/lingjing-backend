@@ -157,8 +157,18 @@ class EcommerceService:
 
     def _parse_douyin_from_url(self, url: str) -> Optional[dict]:
         final_url = url
+        print(f"[DEBUG] 收到的原始url前200字符: {url[:200]}")
         
-        if "v.douyin.com" in url:
+        if final_url.startswith("aweme://"):
+            nested = re.search(r'url=(https?%3A%2F%2F[^&]+)', final_url)
+            if nested:
+                final_url = unquote(nested.group(1))
+                print(f"[DEBUG] 从aweme提取真实URL: {final_url[:100]}")
+            else:
+                print(f"[DEBUG] aweme链接无法提取真实URL")
+                return None
+        
+        if "v.douyin.com" in final_url:
             try:
                 response = requests.get(url, allow_redirects=True, timeout=10)
                 final_url = response.url
