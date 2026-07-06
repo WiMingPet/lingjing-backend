@@ -280,51 +280,19 @@ class EcommerceService:
         return None
 
     async def parse_product_url(self, url: str) -> ProductInfo:
-        import httpx
-        import os
-        
         local_result = self._parse_douyin_from_url(url)
-        if local_result and local_result.get("title"):
-            print(f"[INFO] 本地解析成功: {local_result['title']}")
+        if local_result:
+            print(f"[INFO] 本地解析成功: {local_result.get('title', '无标题')[:50]}")
             return ProductInfo(
-                title=local_result["title"],
-                price=str(local_result["price"]),
-                description=local_result["description"],
+                title=local_result.get("title", "抖音商品"),
+                price=str(local_result.get("price", 0)),
+                description=local_result.get("description", ""),
                 images=local_result.get("images", []),
                 video_url=local_result.get("video_url"),
-                platform="douyin"
+                platform=local_result.get("platform", "douyin")
             )
         
-        print("[INFO] 本地解析失败，尝试订单侠...")
-        apikey = os.environ.get("DINGDANXIA_APIKEY")
-        if not apikey:
-            raise Exception("未配置订单侠API Key，且本地解析失败")
-        
-        api_url = "https://api.tbk.dingdanxia.com/douyin/shareCommandParse"
-        payload = {"apikey": apikey, "command": url}
-        
-        try:
-            async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
-                response = await client.post(api_url, json=payload, headers={"Content-Type": "application/json"})
-                try:
-                    data = response.json()
-                except:
-                    raise Exception("订单侠返回数据格式错误")
-                
-                if data.get("code") == 0:
-                    result = data.get("data", {})
-                    price_fen = result.get("price", 0)
-                    return ProductInfo(
-                        title=result.get("title", ""),
-                        price=str(price_fen / 100 if price_fen else 0),
-                        description=result.get("title", ""),
-                        images=[],
-                        platform="douyin"
-                    )
-                else:
-                    raise Exception(f"订单侠解析失败: {data.get('msg', '未知错误')}")
-        except Exception as e:
-            raise Exception(f"所有解析方式均失败: {str(e)}")
+        raise Exception("无法解析该链接，请检查链接格式或手动上传商品图片")
 
     def _extract_douyin_id(self, url: str) -> str:
         if "v.douyin.com" in url:
