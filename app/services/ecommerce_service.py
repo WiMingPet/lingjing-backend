@@ -249,7 +249,7 @@ class EcommerceService:
             print(f"[DEBUG] HTML兜底解析失败: {e}")
         
         # RSS兜底：从视频ID解析
-        video_id_match = re.search(r'/video/(\d+)/', final_url)
+        video_id_match = re.search(r'/video/(\d+)', final_url)
         if video_id_match:
             video_id = video_id_match.group(1)
             try:
