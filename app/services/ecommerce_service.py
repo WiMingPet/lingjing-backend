@@ -248,6 +248,33 @@ class EcommerceService:
         except Exception as e:
             print(f"[DEBUG] HTML兜底解析失败: {e}")
         
+        # RSS兜底：从视频ID解析
+        video_id_match = re.search(r'/video/(\d+)/', final_url)
+        if video_id_match:
+            video_id = video_id_match.group(1)
+            try:
+                api_url = f"https://www.iesdouyin.com/web/api/v2/aweme/iteminfo/?item_ids={video_id}"
+                resp = requests.get(api_url, headers={
+                    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)"
+                }, timeout=10)
+                data = resp.json()
+                item_list = data.get("item_list", [])
+                if item_list:
+                    item = item_list[0]
+                    title = item.get("desc", "抖音视频")
+                    cover = item.get("video", {}).get("cover", {}).get("url_list", [""])[0]
+                    images = [cover] if cover else []
+                    print(f"[DEBUG] RSS解析成功: {title[:50]}...")
+                    return {
+                        "title": title,
+                        "price": "0",
+                        "description": title,
+                        "images": images,
+                        "platform": "douyin"
+                    }
+            except Exception as e:
+                print(f"[DEBUG] RSS解析失败: {e}")
+        
         return None
 
     async def parse_product_url(self, url: str) -> ProductInfo:
