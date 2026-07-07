@@ -160,6 +160,32 @@ class EcommerceService:
         import json
         from urllib.parse import unquote
         
+        # ========== 0. 处理 aweme:// 协议链接 ==========
+        if url.startswith("aweme://"):
+            # 提取 url 参数
+            match = re.search(r'url=(https?%3A%2F%2F[^&]+)', url)
+            if match:
+                real_url = unquote(match.group(1))
+                print(f"[DEBUG] 从 aweme:// 中提取真实URL: {real_url[:100]}...")
+                url = real_url
+            else:
+                # 提取 commodity_id
+                match = re.search(r'commodity_id%3D(\d+)', url)
+                if match:
+                    commodity_id = match.group(1)
+                    url = f"https://www.douyin.com/product/{commodity_id}"
+                    print(f"[DEBUG] 从 aweme:// 中提取商品ID: {commodity_id}")
+                else:
+                    # 提取 promotion_id
+                    match = re.search(r'promotion_id%3D(\d+)', url)
+                    if match:
+                        promotion_id = match.group(1)
+                        url = f"https://www.douyin.com/product/{promotion_id}"
+                        print(f"[DEBUG] 从 aweme:// 中提取推广ID: {promotion_id}")
+                    else:
+                        print(f"[DEBUG] 无法解析 aweme:// 链接: {url[:100]}...")
+                        return None
+        
         # ========== 1. URL 清理 ==========
         clean_url = url
         if not url.startswith("http"):
@@ -183,8 +209,7 @@ class EcommerceService:
             html = resp.text
         except Exception as e:
             print(f"[DEBUG] 请求失败: {e}")
-            final_url = clean_url
-            html = ""
+            return None
         
         # ========== 2. 抖音商城链接（保留原有逻辑，完全不动） ==========
         match = re.search(r'goods_detail=([^&]+)', final_url)
@@ -211,30 +236,19 @@ class EcommerceService:
             except Exception as e:
                 print(f"[DEBUG] goods_detail解析异常: {e}")
         
-        # ========== 3. 从 HTML 中提取 RENDER_DATA（兜底方案） ==========
+        # ========== 3. 从 HTML 中提取 RENDER_DATA ==========
         try:
-            # 方法1：查找 RENDER_DATA
             render_match = re.search(r'<script id="RENDER_DATA" type="application/json">(.*?)</script>', html, re.DOTALL)
             if render_match:
                 json_text = render_match.group(1)
-                # 有时是 URL 编码的
                 if '%' in json_text:
                     json_text = unquote(json_text)
                 data = json.loads(json_text)
-                
-                # 尝试提取视频/图集数据
                 return self._extract_from_render_data(data, final_url)
             
-            # 方法2：查找 __NEXT_DATA__
             next_match = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', html, re.DOTALL)
             if next_match:
                 data = json.loads(next_match.group(1))
-                return self._extract_from_render_data(data, final_url)
-            
-            # 方法3：查找 window._ROUTER_DATA
-            router_match = re.search(r'window\._ROUTER_DATA\s*=\s*({.*?});', html, re.DOTALL)
-            if router_match:
-                data = json.loads(router_match.group(1))
                 return self._extract_from_render_data(data, final_url)
                 
         except Exception as e:
