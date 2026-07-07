@@ -78,25 +78,6 @@ async def generate_tryon(
     # ✅ 生成成功后扣点
     check_and_deduct_credits(user, db, 10, "虚拟试穿")
     
-    # ========== ✅ 后端自动保存历史记录 ==========
-    try:
-        from app.routers.history import save_history
-        
-        output_data = task.output_data or {}
-        video_url = output_data.get("video_url")
-        tryon_image_url = output_data.get("tryon_image_url")
-        
-        if video_url:
-            history_request = SaveHistoryRequest(
-                url=video_url,
-                type="虚拟试穿",
-                thumbnail=tryon_image_url
-            )
-            await save_history(history_request, db, current_user)
-            print(f"[DEBUG] ✅ 试穿历史记录已自动保存")
-    except Exception as e:
-        print(f"[DEBUG] ⚠️ 历史记录保存失败（不影响主流程）: {e}")
-    
     return APIResponse(
         code=200,
         message="虚拟试穿任务已提交",

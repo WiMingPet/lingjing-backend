@@ -266,6 +266,34 @@ async def generate_digital_human(
     video_url = result.get("task_result", {}).get("video_url", "")
     print(f"[DEBUG] 数字人视频URL: {video_url}")
 
+    # ========== 自动保存历史记录 ==========
+    if video_url:
+        from app.models.history import History
+        from app.services.video_service import VideoService
+        
+        existing = db.query(History).filter(
+            History.user_id == current_user.id,
+            History.url == video_url,
+            History.type == "数字人分身"
+        ).first()
+        
+        if not existing:
+            thumbnail = None
+            try:
+                thumbnail = await VideoService.extract_thumbnail(video_url)
+            except Exception as e:
+                print(f"[DEBUG] 封面生成失败: {e}")
+            
+            history = History(
+                user_id=current_user.id,
+                url=video_url,
+                type="数字人分身",
+                thumbnail=thumbnail
+            )
+            db.add(history)
+            db.commit()
+    # ========================================
+
     return APIResponse(
         code=200,
         message="数字人视频生成成功",

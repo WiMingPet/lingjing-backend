@@ -143,9 +143,10 @@ class TryonService:
             if not existing:
                 thumbnail = None
                 try:
+                    from app.services.video_service import VideoService
                     thumbnail = await VideoService.extract_thumbnail(video_url)
                 except Exception as e:
-                    print(f"[DEBUG] 封面生成失败: {e}")
+                    print(f"[DEBUG] 封面生成失败（不影响主流程）: {e}")
                 
                 history = History(
                     user_id=user_id,

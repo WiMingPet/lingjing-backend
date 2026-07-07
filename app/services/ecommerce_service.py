@@ -155,104 +155,171 @@ class EcommerceService:
             return "播报男声"
         return "温柔女声"
 
-    def _parse_douyin_from_url(self, url: str) -> Optional[dict]:
-        import re
-        from urllib.parse import unquote
+def _parse_douyin_from_url(self, url: str) -> Optional[dict]:
+    import re
+    import json
+    from urllib.parse import unquote
+    
+    # ========== 1. URL 清理 ==========
+    clean_url = url
+    if not url.startswith("http"):
+        http_match = re.search(r'(https?://[^\s]+)', url)
+        if http_match:
+            clean_url = http_match.group(1)
+        else:
+            aweme_match = re.search(r'url=(https?%3A%2F%2F[^&]+)', url)
+            if aweme_match:
+                clean_url = unquote(aweme_match.group(1))
+    
+    if not clean_url.startswith("http"):
+        return None
+    
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
+        }
+        resp = requests.get(clean_url, headers=headers, allow_redirects=True, timeout=10)
+        final_url = resp.url
+        html = resp.text
+    except Exception as e:
+        print(f"[DEBUG] 请求失败: {e}")
+        final_url = clean_url
+        html = ""
+    
+    # ========== 2. 抖音商城链接（保留原有逻辑，完全不动） ==========
+    match = re.search(r'goods_detail=([^&]+)', final_url)
+    if match:
+        try:
+            encoded_json = match.group(1)
+            decoded_json = unquote(encoded_json)
+            goods_detail = json.loads(decoded_json)
+            price_fen = goods_detail.get("min_price", 0)
+            img_data = goods_detail.get("img", {})
+            images = img_data.get("url_list", [])
+            title = goods_detail.get("title", "")
+            
+            if title and images:
+                print(f"[INFO] goods_detail解析成功: {title[:50]}...，{len(images)}张图")
+                return {
+                    "title": title,
+                    "price": price_fen / 100 if price_fen else 0,
+                    "description": title,
+                    "images": images,
+                    "video_url": None,
+                    "platform": "douyin"
+                }
+        except Exception as e:
+            print(f"[DEBUG] goods_detail解析异常: {e}")
+    
+    # ========== 3. 从 HTML 中提取 RENDER_DATA（兜底方案） ==========
+    try:
+        # 方法1：查找 RENDER_DATA
+        render_match = re.search(r'<script id="RENDER_DATA" type="application/json">(.*?)</script>', html, re.DOTALL)
+        if render_match:
+            json_text = render_match.group(1)
+            # 有时是 URL 编码的
+            if '%' in json_text:
+                json_text = unquote(json_text)
+            data = json.loads(json_text)
+            
+            # 尝试提取视频/图集数据
+            return self._extract_from_render_data(data, final_url)
         
-        # 1. 提取纯链接
-        clean_url = url
-        if not url.startswith("http"):
-            http_match = re.search(r'(https?://[^\s]+)', url)
-            if http_match:
-                clean_url = http_match.group(1)
-            else:
-                aweme_match = re.search(r'url=(https?%3A%2F%2F[^&]+)', url)
-                if aweme_match:
-                    clean_url = unquote(aweme_match.group(1))
+        # 方法2：查找 __NEXT_DATA__
+        next_match = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', html, re.DOTALL)
+        if next_match:
+            data = json.loads(next_match.group(1))
+            return self._extract_from_render_data(data, final_url)
         
-        if not clean_url.startswith("http"):
+        # 方法3：查找 window._ROUTER_DATA
+        router_match = re.search(r'window\._ROUTER_DATA\s*=\s*({.*?});', html, re.DOTALL)
+        if router_match:
+            data = json.loads(router_match.group(1))
+            return self._extract_from_render_data(data, final_url)
+            
+    except Exception as e:
+        print(f"[ERROR] HTML解析失败: {e}")
+    
+    return None
+
+def _extract_from_render_data(self, data: dict, url: str) -> Optional[dict]:
+    """从 RENDER_DATA 中提取视频/图集信息"""
+    try:
+        # 抖音的数据结构可能嵌套很深，需要遍历查找
+        # 常见路径：data -> app -> videoInfoRes -> item_list -> [0]
+        # 或 data -> app -> noteInfoRes -> note -> ...
+        
+        def find_key(d, target_keys):
+            """递归查找目标 key"""
+            if isinstance(d, dict):
+                for key in target_keys:
+                    if key in d:
+                        return d[key]
+                for v in d.values():
+                    result = find_key(v, target_keys)
+                    if result is not None:
+                        return result
+            elif isinstance(d, list):
+                for item in d:
+                    result = find_key(item, target_keys)
+                    if result is not None:
+                        return result
             return None
         
-        try:
-            headers = {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)"}
-            resp = requests.get(clean_url, headers=headers, allow_redirects=True, timeout=10)
-            final_url = resp.url
-        except:
-            final_url = clean_url
-        
-        # 2. 优先尝试 goods_detail 解析（抖音商城链接）
-        match = re.search(r'goods_detail=([^&]+)', final_url)
-        if match:
-            try:
-                import json
-                encoded_json = match.group(1)
-                decoded_json = unquote(encoded_json)
-                goods_detail = json.loads(decoded_json)
-                price_fen = goods_detail.get("min_price", 0)
-                img_data = goods_detail.get("img", {})
-                images = img_data.get("url_list", [])
-                title = goods_detail.get("title", "")
-                
-                if title and images:
-                    print(f"[INFO] goods_detail解析成功: {title[:50]}...，{len(images)}张图")
-                    return {
-                        "title": title,
-                        "price": price_fen / 100 if price_fen else 0,
-                        "description": title,
-                        "images": images,
-                        "video_url": None,
-                        "platform": "douyin"
-                    }
-            except Exception as e:
-                print(f"[DEBUG] goods_detail解析异常: {e}")
-        
-        # 3. 兜底：调用抖音公开API
-        try:
-            aweme_id = None
-            id_match = re.search(r'/video/(\d+)|/note/(\d+)|aweme_id=(\d+)|item_id=(\d+)', final_url)
-            if id_match:
-                aweme_id = next(g for g in id_match.groups() if g)
-            
-            if not aweme_id:
-                return None
-            
-            api_url = f"https://www.iesdouyin.com/web/api/v2/aweme/iteminfo/?item_ids={aweme_id}"
-            resp = requests.get(api_url, headers=headers, timeout=10)
-            data = resp.json()
-            
-            item_list = data.get("item_list", [])
-            if not item_list:
-                return None
-            
+        # 查找 item_list（视频列表）
+        item_list = find_key(data, ["item_list"])
+        if item_list and len(item_list) > 0:
             item = item_list[0]
-            title = item.get("desc", "抖音视频")
-            
+            title = item.get("desc", "")
             images = []
-            cover_list = item.get("video", {}).get("cover", {}).get("url_list", [])
-            if cover_list:
-                images.append(cover_list[0])
             
-            for img in item.get("images", []):
+            # 提取视频封面
+            video_cover = item.get("video", {}).get("cover", {}).get("url_list", [])
+            if video_cover:
+                images.append(video_cover[0])
+            
+            # 提取图集图片
+            if "images" in item:
+                for img in item.get("images", []):
+                    url_list = img.get("url_list", [])
+                    if url_list:
+                        images.append(url_list[0])
+            
+            if images:
+                return {
+                    "title": title or "抖音视频",
+                    "price": "0",
+                    "description": title or "抖音视频",
+                    "images": images[:9],
+                    "video_url": None,
+                    "platform": "douyin"
+                }
+        
+        # 查找 note（图集/笔记）
+        note = find_key(data, ["note"])
+        if note:
+            title = note.get("desc", "")
+            images = []
+            # 图集图片
+            for img in note.get("images", []):
                 url_list = img.get("url_list", [])
                 if url_list:
                     images.append(url_list[0])
             
-            if not images:
-                return None
-            
-            print(f"[INFO] API解析成功: {title[:50]}...，{len(images)}张图")
-            return {
-                "title": title,
-                "price": "0",
-                "description": title,
-                "images": images[:9],
-                "video_url": None,
-                "platform": "douyin"
-            }
-            
-        except Exception as e:
-            print(f"[ERROR] API解析失败: {e}")
-            return None
+            if images:
+                return {
+                    "title": title or "抖音图集",
+                    "price": "0",
+                    "description": title or "抖音图集",
+                    "images": images[:9],
+                    "video_url": None,
+                    "platform": "douyin"
+                }
+                
+    except Exception as e:
+        print(f"[ERROR] 提取数据失败: {e}")
+    
+    return None
 
     async def parse_product_url(self, url: str) -> ProductInfo:
         local_result = self._parse_douyin_from_url(url)
