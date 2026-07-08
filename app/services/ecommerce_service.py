@@ -204,6 +204,24 @@ class EcommerceService:
             resp = requests.get(clean_url, headers=headers, allow_redirects=True, timeout=10)
             final_url = resp.url
             html = resp.text
+            
+            # ===== 如果重定向后是 aweme://，提取真实 URL =====
+            if final_url.startswith("aweme://"):
+                print(f"[DEBUG] 重定向到 aweme://，尝试提取真实 URL...")
+                match = re.search(r'url=([^&]+)', final_url)
+                if match:
+                    final_url = unquote(match.group(1))
+                    print(f"[DEBUG] 提取真实 URL: {final_url[:100]}...")
+                    # 重新请求真实 URL
+                    resp2 = requests.get(final_url, headers=headers, allow_redirects=True, timeout=10)
+                    final_url = resp2.url
+                    html = resp2.text
+                else:
+                    # 如果无法提取，尝试用原始 URL 重新请求
+                    resp2 = requests.get(clean_url, headers=headers, allow_redirects=False, timeout=10)
+                    final_url = resp2.url
+                    html = resp2.text
+                    
         except Exception as e:
             print(f"[DEBUG] 请求失败: {e}")
             final_url = clean_url
@@ -338,26 +356,22 @@ class EcommerceService:
     async def parse_product_url(self, url: str) -> ProductInfo:
         import re
         from urllib.parse import unquote
-        
-        # ===== 打印原始 URL =====
-        print(f"[DEBUG] parse_url 收到原始 URL: {repr(url)}")
-        
-        # 清理 URL
-        url = url.strip()
-        print(f"[DEBUG] strip 后 URL: {repr(url)}")
-        
+
+        # ===== 处理 aweme:// 协议链接 =====
         if url.startswith("aweme://"):
-            print("[DEBUG] ✅ 匹配到 aweme://")
+            print(f"[DEBUG] parse_url 检测到 aweme:// 链接")
             match = re.search(r'url=([^&]+)', url)
             if match:
                 url = unquote(match.group(1))
-                print(f"[DEBUG] 转换后: {url[:100]}...")
+                print(f"[DEBUG] aweme:// 转换为: {url[:100]}...")
             else:
-                print("[DEBUG] ❌ 未找到 url 参数")
-                raise Exception("无法解析 aweme:// 链接")
-        else:
-            print("[DEBUG] ❌ 未匹配到 aweme://")
-        
+                match = re.search(r'commodity_id%3D(\d+)', url)
+                if match:
+                    url = f"https://www.douyin.com/product/{match.group(1)}"
+                    print(f"[DEBUG] 提取商品ID: {match.group(1)}")
+                else:
+                    raise Exception("无法解析 aweme:// 链接")
+
         # ===== 本地解析 =====
         local_result = self._parse_douyin_from_url(url)
         if local_result and local_result.get("title"):
