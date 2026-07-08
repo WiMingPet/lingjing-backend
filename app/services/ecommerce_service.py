@@ -275,6 +275,39 @@ class EcommerceService:
             final_url = clean_url
             html = ""
 
+        # ========== 商品页兜底：从 /product/ 页面提取 goods_detail ==========
+        if '/product/' in final_url and not html:
+            # 重新请求获取 HTML
+            try:
+                resp = requests.get(final_url, headers=headers, allow_redirects=True, timeout=10)
+                html = resp.text
+            except:
+                pass
+        
+        # 从 HTML 中找 goods_detail
+        if html and 'goods_detail' in html:
+            detail_match = re.search(r'goods_detail["\']?\s*[:=]\s*["\']?({[^"\'<>]+})', html)
+            if not detail_match:
+                detail_match = re.search(r'goods_detail=([^&"\']+)', html)
+            if detail_match:
+                try:
+                    decoded = unquote(detail_match.group(1))
+                    goods_detail = json.loads(decoded)
+                    title = goods_detail.get("title", "")
+                    images = goods_detail.get("img", {}).get("url_list", [])
+                    if title and images:
+                        print(f"[INFO] HTML中提取goods_detail成功: {title[:50]}...")
+                        return {
+                            "title": title,
+                            "price": str(goods_detail.get("min_price", 0) / 100),
+                            "description": title,
+                            "images": images,
+                            "video_url": None,
+                            "platform": "douyin"
+                        }
+                except Exception as e:
+                    print(f"[DEBUG] HTML goods_detail解析失败: {e}")
+                    
         # ========== 2. 抖音商城链接（goods_detail） ==========
         for check_url in [clean_url, final_url]:
             match = re.search(r'goods_detail=([^&]+)', check_url)
