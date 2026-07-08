@@ -164,14 +164,12 @@ class EcommerceService:
         if url.startswith("aweme://"):
             print(f"[DEBUG] 检测到 aweme:// 链接，尝试提取真实URL...")
 
-            # 提取 url 参数
             match = re.search(r'url=([^&]+)', url)
             if match:
                 real_url = unquote(match.group(1))
                 print(f"[DEBUG] 从 aweme:// 提取真实URL: {real_url[:100]}...")
                 url = real_url
             else:
-                # 提取 commodity_id
                 match = re.search(r'commodity_id%3D(\d+)', url)
                 if match:
                     commodity_id = match.group(1)
@@ -201,34 +199,49 @@ class EcommerceService:
             headers = {
                 "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
             }
-            resp = requests.get(clean_url, headers=headers, allow_redirects=True, timeout=10)
-            final_url = resp.url
-            html = resp.text
             
-            # ===== 如果重定向后是 aweme://，提取真实 URL =====
-            if final_url.startswith("aweme://"):
-                print(f"[DEBUG] 重定向到 aweme://，尝试提取真实 URL...")
-                match = re.search(r'url=([^&]+)', final_url)
-                if match:
-                    final_url = unquote(match.group(1))
-                    print(f"[DEBUG] 提取真实 URL: {final_url[:100]}...")
-                    # 重新请求真实 URL
-                    resp2 = requests.get(final_url, headers=headers, allow_redirects=True, timeout=10)
+            # ===== 关键修复：禁用自动重定向 =====
+            resp = requests.get(clean_url, headers=headers, allow_redirects=False, timeout=10)
+            
+            # 检查是否是重定向
+            if resp.status_code in (301, 302, 303, 307, 308):
+                location = resp.headers.get('Location', '')
+                print(f"[DEBUG] 重定向到: {location[:100]}...")
+                
+                if location.startswith("aweme://"):
+                    # 从 aweme:// 中提取真实 URL
+                    match = re.search(r'url=([^&]+)', location)
+                    if match:
+                        real_url = unquote(match.group(1))
+                        print(f"[DEBUG] aweme:// 重定向，提取真实URL: {real_url[:100]}...")
+                        # 重新请求真实 URL
+                        resp2 = requests.get(real_url, headers=headers, allow_redirects=True, timeout=10)
+                        final_url = resp2.url
+                        html = resp2.text
+                    else:
+                        # 如果提取失败，直接使用原始 URL 再试一次
+                        resp2 = requests.get(clean_url, headers=headers, allow_redirects=True, timeout=10)
+                        final_url = resp2.url
+                        html = resp2.text
+                elif location.startswith("http"):
+                    # 正常 HTTP 重定向
+                    resp2 = requests.get(location, headers=headers, allow_redirects=True, timeout=10)
                     final_url = resp2.url
                     html = resp2.text
                 else:
-                    # 如果无法提取，尝试用原始 URL 重新请求
-                    resp2 = requests.get(clean_url, headers=headers, allow_redirects=False, timeout=10)
-                    final_url = resp2.url
-                    html = resp2.text
-                    
+                    # 其他情况，直接使用原始响应
+                    final_url = clean_url
+                    html = resp.text
+            else:
+                final_url = resp.url
+                html = resp.text
+
         except Exception as e:
             print(f"[DEBUG] 请求失败: {e}")
             final_url = clean_url
             html = ""
 
         # ========== 2. 抖音商城链接（goods_detail） ==========
-        # 先检查原始 URL，再检查重定向后的 URL
         for check_url in [clean_url, final_url]:
             match = re.search(r'goods_detail=([^&]+)', check_url)
             if match:
@@ -254,7 +267,7 @@ class EcommerceService:
                 except Exception as e:
                     print(f"[DEBUG] goods_detail解析异常: {e}")
 
-        # ========== 3. 从 HTML 中提取 RENDER_DATA（兜底方案） ==========
+        # ========== 3. 从 HTML 中提取 RENDER_DATA ==========
         try:
             render_match = re.search(r'<script id="RENDER_DATA" type="application/json">(.*?)</script>', html, re.DOTALL)
             if render_match:
