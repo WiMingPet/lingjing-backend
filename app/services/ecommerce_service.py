@@ -159,14 +159,16 @@ class EcommerceService:
         import re
         import json
         from urllib.parse import unquote
-        
+
         # ========== 0. 处理 aweme:// 协议链接 ==========
         if url.startswith("aweme://"):
+            print(f"[DEBUG] 检测到 aweme:// 链接，尝试提取真实URL...")
+
             # 提取 url 参数
-            match = re.search(r'url=(https?%3A%2F%2F[^&]+)', url)
+            match = re.search(r'url=([^&]+)', url)
             if match:
                 real_url = unquote(match.group(1))
-                print(f"[DEBUG] 从 aweme:// 中提取真实URL: {real_url[:100]}...")
+                print(f"[DEBUG] 从 aweme:// 提取真实URL: {real_url[:100]}...")
                 url = real_url
             else:
                 # 提取 commodity_id
@@ -174,18 +176,13 @@ class EcommerceService:
                 if match:
                     commodity_id = match.group(1)
                     url = f"https://www.douyin.com/product/{commodity_id}"
-                    print(f"[DEBUG] 从 aweme:// 中提取商品ID: {commodity_id}")
+                    print(f"[DEBUG] 从 aweme:// 提取商品ID: {commodity_id}")
                 else:
-                    # 提取 promotion_id
-                    match = re.search(r'promotion_id%3D(\d+)', url)
-                    if match:
-                        promotion_id = match.group(1)
-                        url = f"https://www.douyin.com/product/{promotion_id}"
-                        print(f"[DEBUG] 从 aweme:// 中提取推广ID: {promotion_id}")
-                    else:
-                        print(f"[DEBUG] 无法解析 aweme:// 链接: {url[:100]}...")
-                        return None
-        
+                    print(f"[DEBUG] 无法解析 aweme:// 链接: {url[:100]}...")
+                    return None
+
+            print(f"[DEBUG] aweme:// 转换后 URL: {url[:100]}...")
+
         # ========== 1. URL 清理 ==========
         clean_url = url
         if not url.startswith("http"):
@@ -196,10 +193,10 @@ class EcommerceService:
                 aweme_match = re.search(r'url=(https?%3A%2F%2F[^&]+)', url)
                 if aweme_match:
                     clean_url = unquote(aweme_match.group(1))
-        
+
         if not clean_url.startswith("http"):
             return None
-        
+
         try:
             headers = {
                 "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
@@ -209,34 +206,37 @@ class EcommerceService:
             html = resp.text
         except Exception as e:
             print(f"[DEBUG] 请求失败: {e}")
-            return None
-        
-        # ========== 2. 抖音商城链接（保留原有逻辑，完全不动） ==========
-        match = re.search(r'goods_detail=([^&]+)', final_url)
-        if match:
-            try:
-                encoded_json = match.group(1)
-                decoded_json = unquote(encoded_json)
-                goods_detail = json.loads(decoded_json)
-                price_fen = goods_detail.get("min_price", 0)
-                img_data = goods_detail.get("img", {})
-                images = img_data.get("url_list", [])
-                title = goods_detail.get("title", "")
-                
-                if title and images:
-                    print(f"[INFO] goods_detail解析成功: {title[:50]}...，{len(images)}张图")
-                    return {
-                        "title": title,
-                        "price": price_fen / 100 if price_fen else 0,
-                        "description": title,
-                        "images": images,
-                        "video_url": None,
-                        "platform": "douyin"
-                    }
-            except Exception as e:
-                print(f"[DEBUG] goods_detail解析异常: {e}")
-        
-        # ========== 3. 从 HTML 中提取 RENDER_DATA ==========
+            final_url = clean_url
+            html = ""
+
+        # ========== 2. 抖音商城链接（goods_detail） ==========
+        # 先检查原始 URL，再检查重定向后的 URL
+        for check_url in [clean_url, final_url]:
+            match = re.search(r'goods_detail=([^&]+)', check_url)
+            if match:
+                try:
+                    encoded_json = match.group(1)
+                    decoded_json = unquote(encoded_json)
+                    goods_detail = json.loads(decoded_json)
+                    price_fen = goods_detail.get("min_price", 0)
+                    img_data = goods_detail.get("img", {})
+                    images = img_data.get("url_list", [])
+                    title = goods_detail.get("title", "")
+
+                    if title and images:
+                        print(f"[INFO] goods_detail解析成功: {title[:50]}...，{len(images)}张图")
+                        return {
+                            "title": title,
+                            "price": price_fen / 100 if price_fen else 0,
+                            "description": title,
+                            "images": images,
+                            "video_url": None,
+                            "platform": "douyin"
+                        }
+                except Exception as e:
+                    print(f"[DEBUG] goods_detail解析异常: {e}")
+
+        # ========== 3. 从 HTML 中提取 RENDER_DATA（兜底方案） ==========
         try:
             render_match = re.search(r'<script id="RENDER_DATA" type="application/json">(.*?)</script>', html, re.DOTALL)
             if render_match:
@@ -245,15 +245,15 @@ class EcommerceService:
                     json_text = unquote(json_text)
                 data = json.loads(json_text)
                 return self._extract_from_render_data(data, final_url)
-            
+
             next_match = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', html, re.DOTALL)
             if next_match:
                 data = json.loads(next_match.group(1))
                 return self._extract_from_render_data(data, final_url)
-                
+
         except Exception as e:
             print(f"[ERROR] HTML解析失败: {e}")
-        
+
         return None
 
     def _extract_from_render_data(self, data: dict, url: str) -> Optional[dict]:
