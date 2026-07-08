@@ -336,8 +336,27 @@ class EcommerceService:
         return None
 
     async def parse_product_url(self, url: str) -> ProductInfo:
+        import re
+        from urllib.parse import unquote
+        
+        # ===== 处理 aweme:// 协议链接（放在最前面） =====
+        if url.startswith("aweme://"):
+            print(f"[DEBUG] parse_url 检测到 aweme:// 链接")
+            match = re.search(r'url=([^&]+)', url)
+            if match:
+                url = unquote(match.group(1))
+                print(f"[DEBUG] aweme:// 转换为: {url[:100]}...")
+            else:
+                match = re.search(r'commodity_id%3D(\d+)', url)
+                if match:
+                    url = f"https://www.douyin.com/product/{match.group(1)}"
+                    print(f"[DEBUG] 提取商品ID: {match.group(1)}")
+                else:
+                    raise Exception("无法解析 aweme:// 链接")
+        
+        # ===== 本地解析 =====
         local_result = self._parse_douyin_from_url(url)
-        if local_result:
+        if local_result and local_result.get("title"):
             print(f"[INFO] 本地解析成功: {local_result.get('title', '无标题')[:50]}")
             return ProductInfo(
                 title=local_result.get("title", "抖音商品"),
@@ -348,6 +367,7 @@ class EcommerceService:
                 platform=local_result.get("platform", "douyin")
             )
         
+        # ===== 本地解析失败 =====
         raise Exception("无法解析该链接，请检查链接格式或手动上传商品图片")
 
     def _extract_douyin_id(self, url: str) -> str:
