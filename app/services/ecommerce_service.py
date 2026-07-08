@@ -168,6 +168,27 @@ class EcommerceService:
             if match:
                 real_url = unquote(match.group(1))
                 print(f"[DEBUG] 从 aweme:// 提取真实URL: {real_url[:100]}...")
+                
+                if "bytegecko.com" in real_url or "merchPromoting" in real_url:
+                    id_match = re.search(r'commodity_id[=:](\d+)', real_url)
+                    if id_match:
+                        commodity_id = id_match.group(1)
+                        real_url = f"https://www.douyin.com/product/{commodity_id}"
+                        print(f"[DEBUG] H5页面转换为商品详情页: {real_url}")
+                    else:
+                        id_match = re.search(r'promotion_id[=:](\d+)', real_url)
+                        if id_match:
+                            commodity_id = id_match.group(1)
+                            real_url = f"https://www.douyin.com/product/{commodity_id}"
+                            print(f"[DEBUG] H5页面转换为商品详情页（使用promotion_id）: {real_url}")
+                        else:
+                            # ===== 新增：尝试提取任何数字 ID =====
+                            id_match = re.search(r'(\d{19})', real_url)
+                            if id_match:
+                                commodity_id = id_match.group(1)
+                                real_url = f"https://www.douyin.com/product/{commodity_id}"
+                                print(f"[DEBUG] H5页面转换为商品详情页（使用提取的ID）: {real_url}")
+                
                 url = real_url
             else:
                 match = re.search(r'commodity_id%3D(\d+)', url)
@@ -176,8 +197,15 @@ class EcommerceService:
                     url = f"https://www.douyin.com/product/{commodity_id}"
                     print(f"[DEBUG] 从 aweme:// 提取商品ID: {commodity_id}")
                 else:
-                    print(f"[DEBUG] 无法解析 aweme:// 链接: {url[:100]}...")
-                    return None
+                    # ===== 新增：尝试从 aweme:// 链接中直接提取数字 ID =====
+                    id_match = re.search(r'(\d{19})', url)
+                    if id_match:
+                        commodity_id = id_match.group(1)
+                        url = f"https://www.douyin.com/product/{commodity_id}"
+                        print(f"[DEBUG] 从 aweme:// 提取数字ID: {commodity_id}")
+                    else:
+                        print(f"[DEBUG] 无法解析 aweme:// 链接: {url[:100]}...")
+                        return None
 
             print(f"[DEBUG] aweme:// 转换后 URL: {url[:100]}...")
 
@@ -200,36 +228,42 @@ class EcommerceService:
                 "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
             }
             
-            # ===== 关键修复：禁用自动重定向 =====
             resp = requests.get(clean_url, headers=headers, allow_redirects=False, timeout=10)
             
-            # 检查是否是重定向
             if resp.status_code in (301, 302, 303, 307, 308):
                 location = resp.headers.get('Location', '')
                 print(f"[DEBUG] 重定向到: {location[:100]}...")
                 
                 if location.startswith("aweme://"):
-                    # 从 aweme:// 中提取真实 URL
                     match = re.search(r'url=([^&]+)', location)
                     if match:
                         real_url = unquote(match.group(1))
                         print(f"[DEBUG] aweme:// 重定向，提取真实URL: {real_url[:100]}...")
-                        # 重新请求真实 URL
+                        
+                        # ===== 新增：H5 页面转商品详情页 =====
+                        if "bytegecko.com" in real_url or "merchPromoting" in real_url:
+                            id_match = re.search(r'commodity_id[=:](\d+)', real_url)
+                            if id_match:
+                                real_url = f"https://www.douyin.com/product/{id_match.group(1)}"
+                                print(f"[DEBUG] H5页面转换为商品详情页: {real_url}")
+                            else:
+                                id_match = re.search(r'(\d{19})', real_url)
+                                if id_match:
+                                    real_url = f"https://www.douyin.com/product/{id_match.group(1)}"
+                                    print(f"[DEBUG] H5页面转换为商品详情页（提取ID）: {real_url}")
+                        
                         resp2 = requests.get(real_url, headers=headers, allow_redirects=True, timeout=10)
                         final_url = resp2.url
                         html = resp2.text
                     else:
-                        # 如果提取失败，直接使用原始 URL 再试一次
                         resp2 = requests.get(clean_url, headers=headers, allow_redirects=True, timeout=10)
                         final_url = resp2.url
                         html = resp2.text
                 elif location.startswith("http"):
-                    # 正常 HTTP 重定向
                     resp2 = requests.get(location, headers=headers, allow_redirects=True, timeout=10)
                     final_url = resp2.url
                     html = resp2.text
                 else:
-                    # 其他情况，直接使用原始响应
                     final_url = clean_url
                     html = resp.text
             else:
