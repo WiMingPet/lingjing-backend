@@ -156,305 +156,81 @@ class EcommerceService:
         return "温柔女声"
 
     def _parse_douyin_from_url(self, url: str) -> Optional[dict]:
-        import re
-        import json
-        from urllib.parse import unquote
-
-        # ========== 0. 处理 aweme:// 协议链接 ==========
-        if url.startswith("aweme://"):
-            print(f"[DEBUG] 检测到 aweme:// 链接，尝试提取真实URL...")
-
-            match = re.search(r'url=([^&]+)', url)
-            if match:
-                real_url = unquote(match.group(1))
-                print(f"[DEBUG] 从 aweme:// 提取真实URL: {real_url[:100]}...")
-                
-                if "bytegecko.com" in real_url or "merchPromoting" in real_url:
-                    id_match = re.search(r'commodity_id[=:](\d+)', real_url)
-                    if id_match:
-                        commodity_id = id_match.group(1)
-                        real_url = f"https://www.douyin.com/product/{commodity_id}"
-                        print(f"[DEBUG] H5页面转换为商品详情页: {real_url}")
-                    else:
-                        id_match = re.search(r'promotion_id[=:](\d+)', real_url)
-                        if id_match:
-                            commodity_id = id_match.group(1)
-                            real_url = f"https://www.douyin.com/product/{commodity_id}"
-                            print(f"[DEBUG] H5页面转换为商品详情页（使用promotion_id）: {real_url}")
-                        else:
-                            # ===== 新增：尝试提取任何数字 ID =====
-                            id_match = re.search(r'(\d{19})', real_url)
-                            if id_match:
-                                commodity_id = id_match.group(1)
-                                real_url = f"https://www.douyin.com/product/{commodity_id}"
-                                print(f"[DEBUG] H5页面转换为商品详情页（使用提取的ID）: {real_url}")
-                
-                url = real_url
-            else:
-                match = re.search(r'commodity_id%3D(\d+)', url)
-                if match:
-                    commodity_id = match.group(1)
-                    url = f"https://www.douyin.com/product/{commodity_id}"
-                    print(f"[DEBUG] 从 aweme:// 提取商品ID: {commodity_id}")
-                else:
-                    # ===== 新增：尝试从 aweme:// 链接中直接提取数字 ID =====
-                    id_match = re.search(r'(\d{19})', url)
-                    if id_match:
-                        commodity_id = id_match.group(1)
-                        url = f"https://www.douyin.com/product/{commodity_id}"
-                        print(f"[DEBUG] 从 aweme:// 提取数字ID: {commodity_id}")
-                    else:
-                        print(f"[DEBUG] 无法解析 aweme:// 链接: {url[:100]}...")
-                        return None
-
-            print(f"[DEBUG] aweme:// 转换后 URL: {url[:100]}...")
-
-        # ========== 1. URL 清理 ==========
-        clean_url = url
-        if not url.startswith("http"):
-            http_match = re.search(r'(https?://[^\s]+)', url)
-            if http_match:
-                clean_url = http_match.group(1)
-            else:
-                aweme_match = re.search(r'url=(https?%3A%2F%2F[^&]+)', url)
-                if aweme_match:
-                    clean_url = unquote(aweme_match.group(1))
-
-        if not clean_url.startswith("http"):
-            return None
-
-        try:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
-            }
+            final_url = url
             
-            resp = requests.get(clean_url, headers=headers, allow_redirects=False, timeout=10)
-            
-            if resp.status_code in (301, 302, 303, 307, 308):
-                location = resp.headers.get('Location', '')
-                print(f"[DEBUG] 重定向到: {location[:100]}...")
-                
-                if location.startswith("aweme://"):
-                    match = re.search(r'url=([^&]+)', location)
-                    if match:
-                        real_url = unquote(match.group(1))
-                        print(f"[DEBUG] aweme:// 重定向，提取真实URL: {real_url[:100]}...")
-                        
-                        # ===== 新增：H5 页面转商品详情页 =====
-                        if "bytegecko.com" in real_url or "merchPromoting" in real_url:
-                            id_match = re.search(r'commodity_id[=:](\d+)', real_url)
-                            if id_match:
-                                real_url = f"https://www.douyin.com/product/{id_match.group(1)}"
-                                print(f"[DEBUG] H5页面转换为商品详情页: {real_url}")
-                            else:
-                                id_match = re.search(r'(\d{19})', real_url)
-                                if id_match:
-                                    real_url = f"https://www.douyin.com/product/{id_match.group(1)}"
-                                    print(f"[DEBUG] H5页面转换为商品详情页（提取ID）: {real_url}")
-                        
-                        resp2 = requests.get(real_url, headers=headers, allow_redirects=True, timeout=10)
-                        final_url = resp2.url
-                        html = resp2.text
-                    else:
-                        resp2 = requests.get(clean_url, headers=headers, allow_redirects=True, timeout=10)
-                        final_url = resp2.url
-                        html = resp2.text
-                elif location.startswith("http"):
-                    resp2 = requests.get(location, headers=headers, allow_redirects=True, timeout=10)
-                    final_url = resp2.url
-                    html = resp2.text
-                else:
-                    final_url = clean_url
-                    html = resp.text
-            else:
-                final_url = resp.url
-                html = resp.text
-
-        except Exception as e:
-            print(f"[DEBUG] 请求失败: {e}")
-            final_url = clean_url
-            html = ""
-
-        # ========== 商品页兜底：从 /product/ 页面提取 goods_detail ==========
-        if '/product/' in final_url and not html:
-            # 重新请求获取 HTML
-            try:
-                resp = requests.get(final_url, headers=headers, allow_redirects=True, timeout=10)
-                html = resp.text
-            except:
-                pass
-        
-        # 从 HTML 中找 goods_detail
-        if html and 'goods_detail' in html:
-            detail_match = re.search(r'goods_detail["\']?\s*[:=]\s*["\']?({[^"\'<>]+})', html)
-            if not detail_match:
-                detail_match = re.search(r'goods_detail=([^&"\']+)', html)
-            if detail_match:
+            if "v.douyin.com" in url:
                 try:
-                    decoded = unquote(detail_match.group(1))
-                    goods_detail = json.loads(decoded)
-                    title = goods_detail.get("title", "")
-                    images = goods_detail.get("img", {}).get("url_list", [])
-                    if title and images:
-                        print(f"[INFO] HTML中提取goods_detail成功: {title[:50]}...")
-                        return {
-                            "title": title,
-                            "price": str(goods_detail.get("min_price", 0) / 100),
-                            "description": title,
-                            "images": images,
-                            "video_url": None,
-                            "platform": "douyin"
-                        }
+                    response = requests.get(url, allow_redirects=True, timeout=10)
+                    final_url = response.url
+                    print(f"[DEBUG] 短链接重定向后: {final_url}")
                 except Exception as e:
-                    print(f"[DEBUG] HTML goods_detail解析失败: {e}")
-                    
-        # ========== 2. 抖音商城链接（goods_detail） ==========
-        for check_url in [clean_url, final_url]:
-            match = re.search(r'goods_detail=([^&]+)', check_url)
+                    print(f"[DEBUG] 短链接重定向失败: {e}")
+                    return None
+            
+            match = re.search(r'goods_detail=([^&]+)', final_url)
             if match:
+                encoded_json = match.group(1)
+                decoded_json = unquote(encoded_json)
                 try:
-                    encoded_json = match.group(1)
-                    decoded_json = unquote(encoded_json)
                     goods_detail = json.loads(decoded_json)
                     price_fen = goods_detail.get("min_price", 0)
                     img_data = goods_detail.get("img", {})
                     images = img_data.get("url_list", [])
-                    title = goods_detail.get("title", "")
-
-                    if title and images:
-                        print(f"[INFO] goods_detail解析成功: {title[:50]}...，{len(images)}张图")
-                        return {
-                            "title": title,
-                            "price": price_fen / 100 if price_fen else 0,
-                            "description": title,
-                            "images": images,
-                            "video_url": None,
-                            "platform": "douyin"
-                        }
-                except Exception as e:
-                    print(f"[DEBUG] goods_detail解析异常: {e}")
-
-        # ========== 3. 从 HTML 中提取 RENDER_DATA ==========
-        try:
-            render_match = re.search(r'<script id="RENDER_DATA" type="application/json">(.*?)</script>', html, re.DOTALL)
-            if render_match:
-                json_text = render_match.group(1)
-                if '%' in json_text:
-                    json_text = unquote(json_text)
-                data = json.loads(json_text)
-                return self._extract_from_render_data(data, final_url)
-
-            next_match = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', html, re.DOTALL)
-            if next_match:
-                data = json.loads(next_match.group(1))
-                return self._extract_from_render_data(data, final_url)
-
-        except Exception as e:
-            print(f"[ERROR] HTML解析失败: {e}")
-
-        return None
-
-    def _extract_from_render_data(self, data: dict, url: str) -> Optional[dict]:
-        """从 RENDER_DATA 中提取视频/图集信息"""
-        try:
-            # 抖音的数据结构可能嵌套很深，需要遍历查找
-            # 常见路径：data -> app -> videoInfoRes -> item_list -> [0]
-            # 或 data -> app -> noteInfoRes -> note -> ...
-            
-            def find_key(d, target_keys):
-                """递归查找目标 key"""
-                if isinstance(d, dict):
-                    for key in target_keys:
-                        if key in d:
-                            return d[key]
-                    for v in d.values():
-                        result = find_key(v, target_keys)
-                        if result is not None:
-                            return result
-                elif isinstance(d, list):
-                    for item in d:
-                        result = find_key(item, target_keys)
-                        if result is not None:
-                            return result
-                return None
-            
-            # 查找 item_list（视频列表）
-            item_list = find_key(data, ["item_list"])
-            if item_list and len(item_list) > 0:
-                item = item_list[0]
-                title = item.get("desc", "")
-                images = []
-                
-                # 提取视频封面
-                video_cover = item.get("video", {}).get("cover", {}).get("url_list", [])
-                if video_cover:
-                    images.append(video_cover[0])
-                
-                # 提取图集图片
-                if "images" in item:
-                    for img in item.get("images", []):
-                        url_list = img.get("url_list", [])
-                        if url_list:
-                            images.append(url_list[0])
-                
-                if images:
-                    return {
-                        "title": title or "抖音视频",
-                        "price": "0",
-                        "description": title or "抖音视频",
-                        "images": images[:9],
-                        "video_url": None,
-                        "platform": "douyin"
-                    }
-            
-            # 查找 note（图集/笔记）
-            note = find_key(data, ["note"])
-            if note:
-                title = note.get("desc", "")
-                images = []
-                # 图集图片
-                for img in note.get("images", []):
-                    url_list = img.get("url_list", [])
-                    if url_list:
-                        images.append(url_list[0])
-                
-                if images:
-                    return {
-                        "title": title or "抖音图集",
-                        "price": "0",
-                        "description": title or "抖音图集",
-                        "images": images[:9],
-                        "video_url": None,
-                        "platform": "douyin"
-                    }
                     
-        except Exception as e:
-            print(f"[ERROR] 提取数据失败: {e}")
-        
-        return None
+                    title = goods_detail.get("title", "")
+                    
+                    video_url = None
+                    video_data = goods_detail.get("video", {})
+                    if video_data.get("url_list"):
+                        video_url = video_data["url_list"][0]
+                    if not video_url:
+                        video_match = re.search(r'video_url=([^&]+)', unquote(final_url))
+                        if video_match:
+                            video_url = unquote(video_match.group(1))
+                    
+                    print(f"[DEBUG] 本地解析成功: {title[:50]}...")
+                    print(f"[DEBUG] 获取到 {len(images)} 张图片")
+                    if video_url:
+                        print(f"[DEBUG] 获取到视频: {video_url[:80]}...")
+                    
+                    return {
+                        "title": title,
+                        "price": price_fen / 100 if price_fen else 0,
+                        "description": title,
+                        "images": images,
+                        "video_url": video_url
+                    }
+                except Exception as e:
+                    print(f"[DEBUG] goods_detail 解析异常: {e}")
+            
+            decoded_url = unquote(final_url)
+            title_match = re.search(r'title=([^&]+)', decoded_url)
+            if title_match:
+                try:
+                    title = unquote(title_match.group(1))
+                    print(f"[DEBUG] 从 title 参数提取: {title[:50]}...")
+                    return {
+                        "title": title,
+                        "price": "0",
+                        "description": title,
+                        "images": []
+                    }
+                except:
+                    pass
+            
+            return None
 
     async def parse_product_url(self, url: str) -> ProductInfo:
         import re
         from urllib.parse import unquote
-
-        # ===== 处理 aweme:// 协议链接 =====
+        
         if url.startswith("aweme://"):
-            print(f"[DEBUG] parse_url 检测到 aweme:// 链接")
-            match = re.search(r'url=([^&]+)', url)
+            match = re.search(r'url=(https?%3A%2F%2F[^&]+)', url)
             if match:
                 url = unquote(match.group(1))
-                print(f"[DEBUG] aweme:// 转换为: {url[:100]}...")
-            else:
-                match = re.search(r'commodity_id%3D(\d+)', url)
-                if match:
-                    url = f"https://www.douyin.com/product/{match.group(1)}"
-                    print(f"[DEBUG] 提取商品ID: {match.group(1)}")
-                else:
-                    raise Exception("无法解析 aweme:// 链接")
-
-        # ===== 本地解析 =====
+        
         local_result = self._parse_douyin_from_url(url)
-        if local_result and local_result.get("title"):
+        if local_result:
             print(f"[INFO] 本地解析成功: {local_result.get('title', '无标题')[:50]}")
             return ProductInfo(
                 title=local_result.get("title", "抖音商品"),
@@ -465,7 +241,6 @@ class EcommerceService:
                 platform=local_result.get("platform", "douyin")
             )
         
-        # ===== 本地解析失败 =====
         raise Exception("无法解析该链接，请检查链接格式或手动上传商品图片")
 
     def _extract_douyin_id(self, url: str) -> str:
