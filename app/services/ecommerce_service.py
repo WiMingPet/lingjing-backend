@@ -339,20 +339,24 @@ class EcommerceService:
         import re
         from urllib.parse import unquote
         
-        # ===== 处理 aweme:// 协议链接（放在最前面） =====
+        # ===== 打印原始 URL =====
+        print(f"[DEBUG] parse_url 收到原始 URL: {repr(url)}")
+        
+        # 清理 URL
+        url = url.strip()
+        print(f"[DEBUG] strip 后 URL: {repr(url)}")
+        
         if url.startswith("aweme://"):
-            print(f"[DEBUG] parse_url 检测到 aweme:// 链接")
+            print("[DEBUG] ✅ 匹配到 aweme://")
             match = re.search(r'url=([^&]+)', url)
             if match:
                 url = unquote(match.group(1))
-                print(f"[DEBUG] aweme:// 转换为: {url[:100]}...")
+                print(f"[DEBUG] 转换后: {url[:100]}...")
             else:
-                match = re.search(r'commodity_id%3D(\d+)', url)
-                if match:
-                    url = f"https://www.douyin.com/product/{match.group(1)}"
-                    print(f"[DEBUG] 提取商品ID: {match.group(1)}")
-                else:
-                    raise Exception("无法解析 aweme:// 链接")
+                print("[DEBUG] ❌ 未找到 url 参数")
+                raise Exception("无法解析 aweme:// 链接")
+        else:
+            print("[DEBUG] ❌ 未匹配到 aweme://")
         
         # ===== 本地解析 =====
         local_result = self._parse_douyin_from_url(url)
