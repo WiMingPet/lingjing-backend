@@ -11,6 +11,7 @@ from app.models.user import User
 from app.schemas.payment import CreateOrderRequest, CreateOrderResponse, OrderStatusResponse
 from app.services.payment_service import PaymentService
 from app.utils.auth import get_current_user
+from app.config import settings
 
 router = APIRouter(prefix="/payment", tags=["payment"])
 logger = logging.getLogger(__name__)
@@ -163,3 +164,35 @@ async def alipay_notify(request: Request, db: Session = Depends(get_db)):
     
     logger.info(f"订单 {out_trade_no} 处理成功")
     return PlainTextResponse("success")
+
+    
+# ========== IAP 苹果支付验证 ==========
+@router.post("/iap_verify")
+async def verify_iap_receipt(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    import requests as sync_requests
+    
+    body = await request.json()
+    receipt = body.get("receipt", "")
+    package_id = body.get("package_id", 0)
+    credits = body.get("credits", 0)
+    
+    verify_url = "https://sandbox.itunes.apple.com/verifyReceipt"
+    
+    resp = sync_requests.post(verify_url, json={
+        "receipt-data": receipt,
+        "password": settings.IAP_SHARED_SECRET
+    })
+    result = resp.json()
+    
+    if result.get("status") != 0:
+        raise HTTPException(status_code=400, detail=f"收据验证失败")
+    
+    user = db.query(User).filter(User.id == current_user.id).first()
+    user.credits += credits
+    db.commit()
+    
+    return {"code": 200, "message": "充值成功", "credits": user.credits}

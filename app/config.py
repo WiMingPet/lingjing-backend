@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     # API Ninjas
     APININJAS_API_KEY: str = ""
 
+    # IAP
+    IAP_SHARED_SECRET: str = os.getenv("IAP_SHARED_SECRET", "")
+
     class Config:
         env_file = ".env"
         case_sensitive = True
