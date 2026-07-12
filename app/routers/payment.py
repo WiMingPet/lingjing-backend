@@ -170,8 +170,7 @@ async def alipay_notify(request: Request, db: Session = Depends(get_db)):
 @router.post("/iap_verify")
 async def verify_iap_receipt(
     request: Request,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     import requests as sync_requests
     
@@ -179,6 +178,7 @@ async def verify_iap_receipt(
     receipt = body.get("receipt", "")
     package_id = body.get("package_id", 0)
     credits = body.get("credits", 0)
+    user_id = body.get("user_id", None)
     
     verify_url = "https://sandbox.itunes.apple.com/verifyReceipt"
     
@@ -191,8 +191,12 @@ async def verify_iap_receipt(
     if result.get("status") != 0:
         raise HTTPException(status_code=400, detail=f"收据验证失败")
     
-    user = db.query(User).filter(User.id == current_user.id).first()
-    user.credits += credits
-    db.commit()
+    # 如果传了user_id，直接充值；否则返回credits由前端暂存
+    if user_id:
+        user = db.query(User).filter(User.id == user_id).first()
+        if user:
+            user.credits += credits
+            db.commit()
+            return {"code": 200, "message": "充值成功", "credits": user.credits}
     
-    return {"code": 200, "message": "充值成功", "credits": user.credits}
+    return {"code": 200, "message": "购买成功", "credits": credits}

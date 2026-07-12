@@ -320,3 +320,22 @@ def reset_password(
         code=200,
         message="密码重置成功"
     )
+
+    
+# ========== 注销账户 ==========
+@router.post("/delete_account", response_model=APIResponse)
+def delete_account(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_token)
+):
+    """
+    永久注销账户，删除用户所有数据
+    """
+    # 删除用户（CASCADE会自动删除关联的Task、History等）
+    db.delete(current_user)
+    db.commit()
+    
+    return APIResponse(
+        code=200,
+        message="账户已注销，所有数据已删除"
+    )
