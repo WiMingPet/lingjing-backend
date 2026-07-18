@@ -16,6 +16,7 @@ class VideoService:
         生成视频 - 调用真实可灵API
         """
         from app.services.kling import kling_service
+        from app.services.image_service import ImageService
         
         print("[DEBUG] ========== 开始生成视频 ==========")
         
