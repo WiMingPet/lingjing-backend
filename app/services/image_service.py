@@ -84,7 +84,8 @@ class ImageService:
                 task.status = "failed"
                 task.error_message = "提示词包含不当内容，请修改后重试"
                 db.commit()
-                raise Exception("提示词包含不当内容")
+                from fastapi import HTTPException
+                raise HTTPException(status_code=400, detail="您输入的提示词不符合平台规范，请修改后重试")
 
             print(f"[DEBUG] 调用可灵API生成图片...")
             print(f"[DEBUG] prompt: {prompt}")
