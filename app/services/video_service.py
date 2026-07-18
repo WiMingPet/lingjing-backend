@@ -40,6 +40,13 @@ class VideoService:
             duration = request_data.get("duration", 5)
             mode = request_data.get("mode", "std")
             
+            # 内容安全审核
+            if not ImageService._check_prompt_safety(prompt):
+                task.status = "failed"
+                task.error_message = "提示词包含不当内容，请修改后重试"
+                db.commit()
+                raise Exception("提示词包含不当内容")
+
             print(f"[DEBUG] 调用可灵视频API...")
             print(f"[DEBUG] prompt: {prompt}")
             print(f"[DEBUG] duration: {duration}s, mode: {mode}")

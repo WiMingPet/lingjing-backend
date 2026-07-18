@@ -4,11 +4,40 @@
 from typing import Optional, Dict, List
 from sqlalchemy.orm import Session
 from app.models.task import Task
+from app.config import settings
 import uuid
 
 
 class ImageService:
     """图片生成服务"""
+
+    @staticmethod
+    def _check_prompt_safety(prompt: str) -> bool:
+        import requests
+        try:
+            resp = requests.post(
+                "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {settings.DASHSCOPE_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "qwen-turbo",
+                    "messages": [{
+                        "role": "system",
+                        "content": "判断提示词是否包含色情、暴力、违法不当内容。只回复安全或违规。"
+                    }, {
+                        "role": "user",
+                        "content": prompt
+                    }],
+                    "max_tokens": 10
+                },
+                timeout=10
+            )
+            result = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+            return "安全" in result
+        except:
+            return True
 
     @staticmethod
     async def generate_image(db: Session, user_id: int, request_data: Dict) -> Task:
@@ -48,8 +77,15 @@ class ImageService:
             width = request_data.get("width", 512)
             height = request_data.get("height", 512)
             num_images = request_data.get("num_images", 1)
-            reference_image_url = request_data.get("reference_image_url", None)  # 新增：获取参考图 URL
+            reference_image_url = request_data.get("reference_image_url", None)
             
+            # 内容安全审核
+            if not ImageService._check_prompt_safety(prompt):
+                task.status = "failed"
+                task.error_message = "提示词包含不当内容，请修改后重试"
+                db.commit()
+                raise Exception("提示词包含不当内容")
+
             print(f"[DEBUG] 调用可灵API生成图片...")
             print(f"[DEBUG] prompt: {prompt}")
             print(f"[DEBUG] negative_prompt: {negative_prompt}")
@@ -63,7 +99,7 @@ class ImageService:
                 width=width,
                 height=height,
                 num_images=num_images,
-                reference_image_url=reference_image_url  # 新增：传递参考图 URL
+                reference_image_url=reference_image_url
             )
             print(f"[DEBUG] 可灵API返回任务ID: {api_task_id}")
             
@@ -116,7 +152,7 @@ class ImageService:
                         user_id=user_id,
                         url=img_url,
                         type="图片生成",
-                        thumbnail=img_url  # 图片直接用自身做缩略图
+                        thumbnail=img_url
                     )
                     db.add(history)
             # ========================================
@@ -137,9 +173,7 @@ class ImageService:
 
     @staticmethod
     def mock_image_generation(task_id: int) -> Dict:
-        """
-        Mock图片生成（备用）
-        """
+        """Mock图片生成（备用）"""
         return {
             "task_id": task_id,
             "images": [
