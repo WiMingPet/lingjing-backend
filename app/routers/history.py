@@ -51,6 +51,22 @@ async def save_history(
     db.commit()
     return {"code": 200, "message": "保存成功"}
 
+@router.delete("/{history_id}")
+def delete_history(
+    history_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    item = db.query(History).filter(
+        History.id == history_id,
+        History.user_id == current_user.id
+    ).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="记录不存在")
+    db.delete(item)
+    db.commit()
+    return {"code": 200, "message": "已删除"}
+
 @router.get("/list")
 async def get_history(
     limit: int = 50,
