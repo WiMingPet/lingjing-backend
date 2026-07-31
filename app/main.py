@@ -79,6 +79,10 @@ app.add_middleware(
         "https://media.lingjing-media.com",
         "https://lingji.preview.aliyun-zeabur.cn",
         "https://lingjing.preview.aliyun-zeabur.cn",
+        "capacitor://localhost",
+        "ionic://localhost",
+        "http://localhost",
+        "https://localhost",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -95,6 +99,10 @@ async def options_handler(request: Request):
         "https://www.lingjing-media.com",
         "https://lingji.preview.aliyun-zeabur.cn",
         "https://lingjing.preview.aliyun-zeabur.cn",
+        "capacitor://localhost",
+        "ionic://localhost",
+        "http://localhost",
+        "https://localhost",
     ]
     if origin in allowed_origins:
         return Response(
