@@ -13,6 +13,7 @@ from app.database import init_db, SessionLocal
 from app.models.digital_human import DigitalHuman
 from app.routers import auth, image, video, size, tryon, digital_human, multi_angle, proxy, payment, ecommerce, upload, tts
 from app.routers import history
+from app.routers import merchant
 from app.database import Base, engine
 
 
@@ -83,6 +84,7 @@ app.add_middleware(
         "ionic://localhost",
         "http://localhost",
         "https://localhost",
+        "http://localhost:3000",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -103,6 +105,7 @@ async def options_handler(request: Request):
         "ionic://localhost",
         "http://localhost",
         "https://localhost",
+        "http://localhost:3000",
     ]
     if origin in allowed_origins:
         return Response(
@@ -151,6 +154,9 @@ app.include_router(test_network.router, prefix="/api")
 # 注册链接转视频路由（订单侠）
 from app.routers import link_to_video
 app.include_router(link_to_video.router, prefix="/api")
+
+# 注册商家工作台路由
+app.include_router(merchant.router, prefix="/api")
 
 
 @app.get("/")

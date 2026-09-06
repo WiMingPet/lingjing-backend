@@ -25,18 +25,22 @@ class ImageService:
                     "model": "qwen-turbo",
                     "messages": [{
                         "role": "system",
-                        "content": "判断提示词是否包含色情、暴力、违法不当内容。只回复安全或违规。"
+                        "content": "你是内容安全审核员。判断用户提示词是否包含色情、暴力、违法等违规内容。如果违规，只回答\"违规\"；如果安全，只回答\"安全\"。"
                     }, {
                         "role": "user",
                         "content": prompt
                     }],
-                    "max_tokens": 10
+                    "max_tokens": 5,
+                    "temperature": 0
                 },
                 timeout=10
             )
-            result = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "")
-            return "安全" in result
-        except:
+            result = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+            print(f"[DEBUG] 审核返回: {result}")
+            # 只有明确返回"违规"才拦截
+            return "违规" not in result
+        except Exception as e:
+            print(f"[DEBUG] 审核异常，默认放行: {e}")
             return True
 
     @staticmethod

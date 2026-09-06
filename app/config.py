@@ -21,18 +21,18 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     # Third Party APIs
-    KLING_API_KEY: str = os.getenv("KLING_API_KEY", "api-key-kling-eSYfb8AQsDHPX1etCUgKKRUeT9Ovkts6gVkqc1PBk3U")
+    KLING_API_KEY: str = os.getenv("KLING_API_KEY", "api-key-kling-bFE9cP6vueYLnBn3DILQN8CaMIp3r2KQHaKD1nnnzxE")
     KLING_API_SECRET: str = os.getenv("KLING_API_SECRET", "")
     KLING_API_URL: str = "https://api-beijing.klingai.com/v1"
     
 
     # 腾讯云 TTS
-    TENCENT_SECRET_ID: str = ""
-    TENCENT_SECRET_KEY: str = ""
+    TENCENT_SECRET_ID: str = os.getenv("TENCENT_SECRET_ID", "")
+    TENCENT_SECRET_KEY: str = os.getenv("TENCENT_SECRET_KEY", "")
 
     # OSS 配置
-    OSS_ACCESS_KEY_ID: str = ""
-    OSS_ACCESS_KEY_SECRET: str = ""
+    OSS_ACCESS_KEY_ID: str = os.getenv("OSS_ACCESS_KEY_ID", "")
+    OSS_ACCESS_KEY_SECRET: str = os.getenv("OSS_ACCESS_KEY_SECRET", "")
     OSS_BUCKET_NAME: str = "lingjing-media"
     OSS_ENDPOINT: str = "oss-cn-shenzhen.aliyuncs.com"
     OSS_INTERNAL_ENDPOINT: str = "oss-cn-shenzhen-internal.aliyuncs.com"
