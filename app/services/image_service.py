@@ -15,6 +15,18 @@ class ImageService:
     @staticmethod
     def _check_prompt_safety(prompt: str) -> bool:
         import requests
+
+        # ========== 白名单：正常商业/服装词直接放行 ==========
+        allowed_keywords = [
+            "内衣", "内裤", "泳装", "泳衣", "健身", "瑜伽", "丝袜", "性感",
+            "曲线", "迷人", "身材", "火辣", "曼妙", "显瘦", "收腰", "提臀",
+            "美体", "塑形", "模特", "试穿", "展示", "海边", "沙滩", "比基尼"
+        ]
+        if any(kw in prompt for kw in allowed_keywords):
+            print(f"[DEBUG] 包含正常商业词，直接放行: {prompt[:30]}")
+            return True
+        # ========================================================
+
         try:
             resp = requests.post(
                 "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
@@ -26,7 +38,12 @@ class ImageService:
                     "model": "qwen-turbo",
                     "messages": [{
                         "role": "system",
-                        "content": "你是内容安全审核员。判断用户提示词是否包含色情、暴力、违法等违规内容。如果违规，只回答\"违规\"；如果安全，只回答\"安全\"。"
+                        "content": (
+                            "你是内容安全审核员。只拦截明显违法内容："
+                            "性行为、裸露隐私部位、儿童色情、暴力血腥、恐怖主义、毒品。"
+                            "正常内衣泳装展示、模特试穿、性感广告词、身材描述都不算违规。"
+                            "如果违规，只回复\"违规\"；否则回复\"安全\"。"
+                        )
                     }, {
                         "role": "user",
                         "content": prompt
@@ -38,7 +55,6 @@ class ImageService:
             )
             result = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
             print(f"[DEBUG] 审核返回: {result}")
-            # 只有明确返回"违规"才拦截
             return "违规" not in result
         except Exception as e:
             print(f"[DEBUG] 审核异常，默认放行: {e}")
@@ -46,15 +62,10 @@ class ImageService:
 
     @staticmethod
     async def check_image_safety(image_url: str) -> bool:
-        """
-        用通义千问视觉模型检测图片是否违规。
-        只拦截明显色情、裸露，正常服装（短裤、泳装、运动服等）不拦。
-        """
         import requests
         import base64
 
         try:
-            # 下载图片
             resp = requests.get(image_url, timeout=30)
             img_base64 = base64.b64encode(resp.content).decode('utf-8')
 
@@ -72,10 +83,10 @@ class ImageService:
                             {
                                 "type": "text",
                                 "text": (
-                                    "你是内容安全审核员。判断这张图片是否包含明显色情、裸露敏感部位、性暗示内容。"
-                                    "注意：正常服装展示（短裤、泳装、运动服、内衣模特展示、试穿效果）不属于违规。"
-                                    "只有出现裸露隐私部位、性行为、色情挑逗姿势才判定为违规。"
-                                    "如果违规，只回复\"违规\"；如果安全，只回复\"安全\"。"
+                                    "你是内容安全审核员。只拦截明显违法内容："
+                                    "裸露隐私部位、性行为、儿童色情、暴力血腥。"
+                                    "正常内衣、泳装、运动服、模特试穿、海边展示、性感广告图都不算违规。"
+                                    "如果违规，只回复\"违规\"；否则回复\"安全\"。"
                                 )
                             },
                             {
