@@ -63,6 +63,22 @@ def delete_history(
     ).first()
     if not item:
         raise HTTPException(status_code=404, detail="记录不存在")
+
+    # ========== 删除 OSS 文件 ==========
+    try:
+        from app.services.oss_service import oss_service
+        # 如果 url 是 JSON 数组（电商套图），删除所有图
+        import json
+        try:
+            urls = json.loads(item.url)
+            for u in urls:
+                oss_service.delete_file(u)
+        except:
+            oss_service.delete_file(item.url)
+    except Exception as e:
+        print(f"[DEBUG] OSS文件删除失败: {e}")
+    # ====================================
+
     db.delete(item)
     db.commit()
     return {"code": 200, "message": "已删除"}
@@ -90,3 +106,12 @@ async def get_history(
             for h in items
         ]
     }
+
+@router.post("/report/{history_id}")
+def report_history(
+    history_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    print(f"[REPORT] 用户 {current_user.id} 举报历史记录 {history_id}")
+    return {"code": 200, "message": "举报已收到，我们会尽快处理"}

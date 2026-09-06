@@ -53,12 +53,13 @@ async def generate_video(
     user = current_user  # ✅ 修改：直接使用 current_user
     
     # ✅ 根据时长确定消耗点数
-    if duration == 5:
-        cost = 10
-    elif duration == 10:
-        cost = 15
-    else:
-        cost = 10  # 默认5秒的消耗
+    cost_map = {
+        5: 20,
+        10: 40,
+        15: 60,
+        60: 120,
+    }
+    cost = cost_map.get(duration, 20)  # 默认5秒消耗20点
     
     # ✅ 生成前检查余额
     if user.credits < cost:
