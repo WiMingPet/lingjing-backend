@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.models.task import Task
 from app.config import settings
 import uuid
+from fastapi import HTTPException
 
 
 class ImageService:
@@ -41,6 +42,58 @@ class ImageService:
             return "违规" not in result
         except Exception as e:
             print(f"[DEBUG] 审核异常，默认放行: {e}")
+            return True
+
+    @staticmethod
+    async def check_image_safety(image_url: str) -> bool:
+        """
+        用通义千问视觉模型检测图片是否违规。
+        只拦截明显色情、裸露，正常服装（短裤、泳装、运动服等）不拦。
+        """
+        import requests
+        import base64
+
+        try:
+            # 下载图片
+            resp = requests.get(image_url, timeout=30)
+            img_base64 = base64.b64encode(resp.content).decode('utf-8')
+
+            result = requests.post(
+                "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {settings.DASHSCOPE_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "qwen-vl-plus",
+                    "messages": [{
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": (
+                                    "你是内容安全审核员。判断这张图片是否包含明显色情、裸露敏感部位、性暗示内容。"
+                                    "注意：正常服装展示（短裤、泳装、运动服、内衣模特展示、试穿效果）不属于违规。"
+                                    "只有出现裸露隐私部位、性行为、色情挑逗姿势才判定为违规。"
+                                    "如果违规，只回复\"违规\"；如果安全，只回复\"安全\"。"
+                                )
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/jpeg;base64,{img_base64}"}
+                            }
+                        ]
+                    }],
+                    "max_tokens": 5,
+                    "temperature": 0
+                },
+                timeout=30
+            )
+            content = result.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+            print(f"[DEBUG] 图片审核返回: {content}")
+            return "违规" not in content
+        except Exception as e:
+            print(f"[DEBUG] 图片审核异常，默认放行: {e}")
             return True
 
     @staticmethod
@@ -82,6 +135,14 @@ class ImageService:
             height = request_data.get("height", 512)
             num_images = request_data.get("num_images", 1)
             reference_image_url = request_data.get("reference_image_url", None)
+
+            # ========== 图片安全审核 ==========
+            if reference_image_url:
+                if not await ImageService.check_image_safety(reference_image_url):
+                    task.status = "failed"
+                    task.error_message = "参考图片未通过安全审核，请更换图片"
+                    db.commit()
+                    raise HTTPException(status_code=400, detail="参考图片未通过安全审核，请更换图片")
             
             # 内容安全审核
             if not ImageService._check_prompt_safety(prompt):
@@ -166,13 +227,16 @@ class ImageService:
             print("[DEBUG] ========== 图片生成成功 ==========")
             
         except Exception as e:
-            print(f"[DEBUG] 错误: {e}")
             import traceback
+            error_msg = str(e)
+            if "risk control" in error_msg:
+                error_msg = "内容未通过安全审核，请更换图片后重试"
+            print(f"[DEBUG] 错误: {e}")
             traceback.print_exc()
             task.status = "failed"
-            task.error_message = str(e)
+            task.error_message = error_msg
             db.commit()
-            raise e
+            raise HTTPException(status_code=400, detail=error_msg)
         
         return task
 

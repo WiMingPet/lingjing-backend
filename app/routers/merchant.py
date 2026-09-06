@@ -52,6 +52,11 @@ async def generate_package(
         cloth_url, _ = await upload_file_helper(img, "merchant/products")
         result_item = {"cloth_url": cloth_url}
 
+        # ========== 图片安全审核 ==========
+        from app.services.image_service import ImageService
+        if not await ImageService.check_image_safety(cloth_url):
+            raise HTTPException(status_code=400, detail="商品图片未通过安全审核，请更换图片")
+
         if product_type == "clothing":
             # 服装：指定模特虚拟试穿
             model_image = MODEL_IMAGES.get(gender, MODEL_IMAGES["female"])

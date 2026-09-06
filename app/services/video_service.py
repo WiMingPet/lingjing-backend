@@ -5,6 +5,7 @@ from typing import Optional, Dict
 from sqlalchemy.orm import Session
 from app.models.task import Task
 from app.services.oss_service import oss_service  # 新增：导入 OSS 服务
+from fastapi import HTTPException
 
 
 class VideoService:
@@ -37,6 +38,10 @@ class VideoService:
             # 获取图片 URL
             image_url = request_data.get("image_url", "")
             print(f"[DEBUG] 使用图片 URL: {image_url}")
+            # 图片安全审核
+            from app.services.image_service import ImageService
+            if not await ImageService.check_image_safety(image_url):
+                raise HTTPException(status_code=400, detail="图片未通过安全审核，请更换图片")
             prompt = request_data.get("prompt", "")
             duration = request_data.get("duration", 5)
             mode = request_data.get("mode", "std")
@@ -98,12 +103,15 @@ class VideoService:
             
         except Exception as e:
             import traceback
+            error_msg = str(e)
+            if "risk control" in error_msg:
+                error_msg = "内容未通过安全审核，请更换图片后重试"
             print(f"[DEBUG] 视频生成错误: {e}")
             print(f"[DEBUG] 错误详情: {traceback.format_exc()}")
             task.status = "failed"
-            task.error_message = str(e)
+            task.error_message = error_msg
             db.commit()
-            raise e
+            raise HTTPException(status_code=400, detail=error_msg)
         
         return task
 

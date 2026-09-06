@@ -230,7 +230,12 @@ async def generate_digital_human(
         print(f"[DEBUG] 手动上传图片已保存: {final_image_url}")
     else:
         raise HTTPException(status_code=400, detail="请提供图片 URL 或上传图片文件")
-    
+
+    # ========== 图片安全审核 ==========
+    from app.services.image_service import ImageService
+    if not await ImageService.check_image_safety(final_image_url):
+        raise HTTPException(status_code=400, detail="图片未通过安全审核，请更换图片")
+
     # 2. 获取音频（文字转语音 或 用户上传）
     audio_url = None
     if text:

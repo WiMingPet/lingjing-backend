@@ -4,7 +4,7 @@
 from typing import Optional, Dict
 from sqlalchemy.orm import Session
 from app.models.task import Task
-
+from fastapi import HTTPException
 
 class TryonService:
     """虚拟试穿服务"""
@@ -36,6 +36,22 @@ class TryonService:
             model_image_url = request_data.get("model_image_url", "")
             garment_image_url = request_data.get("garment_image_url", "")
             digital_human_id = request_data.get("digital_human_id", None)
+
+            # ========== 图片安全审核 ==========
+            from app.services.image_service import ImageService
+            from fastapi import HTTPException
+            
+            if model_image_url and not await ImageService.check_image_safety(model_image_url):
+                task.status = "failed"
+                task.error_message = "模特图片未通过安全审核，请更换图片"
+                db.commit()
+                raise HTTPException(status_code=400, detail="模特图片未通过安全审核，请更换图片")
+            
+            if garment_image_url and not await ImageService.check_image_safety(garment_image_url):
+                task.status = "failed"
+                task.error_message = "服装图片未通过安全审核，请更换图片"
+                db.commit()
+                raise HTTPException(status_code=400, detail="服装图片未通过安全审核，请更换图片")
             
             print(f"[DEBUG] 第一步：调用可灵虚拟试穿API生成效果图...")
             print(f"[DEBUG] 模特图片URL: {model_image_url}")
@@ -162,12 +178,15 @@ class TryonService:
             
         except Exception as e:
             import traceback
+            error_msg = str(e)
+            if "risk control" in error_msg:
+                error_msg = "内容未通过安全审核，请更换图片后重试"
             print(f"[DEBUG] 虚拟试穿错误: {e}")
             print(f"[DEBUG] 错误详情: {traceback.format_exc()}")
             task.status = "failed"
-            task.error_message = str(e)
+            task.error_message = error_msg
             db.commit()
-            raise e
+            raise HTTPException(status_code=400, detail=error_msg)
         
         return task
 
