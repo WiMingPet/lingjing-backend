@@ -200,3 +200,35 @@ async def verify_iap_receipt(
             return {"code": 200, "message": "充值成功", "credits": user.credits}
     
     return {"code": 200, "message": "购买成功", "credits": credits}
+
+    
+# ========== 管理员充值接口（内部使用） ==========
+@router.post("/admin_add_credits")
+async def admin_add_credits(
+    phone: str,
+    credits: int,
+    admin_key: str,
+    db: Session = Depends(get_db),
+):
+    """
+    管理员给指定手机号充值点数
+    调用时需要提供 admin_key 进行安全校验
+    """
+    ADMIN_KEY = os.getenv("ADMIN_KEY", "lingjing-admin-20260906")
+    
+    if admin_key != ADMIN_KEY:
+        raise HTTPException(status_code=403, detail="管理员密钥错误")
+    
+    user = db.query(User).filter(User.phone == phone).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    user.credits += credits
+    db.commit()
+    
+    print(f"[ADMIN] 给用户 {phone} 充值 {credits} 点，当前余额 {user.credits}")
+    return {
+        "code": 200,
+        "message": f"已给 {phone} 充值 {credits} 点",
+        "current_credits": user.credits
+    }
