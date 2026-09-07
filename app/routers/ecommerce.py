@@ -102,9 +102,9 @@ async def generate_video(
 ):
     """提交AI带货视频生成任务（异步后台执行）"""
     # ✅ 先检查余额，余额不足直接拒绝
-    if current_user.credits < 50:
-        raise HTTPException(status_code=403, detail="AI带货视频需要50灵境点，当前余额不足")
-    check_and_deduct_credits(current_user, db, 50, "AI带货视频")
+    if current_user.credits < 90:
+        raise HTTPException(status_code=403, detail="AI带货视频需要90灵境点，当前余额不足")
+    check_and_deduct_credits(current_user, db, 90, "AI带货视频")
 
     import uuid
     task_id = str(uuid.uuid4())

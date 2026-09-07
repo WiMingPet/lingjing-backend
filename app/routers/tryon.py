@@ -67,8 +67,8 @@ async def generate_tryon(
     user_id = current_user.id
 
     # ✅ 生成前检查余额（不扣除）
-    if user.credits < 30:
-        raise HTTPException(status_code=403, detail="虚拟试穿需要30灵境点，当前余额不足，请充值")
+    if user.credits < 50:
+        raise HTTPException(status_code=403, detail="虚拟试穿需要50灵境点，当前余额不足，请充值")
         
     task = await TryonService.generate_tryon(db, user_id, request_data)
     
@@ -76,7 +76,7 @@ async def generate_tryon(
         raise HTTPException(500, detail=task.error_message or "虚拟试穿失败")
     
     # ✅ 生成成功后扣点
-    check_and_deduct_credits(user, db, 30, "虚拟试穿")
+    check_and_deduct_credits(user, db, 50, "虚拟试穿")
     
     return APIResponse(
         code=200,
@@ -126,7 +126,7 @@ async def generate_tryon_by_url(
     
     # ✅ 只有用户登录时才扣点（内部调用免扣点）
     if current_user:
-        check_and_deduct_credits(current_user, db, 30, "虚拟试穿")
+        check_and_deduct_credits(current_user, db, 50, "虚拟试穿")
     
     request_data = {
         "model_image_url": request.model_image_url,
