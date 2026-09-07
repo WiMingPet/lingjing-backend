@@ -115,7 +115,7 @@ class TryonService:
             
             video_prompt = "模特全身入镜，自然站立。先正面展示3秒，然后用手轻轻捏起衣角展示面料细节，接着缓慢旋转360度展示全身服装各角度，包括上衣、裤子、背面。最后恢复正面站姿。整个过程自然流畅，专业灯光，4K高清"
             
-            video_task_id = kling_service.generate_video(
+            video_task_id = kling_service.generate_tryon_video(
                 image_url=tryon_image_url,
                 prompt=video_prompt,
                 duration=5,

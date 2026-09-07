@@ -114,23 +114,19 @@ class KlingService:
     def generate_video(self, image_url: str = None, prompt: str = "", 
                        duration: int = 5, mode: str = "std") -> str:
         """
-        生成视频
-        - 有 image_url: 图生视频
-        - 无 image_url: 文生视频
-        返回 task_id
+        普通视频生成 - 使用 Kling 2.5 Turbo（省钱）
         """
         base_url = self._get_base_url()
         url = f"{base_url}/videos/image2video"
         
         payload = {
-            "model_name": "kling-v3",
+            "model_name": "kling-v2-5-turbo",
             "prompt": prompt,
             "duration": str(duration),
             "mode": mode,
-            "with_audio": True  # ← 添加这一行，开启音频
+            "with_audio": True
         }
         
-        # 如果有图片，添加 image 参数实现图生视频
         if image_url:
             payload["image"] = image_url
             print(f"[DEBUG] 使用图生视频模式，参考图: {image_url}")
@@ -198,6 +194,33 @@ class KlingService:
             current_interval = min(current_interval + 5, 30)
         
         raise Exception(f"视频任务超时，task_id: {task_id}")
+
+    def generate_tryon_video(self, image_url: str = None, prompt: str = "", 
+                             duration: int = 5, mode: str = "std") -> str:
+        """
+        试穿视频生成 - 使用 Kling 3.0（保证颜色效果）
+        """
+        base_url = self._get_base_url()
+        url = f"{base_url}/videos/image2video"
+        
+        payload = {
+            "model_name": "kling-v3",
+            "prompt": prompt,
+            "duration": str(duration),
+            "mode": mode,
+            "with_audio": True
+        }
+        
+        if image_url:
+            payload["image"] = image_url
+        
+        response = requests.post(url, json=payload, headers=self._get_headers())
+        result = response.json()
+        
+        if result.get("code") != 0:
+            raise Exception(f"可灵试穿视频API错误: {result.get('message')}")
+        
+        return result["data"]["task_id"]
     
     # ========== 虚拟试穿（独立API）==========
     def generate_tryon(self, human_image_url: str, cloth_image_url: str, cloth_category: str = None, digital_human_id: str = None) -> str:
