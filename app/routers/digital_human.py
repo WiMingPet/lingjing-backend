@@ -37,10 +37,10 @@ async def create_digital_human(
     - **description**: 描述 (可选)
     - **source_video**: 模特视频 (必填)
     """
-    # ✅ 检查并扣除 60 灵境点
-    if current_user.credits < 60:
-        raise HTTPException(status_code=403, detail="定制数字人需要60灵境点，当前余额不足")
-    check_and_deduct_credits(current_user, db, 60, "定制数字人")
+    # ✅ 检查并扣除 80 灵境点
+    if current_user.credits < 80:
+        raise HTTPException(status_code=403, detail="定制数字人需要80灵境点，当前余额不足")
+    check_and_deduct_credits(current_user, db, 80, "定制数字人")
     # 上传视频
     file_url, file_id = await upload_file_helper(source_video, "digital_human_videos")
     source_video_id = file_id
@@ -259,10 +259,10 @@ async def generate_digital_human(
         user = current_user
 
     # 余额检查
-    if user.credits < 60:
-        raise HTTPException(status_code=403, detail="数字人分身需要60灵境点，当前余额不足")
+    if user.credits < 80:
+        raise HTTPException(status_code=403, detail="数字人分身需要80灵境点，当前余额不足")
 
-    check_and_deduct_credits(user, db, 60, "数字人分身")
+    check_and_deduct_credits(user, db, 80, "数字人分身")
     
     # 3. 调用可灵虚拟形象 API
     task_id = await kling_service.generate_digital_human(
