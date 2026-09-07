@@ -114,85 +114,87 @@ class KlingService:
     def generate_video(self, image_url: str = None, prompt: str = "", 
                        duration: int = 5, mode: str = "std") -> str:
         """
-        使用通义万相3.0生成视频
+        生成视频
+        - 有 image_url: 图生视频
+        - 无 image_url: 文生视频
+        返回 task_id
         """
-        base_url = "https://ws-qpaaygw863oh10l0.cn-beijing.maas.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis"
-        
-        headers = {
-            "Authorization": f"Bearer {settings.DASHSCOPE_API_KEY}",
-            "Content-Type": "application/json",
-            "X-DashScope-Async": "enable"
-        }
-        
-        if image_url:
-            input_data = {
-                "prompt": f"保持参考图中服装的颜色、图案、细节完全不变，{prompt}",
-                "img_url": image_url
-            }
-        else:
-            input_data = {"prompt": prompt}
+        base_url = self._get_base_url()
+        url = f"{base_url}/videos/image2video"
         
         payload = {
-            "model": "wan3.0-video",
-            "input": input_data,
-            "parameters": {
-                "resolution": "720P",
-                "ratio": "adaptive",
-                "duration": duration,
-                "prompt_extend": False
-            }
+            "model_name": "kling-v3",
+            "prompt": prompt,
+            "duration": str(duration),
+            "mode": mode,
+            "with_audio": True  # ← 添加这一行，开启音频
         }
         
-        print(f"[DEBUG] 万相3.0视频生成请求: {payload}")
-        response = requests.post(base_url, json=payload, headers=headers, timeout=30)
+        # 如果有图片，添加 image 参数实现图生视频
+        if image_url:
+            payload["image"] = image_url
+            print(f"[DEBUG] 使用图生视频模式，参考图: {image_url}")
+        else:
+            print(f"[DEBUG] 使用文生视频模式")
+        
+        print(f"[DEBUG] 视频生成请求URL: {url}")
+        print(f"[DEBUG] 视频生成请求参数: {payload}")
+        response = requests.post(url, json=payload, headers=self._get_headers())
         result = response.json()
-        print(f"[DEBUG] 万相3.0视频生成响应: {result}")
+        print(f"[DEBUG] 视频生成响应: {result}")
         
-        task_id = result.get("output", {}).get("task_id")
-        if not task_id:
-            raise Exception(f"万相3.0视频API错误: {result.get('message')}")
+        if result.get("code") != 0:
+            raise Exception(f"可灵视频API错误: {result.get('message')}")
         
-        return task_id
+        return result["data"]["task_id"]
     
     @retry(stop=stop_after_attempt(3), wait=wait_fixed(2), retry=retry_if_exception_type(Exception))
     def get_video_task_status(self, task_id: str) -> Dict:
-        """查询万相3.0视频任务状态"""
-        base_url = f"https://dashscope.aliyuncs.com/api/v1/tasks/{task_id}"
-        headers = {
-            "Authorization": f"Bearer {settings.DASHSCOPE_API_KEY}"
-        }
-        response = requests.get(base_url, headers=headers, timeout=30)
+        """查询视频任务状态（带重试）"""
+        base_url = self._get_base_url()
+        url = f"{base_url}/videos/image2video/{task_id}"
+        response = requests.get(url, headers=self._get_headers(), timeout=30)
         result = response.json()
-        return result.get("output", {})
+        
+        if result.get("code") != 0:
+            raise Exception(f"查询视频任务失败: {result.get('message')}")
+        
+        return result["data"]
     
     def wait_for_video_result(self, task_id: str, max_wait: int = 600, 
-                              poll_interval: int = 10) -> Dict:
-        """轮询等待万相3.0视频任务完成"""
+                              poll_interval: int = 15) -> Dict:
+        """轮询等待视频任务完成（优化版：降低频率，避免并发限制）"""
         import time as time_module
         start_time = time_module.time()
+        
+        # 初始轮询间隔15秒，逐步递增到30秒
         current_interval = poll_interval
         
         while time_module.time() - start_time < max_wait:
             try:
                 status_data = self.get_video_task_status(task_id)
-                task_status = status_data.get("task_status", "")
-                print(f"[DEBUG] 万相3.0视频任务状态: {task_status}")
+                task_status = status_data.get("task_status")
+                print(f"[DEBUG] 视频任务状态: {task_status}")
                 
-                if task_status == "SUCCEEDED" or task_status == "succeed":
-                    video_url = status_data.get("video_url", "")
-                    if video_url:
-                        return {"task_result": {"video_url": video_url}}
-                elif task_status == "FAILED" or task_status == "failed":
-                    error_msg = status_data.get("message", "未知错误")
+                if task_status == "succeed":
+                    task_result = status_data.get("task_result", {})
+                    videos = task_result.get("videos", [])
+                    if videos:
+                        status_data["task_result"]["video_url"] = videos[0].get("url", "")
+                    return status_data
+                elif task_status == "failed":
+                    error_msg = status_data.get("task_status_msg", "未知错误")
                     raise Exception(f"视频任务失败: {error_msg}")
             except Exception as e:
-                if "parallel" in str(e).lower() or "1303" in str(e):
+                # 如果是并发限制错误，退避重试
+                if "parallel task" in str(e).lower() or "1303" in str(e):
                     print(f"[DEBUG] 并发限制，稍后重试...")
                     time_module.sleep(current_interval * 2)
                     continue
                 raise e
             
             time_module.sleep(current_interval)
+            # 逐步递增间隔，最大30秒
             current_interval = min(current_interval + 5, 30)
         
         raise Exception(f"视频任务超时，task_id: {task_id}")
