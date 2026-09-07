@@ -124,9 +124,13 @@ class KlingService:
             "X-DashScope-Async": "enable"
         }
         
-        input_data = {"prompt": prompt}
         if image_url:
-            input_data["img_url"] = image_url
+            input_data = {
+                "prompt": f"保持参考图中服装的颜色、图案、细节完全不变，{prompt}",
+                "img_url": image_url
+            }
+        else:
+            input_data = {"prompt": prompt}
         
         payload = {
             "model": "wan3.0-video",
@@ -134,7 +138,8 @@ class KlingService:
             "parameters": {
                 "resolution": "720P",
                 "ratio": "adaptive",
-                "duration": duration
+                "duration": duration,
+                "prompt_extend": False
             }
         }
         
