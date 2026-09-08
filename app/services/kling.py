@@ -120,7 +120,7 @@ class KlingService:
         url = f"{base_url}/videos/image2video"
         
         payload = {
-            "model_name": "kling-v2-5-turbo",
+            "model_name": "kling-v3",
             "prompt": prompt,
             "duration": str(duration),
             "mode": mode,
