@@ -36,40 +36,54 @@ class KlingService:
                        reference_image_url: str = None) -> str:
         """
         生成图片
-        - 有 reference_image_url: 图生图（通过 image 参数）
-        - 无 reference_image_url: 文生图
+        - 有 reference_image_url: 图生图（使用 Omni 模型，人物还原效果好）
+        - 无 reference_image_url: 文生图（使用 kling-v3）
         返回 task_id
         """
         base_url = self._get_base_url()
-        url = f"{base_url}/images/generations"
         
-        # 计算宽高比
-        if width > height:
-            aspect_ratio = "16:9"
-        elif height > width:
-            aspect_ratio = "9:16"
-        else:
-            aspect_ratio = "1:1"
-        
-        # 构建请求参数
-        payload = {
-            "model_name": "kling-v3",
-            "prompt": prompt,
-            "negative_prompt": negative_prompt,
-            "aspect_ratio": aspect_ratio,
-            "n": num_images
-        }
-        
-        # 如果有参考图，添加 image 参数实现图生图
+        # ========== 有参考图：使用 Omni 模型 ==========
         if reference_image_url:
-            payload["image"] = reference_image_url
-            print(f"[DEBUG] 使用图生图模式，参考图: {reference_image_url}")
+            url = f"{base_url}/images/omni-image"
+            
+            payload = {
+                "model_name": "kling-v3-omni",
+                "prompt": prompt if prompt else "保持原图不变，保留人物面部特征、五官、发型、服装细节",
+                "image_list": [
+                    {"image": reference_image_url}
+                ],
+                "resolution": "2k",
+                "n": num_images,
+                "aspect_ratio": "1:1"
+            }
+            print(f"[DEBUG] 使用 Omni 模型图生图（人物保留增强）")
+            print(f"[DEBUG] 参考图: {reference_image_url}")
+        
+        # ========== 无参考图：使用 kling-v3 文生图 ==========
         else:
-            print(f"[DEBUG] 使用文生图模式")
+            url = f"{base_url}/images/generations"
+            
+            # 计算宽高比
+            if width > height:
+                aspect_ratio = "16:9"
+            elif height > width:
+                aspect_ratio = "9:16"
+            else:
+                aspect_ratio = "1:1"
+            
+            payload = {
+                "model_name": "kling-v3",
+                "prompt": prompt,
+                "negative_prompt": negative_prompt,
+                "aspect_ratio": aspect_ratio,
+                "n": num_images,
+                "resolution": "2k"
+            }
+            print(f"[DEBUG] 使用 kling-v3 文生图")
         
         print(f"[DEBUG] 请求URL: {url}")
         print(f"[DEBUG] 请求参数: {payload}")
-        response = requests.post(url, json=payload, headers=self._get_headers())
+        response = requests.post(url, json=payload, headers=self._get_headers(), timeout=30)
         result = response.json()
         print(f"[DEBUG] 响应状态码: {response.status_code}")
         print(f"[DEBUG] 响应内容: {response.text}")
@@ -80,11 +94,23 @@ class KlingService:
         return result["data"]["task_id"]
     
     def get_task_status(self, task_id: str) -> Dict:
-        """查询图片任务状态"""
+        """查询图片任务状态（兼容 omni-image 和 generations 端点）"""
         base_url = self._get_base_url()
-        url = f"{base_url}/images/generations/{task_id}"
-        response = requests.get(url, headers=self._get_headers())
+        
+        # 先尝试 omni-image 端点
+        url = f"{base_url}/images/omni-image/{task_id}"
+        print(f"[DEBUG] 查询 omni-image 任务: {url}")
+        response = requests.get(url, headers=self._get_headers(), timeout=30)
         result = response.json()
+        
+        # 如果 omni-image 查询失败（404），尝试 generations 端点
+        if result.get("code") != 0:
+            url = f"{base_url}/images/generations/{task_id}"
+            print(f"[DEBUG] omni-image 查询失败，尝试 generations: {url}")
+            response = requests.get(url, headers=self._get_headers(), timeout=30)
+            result = response.json()
+        
+        print(f"[DEBUG] 任务状态响应: {result}")
         
         if result.get("code") != 0:
             raise Exception(f"查询失败: {result.get('message')}")
