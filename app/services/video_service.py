@@ -14,7 +14,7 @@ class VideoService:
     @staticmethod
     async def generate_video(db: Session, user_id: int, request_data: Dict) -> Task:
         """
-        生成视频 - 调用真实可灵API
+        生成视频 - 调用2.6基础版或3.0增强版API
         """
         from app.services.kling import kling_service
         from app.services.image_service import ImageService
@@ -38,13 +38,40 @@ class VideoService:
             # 获取图片 URL
             image_url = request_data.get("image_url", "")
             print(f"[DEBUG] 使用图片 URL: {image_url}")
+            
             # 图片安全审核
             from app.services.image_service import ImageService
             if not await ImageService.check_image_safety(image_url):
                 raise HTTPException(status_code=400, detail="图片未通过安全审核，请更换图片")
+            
             prompt = request_data.get("prompt", "")
             duration = request_data.get("duration", 5)
             mode = request_data.get("mode", "std")
+
+            # ========== 获取并验证模型参数 ==========
+            model = request_data.get("model", "2.6")
+            sound = request_data.get("sound", "off")
+            print(f"[DEBUG] 模型: {model}, 声音: {sound}")
+            
+            # 验证模型
+            if model not in ["2.6", "3.0"]:
+                raise HTTPException(status_code=400, detail="无效的模型选择")
+            
+            # 验证声音模式
+            if sound not in ["off", "native"]:
+                raise HTTPException(status_code=400, detail="无效的声音模式")
+            
+            # 2.6模型限制
+            if model == "2.6":
+                if sound != "off":
+                    raise HTTPException(status_code=400, detail="2.6基础版仅支持无声视频")
+                if duration not in [5, 10]:
+                    raise HTTPException(status_code=400, detail="2.6基础版仅支持5秒或10秒")
+            else:
+                # 3.0模型限制
+                if duration not in [5, 10, 15]:
+                    raise HTTPException(status_code=400, detail="3.0增强版支持5秒、10秒或15秒")
+            # ================================================
             
             # 内容安全审核
             if not ImageService._check_prompt_safety(prompt):
@@ -55,16 +82,19 @@ class VideoService:
                 raise HTTPException(status_code=400, detail="您输入的提示词不符合平台规范，请修改后重试")
 
             print(f"[DEBUG] 调用可灵视频API...")
+            print(f"[DEBUG] model: {model}, sound: {sound}")
             print(f"[DEBUG] prompt: {prompt}")
             print(f"[DEBUG] duration: {duration}s, mode: {mode}")
             print(f"[DEBUG] 图片 URL: {image_url}")
             
-            # 调用可灵API
+            # 调用可灵API（传入模型和声音参数）
             api_task_id = kling_service.generate_video(
                 image_url=image_url,
                 prompt=prompt,
                 duration=duration,
-                mode=mode
+                mode=mode,
+                model=model,
+                sound=sound
             )
             print(f"[DEBUG] 可灵视频API返回任务ID: {api_task_id}")
             
@@ -84,7 +114,7 @@ class VideoService:
                         "videos"
                     )
                     print(f"[DEBUG] 视频已上传到 OSS: {oss_video_url}")
-                    video_url = oss_video_url  # 替换成 OSS URL
+                    video_url = oss_video_url
                 except Exception as e:
                     print(f"[DEBUG] OSS 上传失败，使用原始 URL: {e}")
             # ========== OSS 上传结束 ==========
@@ -92,7 +122,10 @@ class VideoService:
             output_data = {
                 "task_id": api_task_id,
                 "video_url": video_url,
-                "status": "completed"
+                "status": "completed",
+                "model": model,
+                "sound": sound,
+                "duration": duration
             }
             
             task.status = "completed"

@@ -110,52 +110,118 @@ class KlingService:
         
         raise Exception(f"任务超时，task_id: {task_id}")
     
-    # ========== 视频生成（图生视频 + 文生视频）==========
+    # ========== 视频生成（图生视频）==========
     def generate_video(self, image_url: str = None, prompt: str = "", 
-                       duration: int = 5, mode: str = "std") -> str:
+                       duration: int = 5, mode: str = "std",
+                       model: str = "2.6", sound: str = "off") -> str:
         """
-        普通视频生成 - 使用 Kling 2.5 Turbo（省钱）
+        视频生成 - 支持2.6基础版和3.0增强版
+        - model: '2.6' 或 '3.0'
+        - sound: 'off' 或 'native'（仅3.0支持native）
+        - duration: 5, 10（2.6）；5, 10, 15（3.0）
         """
         base_url = self._get_base_url()
-        url = f"{base_url}/videos/image2video"
         
+        # 根据模型选择API端点
+        if model == "3.0":
+            url = f"{base_url}/image-to-video/kling-3.0"
+            print(f"[DEBUG] 使用3.0增强版 API")
+        else:
+            url = f"{base_url}/image-to-video/kling-2.6"
+            print(f"[DEBUG] 使用2.6基础版 API")
+        
+        # 构建请求参数（新版API格式）
         payload = {
-            "model_name": "kling-v3",
-            "prompt": prompt,
-            "duration": str(duration),
-            "mode": mode,
-            "with_audio": True
+            "contents": [
+                {
+                    "type": "prompt",
+                    "text": prompt
+                },
+                {
+                    "type": "first_frame",
+                    "url": image_url
+                }
+            ],
+            "settings": {
+                "resolution": "720p",
+                "duration": duration,
+                "audio": sound if model == "3.0" else "off",
+            },
+            "options": {
+                "watermark_info": {
+                    "enabled": False
+                }
+            }
         }
         
-        if image_url:
-            payload["image"] = image_url
-            print(f"[DEBUG] 使用图生视频模式，参考图: {image_url}")
-        else:
-            print(f"[DEBUG] 使用文生视频模式")
+        # 3.0模型需要multi_shot参数
+        if model == "3.0":
+            payload["settings"]["multi_shot"] = False
         
         print(f"[DEBUG] 视频生成请求URL: {url}")
         print(f"[DEBUG] 视频生成请求参数: {payload}")
-        response = requests.post(url, json=payload, headers=self._get_headers())
+        
+        response = requests.post(url, json=payload, headers=self._get_headers(), timeout=30)
         result = response.json()
+        print(f"[DEBUG] 视频生成响应状态码: {response.status_code}")
         print(f"[DEBUG] 视频生成响应: {result}")
         
         if result.get("code") != 0:
             raise Exception(f"可灵视频API错误: {result.get('message')}")
         
-        return result["data"]["task_id"]
+        return result["data"]["id"]
     
     @retry(stop=stop_after_attempt(3), wait=wait_fixed(2), retry=retry_if_exception_type(Exception))
     def get_video_task_status(self, task_id: str) -> Dict:
-        """查询视频任务状态（带重试）"""
+        """查询视频任务状态（带重试）- 新版API"""
         base_url = self._get_base_url()
-        url = f"{base_url}/videos/image2video/{task_id}"
-        response = requests.get(url, headers=self._get_headers(), timeout=30)
+        url = f"{base_url}/tasks"
+        
+        # 新版API使用查询参数
+        params = {"task_ids": task_id}
+        
+        print(f"[DEBUG] 查询视频任务URL: {url}")
+        print(f"[DEBUG] 查询参数: {params}")
+        
+        response = requests.get(url, headers=self._get_headers(), params=params, timeout=30)
         result = response.json()
+        print(f"[DEBUG] 查询视频任务响应: {result}")
         
         if result.get("code") != 0:
             raise Exception(f"查询视频任务失败: {result.get('message')}")
         
-        return result["data"]
+        # 新版API返回 data 是列表
+        data_list = result.get("data", [])
+        if not data_list:
+            raise Exception("查询视频任务失败: 无数据")
+        
+        task_data = data_list[0]
+        
+        # 转换为旧格式兼容
+        task_status = task_data.get("status")
+        # 新版状态: submitted, processing, succeeded, failed
+        # 旧版状态: submitted, processing, succeed, failed
+        status_mapping = {
+            "succeeded": "succeed",
+            "submitted": "submitted",
+            "processing": "processing",
+            "failed": "failed"
+        }
+        
+        formatted_data = {
+            "task_status": status_mapping.get(task_status, task_status),
+            "task_status_msg": task_data.get("message", ""),
+            "task_result": {}
+        }
+        
+        # 提取视频URL
+        outputs = task_data.get("outputs", [])
+        for output in outputs:
+            if output.get("type") == "video":
+                formatted_data["task_result"]["videos"] = [{"url": output.get("url", "")}]
+                break
+        
+        return formatted_data
     
     def wait_for_video_result(self, task_id: str, max_wait: int = 600, 
                               poll_interval: int = 15) -> Dict:
