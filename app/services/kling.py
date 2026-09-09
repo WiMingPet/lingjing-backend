@@ -120,7 +120,11 @@ class KlingService:
         - sound: 'off' 或 'native'（仅3.0支持native）
         - duration: 5, 10（2.6）；5, 10, 15（3.0）
         """
-        base_url = self._get_base_url()
+        # ========== 修复：新版API不需要 /v1 前缀 ==========
+        base_url = self.api_url.rstrip('/')
+        if base_url.endswith('/v1'):
+            base_url = base_url[:-3]  # 移除末尾的 /v1
+        # ==================================================
         
         # 根据模型选择API端点
         if model == "3.0":
@@ -167,14 +171,19 @@ class KlingService:
         print(f"[DEBUG] 视频生成响应: {result}")
         
         if result.get("code") != 0:
-            raise Exception(f"可灵视频API错误: {result.get('message')}")
+            raise Exception(f"视频API错误: {result.get('message')}")
         
         return result["data"]["id"]
     
     @retry(stop=stop_after_attempt(3), wait=wait_fixed(2), retry=retry_if_exception_type(Exception))
     def get_video_task_status(self, task_id: str) -> Dict:
         """查询视频任务状态（带重试）- 新版API"""
-        base_url = self._get_base_url()
+        # ========== 修复：新版API不需要 /v1 前缀 ==========
+        base_url = self.api_url.rstrip('/')
+        if base_url.endswith('/v1'):
+            base_url = base_url[:-3]  # 移除末尾的 /v1
+        # ==================================================
+        
         url = f"{base_url}/tasks"
         
         # 新版API使用查询参数
