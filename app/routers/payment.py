@@ -232,3 +232,76 @@ async def admin_add_credits(
         "message": f"已给 {phone} 充值 {credits} 点",
         "current_credits": user.credits
     }
+
+# ========== 管理员查询用户余额 ==========
+@router.get("/admin_query_credits")
+async def admin_query_credits(
+    phone: str,
+    admin_key: str,
+    db: Session = Depends(get_db),
+):
+    """
+    管理员查询指定手机号的余额
+    调用时需要提供 admin_key 进行安全校验
+    """
+    ADMIN_KEY = os.getenv("ADMIN_KEY", "lingjing-admin-20260906")
+    
+    if admin_key != ADMIN_KEY:
+        raise HTTPException(status_code=403, detail="管理员密钥错误")
+    
+    user = db.query(User).filter(User.phone == phone).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    print(f"[ADMIN] 查询用户 {phone} 余额: {user.credits} 点")
+    return {
+        "code": 200,
+        "message": "查询成功",
+        "data": {
+            "phone": user.phone,
+            "user_id": user.id,
+            "credits": user.credits
+        }
+    }
+
+@router.get("/admin_query_history")
+async def admin_query_history(
+    phone: str,
+    admin_key: str,
+    limit: int = 20,
+    db: Session = Depends(get_db),
+):
+    """
+    管理员查询用户最近的消费记录
+    """
+    ADMIN_KEY = os.getenv("ADMIN_KEY", "lingjing-admin-20260906")
+    
+    if admin_key != ADMIN_KEY:
+        raise HTTPException(status_code=403, detail="管理员密钥错误")
+    
+    user = db.query(User).filter(User.phone == phone).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    from app.models.history import History
+    records = db.query(History).filter(
+        History.user_id == user.id
+    ).order_by(History.created_at.desc()).limit(limit).all()
+    
+    return {
+        "code": 200,
+        "message": "查询成功",
+        "data": {
+            "phone": phone,
+            "current_credits": user.credits,
+            "records": [
+                {
+                    "id": r.id,
+                    "type": r.type,
+                    "url": r.url,
+                    "created_at": r.created_at.isoformat() if r.created_at else None
+                }
+                for r in records
+            ]
+        }
+    }
