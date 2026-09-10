@@ -297,31 +297,64 @@ class KlingService:
         raise Exception(f"视频任务超时，task_id: {task_id}")
 
     def generate_tryon_video(self, image_url: str = None, prompt: str = "", 
-                             duration: int = 5, mode: str = "std") -> str:
+                            duration: int = 5, mode: str = "std",
+                            model: str = "3.0", sound: str = "off") -> str:
         """
-        试穿视频生成 - 使用 Kling 3.0（保证颜色效果）
+        试穿视频生成 - 使用新版API
+        - 默认用3.0增强版（保证颜色效果）
         """
-        base_url = self._get_base_url()
-        url = f"{base_url}/videos/image2video"
+        # 新版API不需要 /v1
+        base_url = self.api_url.rstrip('/')
+        if base_url.endswith('/v1'):
+            base_url = base_url[:-3]
         
+        # 根据模型选择端点
+        if model == "3.0":
+            url = f"{base_url}/image-to-video/kling-3.0"
+            print(f"[DEBUG] 试穿视频使用3.0增强版 API")
+        else:
+            url = f"{base_url}/image-to-video/kling-2.6"
+            print(f"[DEBUG] 试穿视频使用2.6基础版 API")
+        
+        # 新版API参数格式
         payload = {
-            "model_name": "kling-v3",
-            "prompt": prompt,
-            "duration": str(duration),
-            "mode": mode,
-            "with_audio": True
+            "contents": [
+                {
+                    "type": "prompt",
+                    "text": prompt
+                },
+                {
+                    "type": "first_frame",
+                    "url": image_url
+                }
+            ],
+            "settings": {
+                "resolution": "720p",
+                "duration": duration,
+                "audio": sound if model == "3.0" else "off",
+            },
+            "options": {
+                "watermark_info": {
+                    "enabled": False
+                }
+            }
         }
         
-        if image_url:
-            payload["image"] = image_url
+        # 3.0需要multi_shot参数
+        if model == "3.0":
+            payload["settings"]["multi_shot"] = False
         
-        response = requests.post(url, json=payload, headers=self._get_headers())
+        print(f"[DEBUG] 试穿视频请求URL: {url}")
+        print(f"[DEBUG] 试穿视频请求参数: {payload}")
+        
+        response = requests.post(url, json=payload, headers=self._get_headers(), timeout=30)
         result = response.json()
+        print(f"[DEBUG] 试穿视频响应: {result}")
         
         if result.get("code") != 0:
-            raise Exception(f"可灵试穿视频API错误: {result.get('message')}")
+            raise Exception(f"试穿视频API错误: {result.get('message')}")
         
-        return result["data"]["task_id"]
+        return result["data"]["id"]
     
     # ========== 虚拟试穿（独立API）==========
     def generate_tryon(self, human_image_url: str, cloth_image_url: str, cloth_category: str = None, digital_human_id: str = None) -> str:

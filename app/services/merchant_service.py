@@ -106,3 +106,92 @@ class MerchantService:
             arr = [""] * count
             arr[0] = user_text
             return arr
+
+    @staticmethod
+    def add_text_to_image(image_url: str, text: str, position: str = "bottom") -> Optional[bytes]:
+        """
+        在图片上添加文字（用于场景图卖点）
+        - position: top / bottom / center
+        """
+        from PIL import Image, ImageDraw, ImageFont
+        import requests
+        from io import BytesIO
+        
+        if not text or not text.strip():
+            return None
+        
+        try:
+            resp = requests.get(image_url, timeout=30)
+            img = Image.open(BytesIO(resp.content)).convert("RGB")
+            
+            width, height = img.size
+            draw = ImageDraw.Draw(img)
+            
+            # 加载中文字体
+            font_path = "app/data/fonts/SourceHanSans.ttf"
+            try:
+                font_size = int(height * 0.07)
+                font = ImageFont.truetype(font_path, size=font_size)
+            except Exception as e:
+                print(f"[DEBUG] 字体加载失败: {e}")
+                font = ImageFont.load_default()
+            
+            bbox = draw.textbbox((0, 0), text, font=font)
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
+            
+            x = (width - text_width) // 2
+            if position == "top":
+                y = int(height * 0.08)
+            elif position == "center":
+                y = (height - text_height) // 2
+            else:
+                y = int(height * 0.82)
+            
+            padding = 20
+            bg_box = [x - padding, y - padding, x + text_width + padding, y + text_height + padding]
+            
+            # 半透明背景
+            overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+            overlay_draw = ImageDraw.Draw(overlay)
+            overlay_draw.rectangle(bg_box, fill=(0, 0, 0, 130))
+            
+            img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
+            draw = ImageDraw.Draw(img)
+            draw.text((x, y), text, font=font, fill=(255, 255, 255))
+            
+            output = BytesIO()
+            img.save(output, format="JPEG", quality=95)
+            return output.getvalue()
+            
+        except Exception as e:
+            print(f"[DEBUG] 文字合成失败: {e}")
+            return None
+
+    @staticmethod
+    def force_white_background(image_url: str) -> Optional[bytes]:
+        """
+        强制将图片背景改为纯白 RGB(255,255,255)
+        """
+        from PIL import Image
+        import numpy as np
+        import requests
+        from io import BytesIO
+        
+        try:
+            resp = requests.get(image_url, timeout=30)
+            img = Image.open(BytesIO(resp.content)).convert("RGB")
+            
+            arr = np.array(img)
+            mask = (arr[:, :, 0] > 230) & (arr[:, :, 1] > 230) & (arr[:, :, 2] > 230)
+            arr[mask] = [255, 255, 255]
+            
+            img = Image.fromarray(arr)
+            
+            output = BytesIO()
+            img.save(output, format="JPEG", quality=95)
+            return output.getvalue()
+            
+        except Exception as e:
+            print(f"[DEBUG] 白底处理失败: {e}")
+            return None
