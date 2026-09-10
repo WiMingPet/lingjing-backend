@@ -7,6 +7,33 @@ from typing import Dict, Optional, List
 from app.config import settings
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 
+def enhance_prompt(prompt: str, model: str = "2.6", sound: str = "off") -> str:
+    """
+    增强提示词，提升动作精准度
+    - 用户没写：不干预
+    - 用户写了：只补充缺失的信息
+    """
+    if not prompt or not prompt.strip():
+        return ""  # 不干预，让可灵自由发挥
+    
+    prompt = prompt.strip()
+    
+    # ========== 1. 动作类：补充节奏描述 ==========
+    action_keywords = [
+        "转身", "走动", "跳舞", "挥手", "跑", "跳", "蹲", "坐", "躺",
+        "微笑", "点头", "摇头", "抬手", "伸手", "举手",
+        "展示", "拿着", "举起", "放下", "看镜头", "看向", "注视"
+    ]
+    if any(word in prompt for word in action_keywords):
+        if "缓慢" not in prompt and "自然" not in prompt and "快速" not in prompt:
+            prompt += "，动作流畅自然"
+    
+    # ========== 2. 说话类：补充口型同步（仅3.0有声） ==========
+    if model == "3.0" and sound == "native":
+        if ("说" in prompt or "唱" in prompt) and "口型" not in prompt:
+            prompt += "，口型与语音同步"
+    
+    return prompt
 
 class KlingService:
     """可灵AI API 服务"""
@@ -160,12 +187,18 @@ class KlingService:
             url = f"{base_url}/image-to-video/kling-2.6"
             print(f"[DEBUG] 使用2.6基础版 API")
         
+        # ========== 增强提示词 ==========
+        enhanced_prompt = enhance_prompt(prompt, model=model, sound=sound)
+        print(f"[DEBUG] 原始提示词: {prompt}")
+        print(f"[DEBUG] 增强后提示词: {enhanced_prompt}")
+        # ==============================
+        
         # 构建请求参数（新版API格式）
         payload = {
             "contents": [
                 {
                     "type": "prompt",
-                    "text": prompt
+                    "text": enhanced_prompt
                 },
                 {
                     "type": "first_frame",
