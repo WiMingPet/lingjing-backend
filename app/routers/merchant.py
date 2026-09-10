@@ -80,30 +80,15 @@ async def generate_package(
             if template == "white_bg":
                 try:
                     main_task_id = kling_service.generate_image(
-                        prompt="电商商品图，纯白背景RGB255,255,255，产品居中，无阴影，高清细节",
+                        prompt="电商商品图，白色背景，产品居中，高清细节",
                         reference_image_url=cloth_url,
                     )
                     main_result = kling_service.wait_for_result(main_task_id, "image", max_wait=120)
-                    main_images = [
+                    result_item["main_images"] = [
                         img_data.get("url", "")
                         for img_data in main_result.get("task_result", {}).get("images", [])
-                    ]
-                    
-                    if main_images:
-                        from app.services.oss_service import oss_service
-                        white_bg_bytes = MerchantService.force_white_background(main_images[0])
-                        if white_bg_bytes:
-                            oss_url = await oss_service.upload_file(
-                                white_bg_bytes,
-                                "jpg",
-                                "merchant/white_bg"
-                            )
-                            result_item["main_images"] = [oss_url]
-                            print(f"[DEBUG] 白底图处理成功: {oss_url}")
-                        else:
-                            result_item["main_images"] = main_images[:1]
+                    ][:1]
                 except Exception as e:
-                    print(f"[DEBUG] 白底图生成失败: {e}")
                     result_item["main_images"] = []
 
             # 场景图多张（服装类，支持文案拆分）
@@ -114,8 +99,10 @@ async def generate_package(
 
                 for i in range(scene_count):
                     scene = scenes[i % len(scenes)]
-                    prompt = f"服装模特图，{scene}，简约时尚场景，电商风格，无文字"
-                    
+                    if scene_texts[i]:
+                        prompt = f"服装模特图，{scene}，图片中清晰显示文字：{scene_texts[i]}，排版美观，突出卖点"
+                    else:
+                        prompt = f"服装模特图，{scene}，简约时尚场景，电商风格"
                     try:
                         scene_task_id = kling_service.generate_image(
                             prompt=prompt,
@@ -125,28 +112,8 @@ async def generate_package(
                         imgs = [
                             img_data.get("url", "")
                             for img_data in scene_result.get("task_result", {}).get("images", [])
-                        ]
-                        
-                        if imgs:
-                            if scene_texts[i]:
-                                from app.services.oss_service import oss_service
-                                text_image_bytes = MerchantService.add_text_to_image(
-                                    imgs[0], 
-                                    scene_texts[i], 
-                                    position="bottom"
-                                )
-                                if text_image_bytes:
-                                    oss_url = await oss_service.upload_file(
-                                        text_image_bytes,
-                                        "jpg",
-                                        "merchant/scene_with_text"
-                                    )
-                                    result_item["scene_images"].append(oss_url)
-                                    print(f"[DEBUG] 场景图{i+1}文字合成成功: {oss_url}")
-                                else:
-                                    result_item["scene_images"].extend(imgs[:1])
-                            else:
-                                result_item["scene_images"].extend(imgs[:1])
+                        ][:1]
+                        result_item["scene_images"].extend(imgs)
                     except Exception as e:
                         print(f"[DEBUG] 场景图{i+1}失败: {e}")
 
@@ -170,12 +137,15 @@ async def generate_package(
                 result_item["scene_images"] = []
                 scenes = ["简约场景", "自然光场景", "生活场景", "商务场景", "时尚场景", "家居场景"]
 
+                # 拆分/优化文案
                 scene_texts = MerchantService.split_scene_texts(scene_text, scene_count)
 
                 for i in range(scene_count):
                     scene = scenes[i % len(scenes)]
-                    prompt = f"电商商品图，{scene}，{template_data['prompt_suffix']}，无文字"
-                    
+                    if scene_texts[i]:
+                        prompt = f"电商营销场景图，商品展示在{scene}中，图片中清晰显示文字：{scene_texts[i]}，排版美观，突出卖点，专业设计"
+                    else:
+                        prompt = f"电商商品图，{scene}，{template_data['prompt_suffix']}"
                     try:
                         scene_task_id = kling_service.generate_image(
                             prompt=prompt,
@@ -185,28 +155,8 @@ async def generate_package(
                         imgs = [
                             img_data.get("url", "")
                             for img_data in scene_result.get("task_result", {}).get("images", [])
-                        ]
-                        
-                        if imgs:
-                            if scene_texts[i]:
-                                from app.services.oss_service import oss_service
-                                text_image_bytes = MerchantService.add_text_to_image(
-                                    imgs[0], 
-                                    scene_texts[i], 
-                                    position="bottom"
-                                )
-                                if text_image_bytes:
-                                    oss_url = await oss_service.upload_file(
-                                        text_image_bytes,
-                                        "jpg",
-                                        "merchant/scene_with_text"
-                                    )
-                                    result_item["scene_images"].append(oss_url)
-                                    print(f"[DEBUG] 场景图{i+1}文字合成成功: {oss_url}")
-                                else:
-                                    result_item["scene_images"].extend(imgs[:1])
-                            else:
-                                result_item["scene_images"].extend(imgs[:1])
+                        ][:1]
+                        result_item["scene_images"].extend(imgs)
                     except Exception as e:
                         print(f"[DEBUG] 场景图{i+1}失败: {e}")
 
