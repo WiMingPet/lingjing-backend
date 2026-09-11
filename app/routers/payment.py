@@ -305,3 +305,29 @@ async def admin_query_history(
             ]
         }
     }
+
+@router.get("/admin_query_user_by_id")
+async def admin_query_user_by_id(
+    user_id: int,
+    admin_key: str,
+    db: Session = Depends(get_db),
+):
+    """管理员按用户ID查询用户信息"""
+    ADMIN_KEY = os.getenv("ADMIN_KEY", "lingjing-admin-20260906")
+    
+    if admin_key != ADMIN_KEY:
+        raise HTTPException(status_code=403, detail="管理员密钥错误")
+    
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    return {
+        "code": 200,
+        "message": "查询成功",
+        "data": {
+            "user_id": user.id,
+            "phone": user.phone,
+            "credits": user.credits
+        }
+    }
