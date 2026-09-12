@@ -16,6 +16,13 @@ from app.routers import history
 from app.routers import merchant
 from app.database import Base, engine
 
+# 初始化 RQ 队列
+try:
+    from app.rq_app import video_queue
+    print("[STARTUP] RQ 队列初始化成功")
+except Exception as e:
+    print(f"[STARTUP] RQ 队列初始化失败（不影响启动）: {e}")
+    video_queue = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
