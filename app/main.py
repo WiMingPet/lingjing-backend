@@ -4,8 +4,9 @@ AI创意生成平台 - FastAPI应用入口
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response  # ← 添加这行导入
+from fastapi.responses import Response
 from contextlib import asynccontextmanager
+from sqlalchemy import text
 
 
 from app.config import settings
@@ -18,11 +19,14 @@ from app.database import Base, engine
 
 # 初始化 RQ 队列
 try:
-    from app.rq_app import video_queue
+    from app.rq_app import queue_image, queue_video, queue_other
     print("[STARTUP] RQ 队列初始化成功")
 except Exception as e:
     print(f"[STARTUP] RQ 队列初始化失败（不影响启动）: {e}")
-    video_queue = None
+    queue_image = None
+    queue_video = None
+    queue_other = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -30,8 +34,19 @@ async def lifespan(app: FastAPI):
     # 启动时
     print("Starting AI Creative Platform...")
 
+    # ========== 数据库字段迁移（关键） ==========
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS credits_cost INTEGER DEFAULT 0"))
+            conn.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS refunded BOOLEAN DEFAULT FALSE"))
+            conn.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMP WITH TIME ZONE"))
+            conn.commit()
+        print("[STARTUP] 数据库字段迁移完成")
+    except Exception as e:
+        print(f"[STARTUP] 数据库字段迁移失败: {e}")
+    # ============================================
+
     # ========== 强制创建所有表（如果不存在） ==========
-    from app.database import Base, engine
     Base.metadata.create_all(bind=engine)
     print("数据库表创建/检查完成")
     # ================================================
@@ -102,7 +117,6 @@ app.add_middleware(
 @app.options("/{rest_of_path:path}")
 async def options_handler(request: Request):
     origin = request.headers.get("origin")
-    # 允许所有相关域名
     allowed_origins = [
         "https://lingjing-media.com",
         "https://www.lingjing-media.com",
@@ -132,7 +146,6 @@ os.makedirs("./uploads", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="./uploads"), name="uploads")
 
 # 注册路由（带 /api 前缀）
-
 app.include_router(auth.router, prefix="/api")
 app.include_router(image.router, prefix="/api")
 app.include_router(video.router, prefix="/api")
@@ -141,28 +154,12 @@ app.include_router(tryon.router, prefix="/api")
 app.include_router(digital_human.router, prefix="/api")
 app.include_router(multi_angle.router, prefix="/api")
 app.include_router(history.router, prefix="/api")
-
-# 注册支付路由（必须在 app 创建之后）
-from app.routers import payment
 app.include_router(payment.router, prefix="/api")
-
-# 注册电商带货路由（AI带货视频）
-from app.routers import ecommerce
 app.include_router(ecommerce.router, prefix="/api")
-
-# 注册上传路由
-from app.routers import upload
 app.include_router(upload.router, prefix="/api")
 app.include_router(tts.router, prefix="/api")
-
-from app.routers import test_network
 app.include_router(test_network.router, prefix="/api")
-
-# 注册链接转视频路由（订单侠）
-from app.routers import link_to_video
 app.include_router(link_to_video.router, prefix="/api")
-
-# 注册商家工作台路由
 app.include_router(merchant.router, prefix="/api")
 
 
