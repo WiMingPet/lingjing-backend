@@ -66,7 +66,7 @@ def generate_video_task(task_id: int, user_id: int, request_data: dict):
                     db.add(history)
                     db.commit()
         
-        # ========== 新增：同步内层 task 的结果到外层 task ==========
+        # ========== 同步内层 task 的结果到外层 task ==========
         outer_task = db.query(Task).filter(Task.id == task_id).first()
         if outer_task:
             outer_task.status = result_task.status
@@ -75,6 +75,14 @@ def generate_video_task(task_id: int, user_id: int, request_data: dict):
             outer_task.completed_at = datetime.datetime.utcnow()
             db.commit()
             print(f"[RQ-VIDEO] 外层任务已同步: task_id={task_id}, status={result_task.status}")
+            
+            # ========== 如果内层失败，退款 ==========
+            if result_task.status == "failed":
+                refund_credits(
+                    db, task_id,
+                    reason=f"视频生成失败: {result_task.error_message or '未知错误'}"
+                )
+            # ============================================
         # ========================================================
         
         print(f"[RQ-VIDEO] 完成: task_id={task_id}")

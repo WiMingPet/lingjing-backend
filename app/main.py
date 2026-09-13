@@ -1,6 +1,8 @@
 """
 AI创意生成平台 - FastAPI应用入口
 """
+import asyncio
+from datetime import datetime, timedelta
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,13 +32,58 @@ except Exception as e:
     queue_other = None
 
 
+# ========== 超时任务监控 ==========
+async def check_stuck_tasks():
+    """每5分钟检测一次卡在 processing 超过 30 分钟的任务，自动退款"""
+    from app.models.task import Task
+    from app.utils.refund import refund_credits
+    
+    db = SessionLocal()
+    try:
+        threshold = datetime.utcnow() - timedelta(minutes=30)
+        stuck_tasks = db.query(Task).filter(
+            Task.status == "processing",
+            Task.created_at < threshold,
+            Task.refunded == False,
+            Task.credits_cost > 0
+        ).all()
+        
+        if not stuck_tasks:
+            return
+        
+        print(f"[TIMEOUT] 发现 {len(stuck_tasks)} 个超时任务")
+        for task in stuck_tasks:
+            print(f"[TIMEOUT] 处理卡住任务: task_id={task.id}, user_id={task.user_id}, "
+                  f"type={task.task_type}, created={task.created_at}")
+            task.status = "failed"
+            task.error_message = "任务超时，已自动退款"
+            db.commit()
+            refund_credits(db, task.id, reason="任务超时自动退款")
+    except Exception as e:
+        print(f"[TIMEOUT] 监控出错: {e}")
+    finally:
+        db.close()
+
+
+async def periodic_timeout_check():
+    """后台循环：每5分钟检查一次"""
+    print("[STARTUP] 超时任务监控已启动")
+    while True:
+        await asyncio.sleep(300)  # 5 分钟
+        try:
+            await check_stuck_tasks()
+        except Exception as e:
+            print(f"[TIMEOUT] 循环出错: {e}")
+# ===================================
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     # 启动时
     print("Starting AI Creative Platform...")
 
-    # ========== 数据库字段迁移（关键） ==========
+    # ========== 数据库字段迁移 ==========
     try:
         with engine.connect() as conn:
             conn.execute(text("ALTER TABLE tasks ADD COLUMN IF NOT EXISTS credits_cost INTEGER DEFAULT 0"))
@@ -79,12 +126,21 @@ async def lifespan(app: FastAPI):
     finally:
         db.close()
 
+    # ========== 启动超时任务监控 ==========
+    timeout_task = asyncio.create_task(periodic_timeout_check())
+    # ====================================
+
     print("Application started successfully!")
 
     yield
 
     # 关闭时
     print("Shutting down AI Creative Platform...")
+    timeout_task.cancel()
+    try:
+        await timeout_task
+    except asyncio.CancelledError:
+        pass
 
 
 # 创建FastAPI应用

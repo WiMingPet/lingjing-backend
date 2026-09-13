@@ -53,7 +53,6 @@ def _generic_task(task_id, user_id, request_data, task_type, task_name):
             from app.services.tryon_service import TryonService
             result_task = _run_async(TryonService.generate_tryon(db, user_id, request_data))
             
-            # 同步内层 task 到外层 task
             outer_task = db.query(Task).filter(Task.id == task_id).first()
             if outer_task and result_task:
                 outer_task.status = result_task.status
@@ -62,6 +61,14 @@ def _generic_task(task_id, user_id, request_data, task_type, task_name):
                 outer_task.completed_at = datetime.datetime.utcnow()
                 db.commit()
                 print(f"[RQ-OTHER] tryon 外层任务已同步: task_id={task_id}, status={result_task.status}")
+                
+                # ========== 如果内层失败，退款 ==========
+                if result_task.status == "failed":
+                    refund_credits(
+                        db, task_id,
+                        reason=f"虚拟试穿失败: {result_task.error_message or '未知错误'}"
+                    )
+                # ============================================
         
         elif task_type == "multi_angle":
             from app.services.kling import kling_service
