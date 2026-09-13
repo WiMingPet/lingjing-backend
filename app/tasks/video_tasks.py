@@ -31,6 +31,7 @@ def generate_video_task(task_id: int, user_id: int, request_data: dict):
             loop.close()
         
         # 保存历史记录
+        video_url = None
         if result_task.status == "completed" and result_task.output_data:
             video_url = result_task.output_data.get("video_url")
             if video_url:
@@ -65,6 +66,17 @@ def generate_video_task(task_id: int, user_id: int, request_data: dict):
                     db.add(history)
                     db.commit()
         
+        # ========== 新增：同步内层 task 的结果到外层 task ==========
+        outer_task = db.query(Task).filter(Task.id == task_id).first()
+        if outer_task:
+            outer_task.status = result_task.status
+            outer_task.output_data = result_task.output_data
+            outer_task.progress = 100
+            outer_task.completed_at = datetime.datetime.utcnow()
+            db.commit()
+            print(f"[RQ-VIDEO] 外层任务已同步: task_id={task_id}, status={result_task.status}")
+        # ========================================================
+        
         print(f"[RQ-VIDEO] 完成: task_id={task_id}")
         return {"task_id": task_id, "status": result_task.status}
     
@@ -74,7 +86,6 @@ def generate_video_task(task_id: int, user_id: int, request_data: dict):
         print(f"[RQ-VIDEO] 失败: task_id={task_id}, error={error_msg}")
         print(traceback.format_exc())
         
-        # 更新任务状态
         try:
             task = db.query(Task).filter(Task.id == task_id).first()
             if task:
@@ -84,7 +95,6 @@ def generate_video_task(task_id: int, user_id: int, request_data: dict):
         except Exception as e2:
             print(f"[RQ-VIDEO] 更新失败状态出错: {e2}")
         
-        # 退款（防重复）
         refund_credits(db, task_id, reason=f"视频生成失败: {error_msg}")
         return {"task_id": task_id, "status": "failed", "error": error_msg}
     

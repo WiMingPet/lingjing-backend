@@ -28,6 +28,17 @@ def generate_image_task(task_id: int, user_id: int, request_data: dict):
         finally:
             loop.close()
         
+        # ========== 新增：同步内层 task 的结果到外层 task ==========
+        outer_task = db.query(Task).filter(Task.id == task_id).first()
+        if outer_task:
+            outer_task.status = result_task.status
+            outer_task.output_data = result_task.output_data
+            outer_task.progress = 100
+            outer_task.completed_at = __import__('datetime').datetime.utcnow()
+            db.commit()
+            print(f"[RQ-IMAGE] 外层任务已同步: task_id={task_id}, status={result_task.status}")
+        # ========================================================
+        
         print(f"[RQ-IMAGE] 完成: task_id={task_id}")
         return {"task_id": task_id, "status": result_task.status}
     

@@ -48,9 +48,20 @@ def _generic_task(task_id, user_id, request_data, task_type, task_name):
         db.commit()
         
         # 根据任务类型调用对应服务
+        # ========== tryon（修复） ==========
         if task_type == "tryon":
             from app.services.tryon_service import TryonService
-            _run_async(TryonService.generate_tryon(db, user_id, request_data))
+            result_task = _run_async(TryonService.generate_tryon(db, user_id, request_data))
+            
+            # 同步内层 task 到外层 task
+            outer_task = db.query(Task).filter(Task.id == task_id).first()
+            if outer_task and result_task:
+                outer_task.status = result_task.status
+                outer_task.output_data = result_task.output_data
+                outer_task.progress = 100
+                outer_task.completed_at = datetime.datetime.utcnow()
+                db.commit()
+                print(f"[RQ-OTHER] tryon 外层任务已同步: task_id={task_id}, status={result_task.status}")
         
         elif task_type == "multi_angle":
             from app.services.kling import kling_service
@@ -131,6 +142,7 @@ def _generic_task(task_id, user_id, request_data, task_type, task_name):
             print(f"[RQ-OTHER] 多角度试穿完成: task_id={task_id}")
             return {"task_id": task_id, "status": "completed"}
         
+        # ========== digital_human（修复） ==========
         elif task_type == "digital_human":
             from app.services.kling import kling_service
             api_task_id = _run_async(
@@ -144,21 +156,25 @@ def _generic_task(task_id, user_id, request_data, task_type, task_name):
             result = kling_service.wait_for_digital_human_result(api_task_id)
             video_url = result.get("task_result", {}).get("video_url", "")
             
+            if not video_url:
+                raise Exception("数字人视频生成失败")
+            
             task.status = "completed"
             task.output_data = {"video_url": video_url}
+            task.progress = 100
+            task.completed_at = datetime.datetime.utcnow()
             db.commit()
             
-            if video_url:
-                existing = db.query(History).filter(
-                    History.user_id == user_id, History.url == video_url
-                ).first()
-                if not existing:
-                    history = History(
-                        user_id=user_id, url=video_url, type="数字人分身",
-                        created_at=datetime.datetime.utcnow()
-                    )
-                    db.add(history)
-                    db.commit()
+            existing = db.query(History).filter(
+                History.user_id == user_id, History.url == video_url
+            ).first()
+            if not existing:
+                history = History(
+                    user_id=user_id, url=video_url, type="数字人分身",
+                    created_at=datetime.datetime.utcnow()
+                )
+                db.add(history)
+                db.commit()
         
         elif task_type == "ecommerce":
             from app.services.ecommerce_service import EcommerceService
