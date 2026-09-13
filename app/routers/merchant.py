@@ -341,3 +341,25 @@ async def _generate_package_logic(
         results.append(result_item)
 
     return results
+
+@router.get("/task/{task_id}", response_model=APIResponse)
+def get_merchant_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+):
+    """获取电商套图任务状态"""
+    from app.models.task import Task
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    
+    return APIResponse(
+        code=200,
+        message="获取成功",
+        data={
+            "task_id": task.id,
+            "status": task.status,
+            "output_data": task.output_data,
+            "error_message": task.error_message,
+        }
+    )

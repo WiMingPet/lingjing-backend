@@ -159,8 +159,17 @@ def _generic_task(task_id, user_id, request_data, task_type, task_name):
             if not video_url:
                 raise Exception("数字人视频生成失败")
             
+            # 生成封面
+            thumbnail_url = None
+            try:
+                from app.services.video_service import VideoService
+                thumbnail_url = _run_async(VideoService.extract_thumbnail(video_url))
+                print(f"[RQ-OTHER] 数字人封面生成成功: {thumbnail_url}")
+            except Exception as e:
+                print(f"[RQ-OTHER] 数字人封面生成失败: {e}")
+            
             task.status = "completed"
-            task.output_data = {"video_url": video_url}
+            task.output_data = {"video_url": video_url, "thumbnail": thumbnail_url}
             task.progress = 100
             task.completed_at = datetime.datetime.utcnow()
             db.commit()
@@ -170,7 +179,10 @@ def _generic_task(task_id, user_id, request_data, task_type, task_name):
             ).first()
             if not existing:
                 history = History(
-                    user_id=user_id, url=video_url, type="数字人分身",
+                    user_id=user_id, 
+                    url=video_url, 
+                    type="数字人分身",
+                    thumbnail=thumbnail_url,  # ← 加封面
                     created_at=datetime.datetime.utcnow()
                 )
                 db.add(history)
