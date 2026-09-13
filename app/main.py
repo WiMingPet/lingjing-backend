@@ -15,6 +15,8 @@ from app.models.digital_human import DigitalHuman
 from app.routers import auth, image, video, size, tryon, digital_human, multi_angle, proxy, payment, ecommerce, upload, tts
 from app.routers import history
 from app.routers import merchant
+from app.routers import test_network
+from app.routers import link_to_video
 from app.database import Base, engine
 
 # 初始化 RQ 队列
