@@ -14,51 +14,22 @@ class ImageService:
 
     @staticmethod
     def _check_prompt_safety(prompt: str) -> bool:
-        import requests
+        """
+        内容审核：只拦硬红线关键词，其余一律放行，最终风控交由可灵。
+        返回 True = 放行，False = 拦截。
+        """
+        hard_block_keywords = [
+            "露阴", "做爱", "乳头", "肛交", "强奸", "轮奸", "迷奸",
+            "海洛因", "全裸", "裸体", "生殖器", "冰毒",
+        ]    
+        
+        matched = [kw for kw in hard_block_keywords if kw in prompt]
+        if matched:
+            print(f"[DEBUG] 命中硬红线，拦截: {matched}, prompt={prompt[:50]}")
+            return False
 
-        # ========== 白名单：正常商业/服装词直接放行 ==========
-        allowed_keywords = [
-            "内衣", "内裤", "泳装", "泳衣", "健身", "瑜伽", "丝袜", "性感",
-            "曲线", "迷人", "身材", "火辣", "曼妙", "显瘦", "收腰", "提臀",
-            "美体", "塑形", "模特", "试穿", "展示", "海边", "沙滩", "比基尼"
-        ]
-        if any(kw in prompt for kw in allowed_keywords):
-            print(f"[DEBUG] 包含正常商业词，直接放行: {prompt[:30]}")
-            return True
-        # ========================================================
-
-        try:
-            resp = requests.post(
-                "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {settings.DASHSCOPE_API_KEY}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": "qwen-turbo",
-                    "messages": [{
-                        "role": "system",
-                        "content": (
-                            "你是内容安全审核员。只拦截明显违法内容："
-                            "性行为、裸露隐私部位、儿童色情、暴力血腥、恐怖主义、毒品。"
-                            "正常内衣泳装展示、模特试穿、性感广告词、身材描述都不算违规。"
-                            "如果违规，只回复\"违规\"；否则回复\"安全\"。"
-                        )
-                    }, {
-                        "role": "user",
-                        "content": prompt
-                    }],
-                    "max_tokens": 5,
-                    "temperature": 0
-                },
-                timeout=10
-            )
-            result = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
-            print(f"[DEBUG] 审核返回: {result}")
-            return "违规" not in result
-        except Exception as e:
-            print(f"[DEBUG] 审核异常，默认放行: {e}")
-            return True
+        print(f"[DEBUG] 未命中硬红线，放行: {prompt[:50]}")
+        return True
 
     @staticmethod
     async def check_image_safety(image_url: str) -> bool:

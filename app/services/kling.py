@@ -489,7 +489,6 @@ class KlingService:
             raise Exception("请提供文字内容或音频文件")
 
         # ========== 强制生成唯一的 external_task_id ==========
-        # 忽略前端传入的 name，使用 UUID + 时间戳生成唯一 ID
         unique_task_id = f"dh_{uuid.uuid4().hex}_{int(time.time())}"
         print(f"[DEBUG] 原始名称: {name}, 生成唯一任务ID: {unique_task_id}")
         # ====================================================
@@ -504,22 +503,38 @@ class KlingService:
 
         if prompt and prompt != "string":
             payload["prompt"] = prompt
-        
-        # 注意：不再使用 name 作为 external_task_id
-        # 如果前端传入了 name，可以记录到日志，但不作为任务ID使用
 
         payload = {k: v for k, v in payload.items() if v is not None}
 
-        print(f"[DEBUG] 数字人请求URL: {url}")
-        print(f"[DEBUG] 数字人请求参数: {payload}")
-        response = requests.post(url, json=payload, headers=self._get_headers())
-        result = response.json()
-        print(f"[DEBUG] 数字人响应: {result}")
+        # ========== 提交阶段对并发限制重试 ==========
+        max_retries = 5
+        for attempt in range(1, max_retries + 1):
+            print(f"[DEBUG] 数字人请求URL: {url}")
+            print(f"[DEBUG] 数字人请求参数: {payload}, 第{attempt}次尝试")
+            response = requests.post(url, json=payload, headers=self._get_headers())
+            result = response.json()
+            print(f"[DEBUG] 数字人响应: {result}")
 
-        if result.get("code") != 0:
-            raise Exception(f"可灵数字人API错误: {result.get('message')}")
+            if result.get("code") == 0:
+                return result["data"]["task_id"]
 
-        return result["data"]["task_id"]
+            msg = str(result.get("message", ""))
+            code = result.get("code")
+
+            # 并发限制，等待后重试
+            if code == 1303 or "parallel task" in msg.lower():
+                if attempt < max_retries:
+                    wait = attempt * 10  # 10s, 20s, 30s, 40s
+                    print(f"[DEBUG] 提交遇并发限制，{wait}s 后重试 (第{attempt}次): {msg}")
+                    time.sleep(wait)
+                    continue
+                raise Exception(f"可灵数字人API错误(并发限制重试{max_retries}次仍失败): {msg}")
+
+            # 其他错误直接抛出
+            raise Exception(f"可灵数字人API错误: {msg}")
+        # ============================================
+
+        raise Exception("可灵数字人API错误: 未知原因")
     
     @retry(stop=stop_after_attempt(3), wait=wait_fixed(2), retry=retry_if_exception_type(Exception))
     def get_digital_human_task_status(self, task_id: str) -> Dict:
@@ -528,44 +543,81 @@ class KlingService:
         url = f"{base_url}/videos/avatar/image2video/{task_id}"
         response = requests.get(url, headers=self._get_headers())
         result = response.json()
-        
+
         if result.get("code") != 0:
             raise Exception(f"查询数字人任务失败: {result.get('message')}")
-        
+
         return result["data"]
-    
-    def wait_for_digital_human_result(self, task_id: str, max_wait: int = 900, 
+
+    def wait_for_digital_human_result(self, task_id: str, max_wait: int = 1500,
                                        poll_interval: int = 15) -> Dict:
-        """轮询等待数字人任务完成"""
+        """
+        轮询等待数字人任务完成。
+        max_wait=1500 秒（25 分钟）：可灵实测约 15.7 分钟，留高峰排队余量。
+        超时前会再查一次终态，避免把已成功的任务误判为超时。
+        """
         start_time = time.time()
         current_interval = poll_interval
-        
+        last_status = None
+        last_msg = ""
+
         while time.time() - start_time < max_wait:
+            elapsed = int(time.time() - start_time)
+            status_data = None
             try:
                 status_data = self.get_digital_human_task_status(task_id)
-                task_status = status_data.get("task_status")
-                print(f"[DEBUG] 数字人任务状态: {task_status}")
-                
-                if task_status == "succeed":
-                    task_result = status_data.get("task_result", {})
-                    videos = task_result.get("videos", [])
-                    if videos:
-                        status_data["task_result"]["video_url"] = videos[0].get("url", "")
-                    return status_data
-                elif task_status == "failed":
-                    error_msg = status_data.get("task_status_msg", "未知错误")
-                    raise Exception(f"数字人任务失败: {error_msg}")
             except Exception as e:
                 if "parallel task" in str(e).lower() or "1303" in str(e):
                     print(f"[DEBUG] 并发限制，稍后重试...")
                     time.sleep(current_interval * 2)
                     continue
-                raise e
-            
+                # 只有查询接口本身的异常才继续轮询
+                print(f"[DEBUG] 查询异常，继续轮询: {e}")
+                time.sleep(current_interval)
+                current_interval = min(current_interval + 5, 30)
+                continue
+
+            task_status = status_data.get("task_status")
+            last_status = task_status
+            last_msg = status_data.get("task_status_msg", "")
+            print(f"[DEBUG] 数字人任务状态: {task_status}, elapsed={elapsed}s")
+
+            if task_status == "succeed":
+                task_result = status_data.get("task_result", {})
+                videos = task_result.get("videos", [])
+                if videos:
+                    status_data["task_result"]["video_url"] = videos[0].get("url", "")
+                return status_data
+            elif task_status == "failed":
+                # 业务失败，直接抛出，不被下面的 except 捕获
+                raise Exception(f"数字人任务失败: {status_data.get('task_status_msg', '未知错误')}")
+
             time.sleep(current_interval)
             current_interval = min(current_interval + 5, 30)
-        
-        raise Exception(f"数字人任务超时，task_id: {task_id}")
+
+        # ========== 超时前再查一次终态，避免误判 ==========
+        try:
+            status_data = self.get_digital_human_task_status(task_id)
+            final_status = status_data.get("task_status")
+            last_status = final_status
+            last_msg = status_data.get("task_status_msg", "")
+            print(f"[DEBUG] 超时后复查: status={final_status}, msg={last_msg}")
+
+            if final_status == "succeed":
+                task_result = status_data.get("task_result", {})
+                videos = task_result.get("videos", [])
+                if videos:
+                    status_data["task_result"]["video_url"] = videos[0].get("url", "")
+                print(f"[DEBUG] 超时复查发现任务已成功，返回结果: task_id={task_id}")
+                return status_data
+        except Exception as e:
+            print(f"[DEBUG] 超时复查异常: {e}")
+
+        raise Exception(
+            f"数字人任务超时，task_id: {task_id}, "
+            f"elapsed={int(time.time() - start_time)}s, "
+            f"最后状态={last_status}, msg={last_msg}"
+        )
 
     # ========== 音色列表接口 ==========
     def get_tts_voices(self) -> List[Dict]:
