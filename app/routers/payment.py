@@ -175,6 +175,9 @@ async def verify_iap_receipt(
     import requests as sync_requests
     
     body = await request.json()
+    print(f"[IAP-VERIFY] 收到请求: {body}")             # ← 加这行
+    logger.info(f"[IAP-VERIFY] 收到请求: {body}")        # ← 加这行
+    print(f"[IAP-VERIFY] user_id={body.get('user_id')}, credits={body.get('credits')}, package_id={body.get('package_id')}")  # ← 加这行
     receipt = body.get("receipt", "")
     package_id = body.get("package_id", 0)
     credits = body.get("credits", 0)
@@ -187,6 +190,7 @@ async def verify_iap_receipt(
         "password": settings.IAP_SHARED_SECRET
     })
     result = resp.json()
+    print(f"[IAP-VERIFY] 苹果返回状态: {result.get('status')}")   # ← 加这行
     
     if result.get("status") != 0:
         raise HTTPException(status_code=400, detail=f"收据验证失败")
