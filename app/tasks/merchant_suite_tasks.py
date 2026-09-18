@@ -75,8 +75,8 @@ def generate_suite_task(task_id: int, user_id: int, request_data: dict):
         task.output_data = {"images": images, "analysis": analysis, "history_id": history.id}
         db.commit()
         
-        print(f"[RQ-SUITE] 完成: task_id={task_id}, 生成 {len(watermarked_urls)} 张图")
-        return {"task_id": task_id, "status": "completed", "images": watermarked_urls}
+        print(f"[RQ-SUITE] 完成: task_id={task_id}, 生成 {len(images)} 张图")
+        return {"task_id": task_id, "status": "completed", "images": images}
     
     except Exception as e:
         import traceback
