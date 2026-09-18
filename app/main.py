@@ -14,9 +14,11 @@ from sqlalchemy import text
 from app.config import settings
 from app.database import init_db, SessionLocal
 from app.models.digital_human import DigitalHuman
-from app.routers import auth, image, video, size, tryon, digital_human, multi_angle, proxy, payment, ecommerce, upload, tts
+from app.routers import auth, image, video, size, tryon, digital_human, multi_angle, proxy, payment, upload, tts
 from app.routers import history
 from app.routers import merchant
+from app.tasks import merchant_suite_tasks
+from app.routers import talking_agent
 from app.routers import test_network
 from app.routers import link_to_video
 from app.database import Base, engine
@@ -222,12 +224,13 @@ app.include_router(digital_human.router, prefix="/api")
 app.include_router(multi_angle.router, prefix="/api")
 app.include_router(history.router, prefix="/api")
 app.include_router(payment.router, prefix="/api")
-app.include_router(ecommerce.router, prefix="/api")
+
 app.include_router(upload.router, prefix="/api")
 app.include_router(tts.router, prefix="/api")
 app.include_router(test_network.router, prefix="/api")
 app.include_router(link_to_video.router, prefix="/api")
 app.include_router(merchant.router, prefix="/api")
+app.include_router(talking_agent.router, prefix="/api")
 
 
 @app.get("/")

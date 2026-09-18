@@ -24,6 +24,10 @@ MULTI_ANGLE_COST = 80
 MERCHANT_WHITE_BG_COST = 10
 MERCHANT_SCENE_COST_PER_IMAGE = 10
 
+# ========== 口播带货 ==========
+TALKING_AGENT_COST_PER_SECOND = 16   # 每秒 16 点
+TALKING_AGENT_MIN_SECONDS = 5        # 最小预估 5 秒
+TALKING_AGENT_WORDS_PER_SECOND = 4   # 每秒 4 字
 
 # ========== 统一查询接口 ==========
 def get_video_cost(model: str, sound: str, duration: int) -> int:

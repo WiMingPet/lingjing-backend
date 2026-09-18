@@ -145,7 +145,7 @@ class KlingService:
         return result["data"]
     
     def wait_for_result(self, task_id: str, task_type: str = "image", 
-                        max_wait: int = 120, poll_interval: int = 2) -> Dict:
+                        max_wait: int = 300, poll_interval: int = 2) -> Dict:
         """轮询等待图片任务完成"""
         start_time = time.time()
         
@@ -163,6 +163,146 @@ class KlingService:
         
         raise Exception(f"任务超时，task_id: {task_id}")
     
+    def generate_image_o1(self, prompt: str, image_urls: list,
+                          resolution: str = "2k", aspect_ratio: str = "1:1",
+                          n: int = 1) -> str:
+        """
+        可灵图片O1 - 多模态图像编辑/生成
+        用自然语言描述哪里要改、哪里不变，无需手动mask
+        返回 task_id
+        """
+        import time as _time
+
+        base_url = self._get_base_url()
+        url = f"{base_url}/images/omni-image"
+
+        # ========== 根据原图比例动态设置 aspect_ratio ==========
+        try:
+            from PIL import Image as _PILImage
+            from io import BytesIO as _BytesIO
+            _resp = requests.get(image_urls[0], timeout=30)
+            _img = _PILImage.open(_BytesIO(_resp.content))
+            _w, _h = _img.size
+            _ratio = _w / _h
+            if _ratio > 1.2:
+                aspect_ratio = "16:9"
+            elif _ratio < 0.8:
+                aspect_ratio = "9:16"
+            else:
+                aspect_ratio = "1:1"
+            print(f"[KLING-O1] 动态比例: {aspect_ratio} (原图 {_w}x{_h})")
+        except Exception as e:
+            print(f"[KLING-O1] 计算比例失败，用默认 1:1: {e}")
+        # ====================================================
+
+        payload = {
+            "model_name": "kling-image-o1",
+            "prompt": prompt,
+            "image_list": [
+                {"image": img_url} for img_url in image_urls
+            ],
+            "resolution": resolution,
+            "aspect_ratio": aspect_ratio,
+            "n": n,
+        }
+
+        print(f"[KLING-O1] 提交图片O1任务")
+        print(f"[KLING-O1] prompt: {prompt[:100]}...")
+        print(f"[KLING-O1] 参考图数量: {len(image_urls)}")
+
+        response = requests.post(url, json=payload,
+                                 headers=self._get_headers(), timeout=30)
+        result = response.json()
+
+        if result.get("code") != 0:
+            msg = result.get("message", "未知错误")
+            # 并发限制重试
+            if "parallel" in msg.lower() or result.get("code") == 1303:
+                max_retries = 3
+                for attempt in range(1, max_retries + 1):
+                    wait = attempt * 15
+                    print(f"[KLING-O1] 并发限制，{wait}s 后重试 ({attempt}/{max_retries})")
+                    _time.sleep(wait)
+                    response = requests.post(url, json=payload,
+                                             headers=self._get_headers(), timeout=30)
+                    result = response.json()
+                    if result.get("code") == 0:
+                        break
+                else:
+                    raise Exception(f"可灵O1并发限制重试失败: {msg}")
+            else:
+                raise Exception(f"可灵O1 API错误: {msg}")
+
+        task_id = result["data"]["task_id"]
+        print(f"[KLING-O1] 任务已提交: {task_id}")
+        return task_id
+
+    def wait_for_o1_result(self, task_id: str, max_wait: int = 600,
+                           poll_interval: int = 10) -> Dict:
+        """
+        轮询等待图片O1任务完成
+        max_wait=600秒（10分钟）
+        """
+        import time as _time
+
+        base_url = self._get_base_url()
+        url = f"{base_url}/images/omni-image/{task_id}"
+
+        start_time = _time.time()
+        last_status = None
+
+        while _time.time() - start_time < max_wait:
+            elapsed = int(_time.time() - start_time)
+            try:
+                response = requests.get(url, headers=self._get_headers(), timeout=30)
+                result = response.json()
+
+                if result.get("code") != 0:
+                    print(f"[KLING-O1] 查询异常: {result.get('message')}")
+                    _time.sleep(poll_interval)
+                    continue
+
+                data = result.get("data", {})
+                task_status = data.get("task_status")
+                last_status = task_status
+
+                print(f"[KLING-O1] 状态: {task_status}, elapsed={elapsed}s")
+
+                if task_status == "succeed":
+                    task_result = data.get("task_result", {})
+                    images = task_result.get("images", [])
+                    if images:
+                        data["output_url"] = images[0].get("url", "")
+                    return data
+
+                elif task_status == "failed":
+                    error_msg = data.get("task_status_msg", "未知错误")
+                    raise Exception(f"图片O1任务失败: {error_msg}")
+
+            except Exception as e:
+                if "失败" in str(e):
+                    raise e
+                print(f"[KLING-O1] 查询异常，继续轮询: {e}")
+
+            _time.sleep(poll_interval)
+
+        # 超时前再查一次终态
+        try:
+            response = requests.get(url, headers=self._get_headers(), timeout=30)
+            result = response.json()
+            data = result.get("data", {})
+            if data.get("task_status") == "succeed":
+                task_result = data.get("task_result", {})
+                images = task_result.get("images", [])
+                if images:
+                    data["output_url"] = images[0].get("url", "")
+                print(f"[KLING-O1] 超时复查发现已成功: {task_id}")
+                return data
+        except Exception as e:
+            print(f"[KLING-O1] 超时复查异常: {e}")
+
+        raise Exception(f"图片O1任务超时，task_id={task_id}, 最后状态={last_status}")
+
     # ========== 视频生成（图生视频）==========
     def generate_video(self, image_url: str = None, prompt: str = "", 
                        duration: int = 5, mode: str = "std",
@@ -460,6 +600,165 @@ class KlingService:
         
         raise Exception(f"虚拟试穿任务超时，task_id: {task_id}")
     
+    def generate_talking_agent(self, request_data: dict) -> dict:
+        """
+        口播带货 - 调用可灵 /solutions/talking_agent
+        支持达人口播和口播带货两种模式
+        """
+        import time
+        
+        base_url = self.api_url.rstrip('/')
+        if base_url.endswith('/v1'):
+            base_url = base_url[:-3]
+        
+        url = f"{base_url}/solutions/talking_agent"
+        
+        # 构建 contents
+        contents = []
+        
+        # 人物来源
+        if request_data.get("avatar_image_url"):
+            contents.append({
+                "type": "avatar_image",
+                "url": request_data["avatar_image_url"]
+            })
+        elif request_data.get("avatar_id"):
+            contents.append({
+                "type": "avatar_id",
+                "text": request_data["avatar_id"]
+            })
+        
+        # 商品信息
+        if request_data.get("product_images"):
+            for img_url in request_data["product_images"]:
+                contents.append({
+                    "type": "ref_image",
+                    "url": img_url
+                })
+        
+        if request_data.get("goods_title"):
+            contents.append({
+                "type": "goods_title",
+                "text": request_data["goods_title"]
+            })
+        
+        if request_data.get("goods_price"):
+            contents.append({
+                "type": "goods_price",
+                "text": request_data["goods_price"]
+            })
+        
+        if request_data.get("target_audience"):
+            contents.append({
+                "type": "goods_target_audience",
+                "text": request_data["target_audience"]
+            })
+        
+        if request_data.get("selling_point"):
+            contents.append({
+                "type": "goods_selling_point",
+                "text": request_data["selling_point"]
+            })
+        
+        # 口播稿
+        contents.append({
+            "type": "speech_script",
+            "text": request_data["script"]
+        })
+        
+        # 构建 settings
+        settings = {
+            "resolution": request_data.get("resolution", "720p"),
+            "aspect_ratio": request_data.get("aspect_ratio", "9:16"),
+            "allow_polish": request_data.get("allow_polish", False),
+        }
+        
+        # 上传人物图时，必须传 voice_id
+        if request_data.get("avatar_image_url"):
+            settings["voice_id"] = request_data.get("voice_id", "male_calm_informative")
+        
+        # 口播带货模式：不支持 speech_rate
+        has_product = bool(request_data.get("product_images"))
+        if not has_product and request_data.get("speech_rate"):
+            settings["speech_rate"] = request_data["speech_rate"]
+        
+        payload = {
+            "contents": contents,
+            "settings": settings,
+        }
+        
+        print(f"[DEBUG] 口播带货请求URL: {url}")
+        print(f"[DEBUG] 口播带货请求参数: {payload}")
+        
+        response = requests.post(url, json=payload, headers=self._get_headers(), timeout=30)
+        result = response.json()
+        print(f"[DEBUG] 口播带货响应: {result}")
+        
+        if result.get("code") != 0:
+            raise Exception(f"口播带货API错误: {result.get('message')}")
+        
+        data = result["data"]
+        task_id = data.get("task_id") or data.get("id")
+        print(f"[DEBUG] 口播带货任务ID: {task_id}")
+        
+        # 轮询等待
+        return self._wait_for_talking_agent(task_id)
+    
+    def _wait_for_talking_agent(self, task_id: str, max_wait: int = 900, poll_interval: int = 10) -> dict:
+        """轮询等待口播带货任务完成"""
+        import time
+
+        base_url = self.api_url.rstrip('/')
+        if base_url.endswith('/v1'):
+            base_url = base_url[:-3]
+
+        start_time = time.time()
+
+        while time.time() - start_time < max_wait:
+            url = f"{base_url}/solutions"
+            params = {"task_ids": task_id}
+
+            response = requests.get(url, headers=self._get_headers(), params=params, timeout=30)
+            result = response.json()
+
+            if result.get("code") != 0:
+                raise Exception(f"查询口播任务失败: {result.get('message')}")
+
+            data = result.get("data", [])
+            if not data:
+                time.sleep(poll_interval)
+                continue
+
+            # 兼容 data 是列表或字典
+            if isinstance(data, list):
+                task_data = data[0]
+            else:
+                task_data = data
+
+            status = task_data.get("status")
+            print(f"[DEBUG] 口播任务状态: {status}")
+
+            if status in ("succeeded", "succeed"):
+                outputs = task_data.get("outputs", [])
+                for output in outputs:
+                    if output.get("type") == "video":
+                        duration = output.get("duration", 0)
+                        try:
+                            duration = float(duration)
+                        except (ValueError, TypeError):
+                            duration = 0
+                        return {
+                            "video_url": output.get("url"),
+                            "duration": duration
+                        }
+                return {"video_url": None, "duration": 0}
+            elif status == "failed":
+                raise Exception(f"口播任务失败: {task_data.get('message', '未知错误')}")
+
+            time.sleep(poll_interval)
+
+        raise Exception(f"口播任务超时: {task_id}")
+
     # ========== 数字人分身 ==========
     async def generate_digital_human(self, digital_human_id: Optional[int] = None, text: str = "", image_url: str = None, audio_url: str = None, prompt: str = None, name: str = None, voice: str = None) -> str:
         """

@@ -1,0 +1,43 @@
+{
+  "canvas_size": [
+    1464,
+    600
+  ],
+  "placeholders": [
+    {
+      "type": "image",
+      "name": "image_1",
+      "x": 0,
+      "y": 108,
+      "w": 487,
+      "h": 492
+    },
+    {
+      "type": "image",
+      "name": "image_2",
+      "x": 489,
+      "y": 108,
+      "w": 486,
+      "h": 492
+    },
+    {
+      "type": "image",
+      "name": "image_3",
+      "x": 976,
+      "y": 108,
+      "w": 488,
+      "h": 492
+    },
+    {
+      "type": "text",
+      "name": "title",
+      "x": 732,
+      "y": 54,
+      "max_w": 1317,
+      "font": "SourceHanSerif-Bold",
+      "size": 48,
+      "color": "#FFFFFF",
+      "anchor": "mm"
+    }
+  ]
+}

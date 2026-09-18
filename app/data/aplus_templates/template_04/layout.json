@@ -1,0 +1,40 @@
+{
+  "canvas_size": [
+    1464,
+    600
+  ],
+  "placeholders": [
+    {
+      "type": "image",
+      "name": "closeup_1",
+      "x": 20,
+      "y": 30,
+      "w": 369,
+      "h": 150
+    },
+    {
+      "type": "image",
+      "name": "closeup_2",
+      "x": 20,
+      "y": 230,
+      "w": 369,
+      "h": 150
+    },
+    {
+      "type": "image",
+      "name": "closeup_3",
+      "x": 20,
+      "y": 430,
+      "w": 369,
+      "h": 140
+    },
+    {
+      "type": "image",
+      "name": "scene_image",
+      "x": 419,
+      "y": 10,
+      "w": 1035,
+      "h": 580
+    }
+  ]
+}

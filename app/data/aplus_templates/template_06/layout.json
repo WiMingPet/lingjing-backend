@@ -1,0 +1,71 @@
+{
+  "canvas_size": [1464, 600],
+  "placeholders": [
+    {
+      "type": "image",
+      "name": "image_top",
+      "x": 20,
+      "y": 20,
+      "w": 950,
+      "h": 270
+    },
+    {
+      "type": "image",
+      "name": "image_bottom",
+      "x": 20,
+      "y": 310,
+      "w": 950,
+      "h": 270
+    },
+    {
+      "type": "text",
+      "name": "label_top",
+      "x": 30,
+      "y": -5,
+      "max_w": 600,
+      "font": "SourceHanSans",
+      "size": 16,
+      "color": "#00C8FF"
+    },
+    {
+      "type": "text",
+      "name": "label_bottom",
+      "x": 30,
+      "y": 285,
+      "max_w": 600,
+      "font": "SourceHanSans",
+      "size": 16,
+      "color": "#00C8FF"
+    },
+    {
+      "type": "text",
+      "name": "title",
+      "x": 970,
+      "y": 130,
+      "max_w": 490,
+      "font": "SourceHanSerif-Bold",
+      "size": 28,
+      "color": "#FFFFFF"
+    },
+    {
+      "type": "text",
+      "name": "subtitle",
+      "x": 970,
+      "y": 210,
+      "max_w": 490,
+      "font": "SourceHanSans",
+      "size": 16,
+      "color": "#B0C0D0"
+    },
+    {
+      "type": "text",
+      "name": "body",
+      "x": 970,
+      "y": 300,
+      "max_w": 490,
+      "font": "SourceHanSans",
+      "size": 13,
+      "color": "#8090A0"
+    }
+  ]
+}

@@ -75,3 +75,19 @@ def get_current_user(
         )
     
     return user
+
+def get_user_from_token(token: str, db: Session) -> Optional[User]:
+    """根据 token 字符串解析用户（不带 Bearer 前缀）"""
+    payload = decode_access_token(token)
+    if payload is None:
+        return None
+
+    user_id = payload.get("sub")
+    if user_id is None:
+        return None
+
+    try:
+        user = db.query(User).filter(User.id == int(user_id)).first()
+        return user
+    except (ValueError, TypeError):
+        return None

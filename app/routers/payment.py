@@ -1,15 +1,16 @@
 import logging
 import os
-
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.order import RechargeOrder
 from app.models.user import User
 from app.schemas.payment import CreateOrderRequest, CreateOrderResponse, OrderStatusResponse
+from app.schemas.task import APIResponse
 from app.services.payment_service import PaymentService
+from app.services.wechat_pay_service import wechat_pay_service
 from app.utils.auth import get_current_user
 from app.config import settings
 
@@ -175,37 +176,185 @@ async def verify_iap_receipt(
     import requests as sync_requests
     
     body = await request.json()
-    print(f"[IAP-VERIFY] 收到请求: {body}")             # ← 加这行
-    logger.info(f"[IAP-VERIFY] 收到请求: {body}")        # ← 加这行
-    print(f"[IAP-VERIFY] user_id={body.get('user_id')}, credits={body.get('credits')}, package_id={body.get('package_id')}")  # ← 加这行
+    logger.info(f"[IAP-VERIFY] 收到请求: {body}")
+    
     receipt = body.get("receipt", "")
     package_id = body.get("package_id", 0)
     credits = body.get("credits", 0)
     user_id = body.get("user_id", None)
+    transaction_id = body.get("transaction_id", None)
     
-    verify_url = "https://sandbox.itunes.apple.com/verifyReceipt"
+    if not receipt:
+        raise HTTPException(status_code=400, detail="缺少收据")
     
+    if not user_id:
+        raise HTTPException(status_code=400, detail="缺少用户ID")
+    
+    # ========== 1. 先走正式环境 ==========
+    verify_url = "https://buy.itunes.apple.com/verifyReceipt"
     resp = sync_requests.post(verify_url, json={
         "receipt-data": receipt,
         "password": settings.IAP_SHARED_SECRET
     })
     result = resp.json()
-    print(f"[IAP-VERIFY] 苹果返回状态: {result.get('status')}")   # ← 加这行
+    logger.info(f"[IAP-VERIFY] 正式环境返回: {result.get('status')}")
+    
+    # ========== 2. 如果是沙盒收据（21007），改用沙盒 ==========
+    if result.get("status") == 21007:
+        logger.info("[IAP-VERIFY] 检测到沙盒收据，切换沙盒验证")
+        verify_url = "https://sandbox.itunes.apple.com/verifyReceipt"
+        resp = sync_requests.post(verify_url, json={
+            "receipt-data": receipt,
+            "password": settings.IAP_SHARED_SECRET
+        })
+        result = resp.json()
+        logger.info(f"[IAP-VERIFY] 沙盒环境返回: {result.get('status')}")
     
     if result.get("status") != 0:
-        raise HTTPException(status_code=400, detail=f"收据验证失败")
+        raise HTTPException(status_code=400, detail=f"收据验证失败: {result.get('status')}")
     
-    # 如果传了user_id，直接充值；否则返回credits由前端暂存
-    if user_id:
-        user = db.query(User).filter(User.id == user_id).first()
-        if user:
-            user.credits += credits
-            db.commit()
-            return {"code": 200, "message": "充值成功", "credits": user.credits}
+    # ========== 3. 提取交易信息 ==========
+    latest_receipt_info = result.get("latest_receipt_info", [])
+    if not latest_receipt_info:
+        raise HTTPException(status_code=400, detail="收据中无交易信息")
     
-    return {"code": 200, "message": "购买成功", "credits": credits}
+    latest = latest_receipt_info[-1]
+    product_id = latest.get("product_id")
+    apple_transaction_id = latest.get("transaction_id")
+    
+    logger.info(f"[IAP-VERIFY] 商品: {product_id}, 交易ID: {apple_transaction_id}")
+    
+    # ========== 4. 防重复 ==========
+    if apple_transaction_id:
+        existing = db.query(RechargeOrder).filter(
+            RechargeOrder.order_no == f"iap_{apple_transaction_id}"
+        ).first()
+        if existing:
+            logger.info(f"[IAP-VERIFY] 交易 {apple_transaction_id} 已处理过")
+            user = db.query(User).filter(User.id == user_id).first()
+            return {"code": 200, "message": "已充值", "credits": user.credits if user else 0}
+    
+    # ========== 5. 给用户加灵境点 ==========
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    user.credits += credits
+    db.commit()
+    logger.info(f"[IAP-VERIFY] 用户 {user_id} 充值 {credits} 点，当前余额 {user.credits}")
+    
+    # ========== 6. 记录订单 ==========
+    if apple_transaction_id:
+        order = RechargeOrder(
+            order_no=f"iap_{apple_transaction_id}",
+            user_id=user_id,
+            amount=0,
+            credits=credits,
+            status="paid",
+        )
+        db.add(order)
+        db.commit()
+    
+    return {"code": 200, "message": "充值成功", "credits": user.credits}
 
     
+
+@router.post("/wechat/create_order", response_model=APIResponse)
+async def create_wechat_order(
+    payload: CreateOrderRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """微信 APP 支付统一下单"""
+    import datetime
+    import random
+    order_no = "WX" + datetime.datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(1000, 9999))
+
+    order = RechargeOrder(
+        order_no=order_no,
+        user_id=current_user.id,
+        amount=float(payload.amount),
+        credits=payload.credits,
+        status="pending",
+    )
+    db.add(order)
+    db.commit()
+
+    try:
+        pay_params = wechat_pay_service.create_app_order(
+            out_trade_no=order_no,
+            total_fee=int(float(payload.amount) * 100),
+            description=f"灵境点充值 {payload.credits} 点",
+        )
+
+        return APIResponse(
+            code=200,
+            message="下单成功",
+            data={
+                "order_no": order_no,
+                "pay_params": pay_params,
+            }
+        )
+    except Exception as e:
+        print(f"[WECHAT_PAY] 下单失败: {e}")
+        raise HTTPException(500, f"微信下单失败: {e}")
+
+
+@router.post("/wechat_notify")
+async def wechat_notify(request: Request, db: Session = Depends(get_db)):
+    """微信支付回调"""
+    try:
+        body = await request.body()
+        headers = {k: v for k, v in request.headers.items()}
+
+        result = wechat_pay_service.verify_callback(headers, body)
+
+        if not result:
+            print("[WECHAT_PAY] 回调验证失败")
+            return JSONResponse({"code": "FAIL", "message": "验证失败"})
+
+        event_type = result.get("event_type")
+        if event_type != "TRANSACTION.SUCCESS":
+            print(f"[WECHAT_PAY] 非支付成功事件: {event_type}")
+            return JSONResponse({"code": "SUCCESS", "message": "成功"})
+
+        resource = result.get("resource", {})
+        decrypted = wechat_pay_service.wxpay.decrypt_callback(resource)
+
+        out_trade_no = decrypted.get("out_trade_no")
+        transaction_id = decrypted.get("transaction_id")
+        trade_state = decrypted.get("trade_state")
+
+        print(f"[WECHAT_PAY] 支付回调: order_no={out_trade_no}, txn={transaction_id}, state={trade_state}")
+
+        if trade_state != "SUCCESS":
+            return JSONResponse({"code": "SUCCESS", "message": "成功"})
+
+        order = db.query(RechargeOrder).filter(RechargeOrder.order_no == out_trade_no).first()
+        if not order:
+            print(f"[WECHAT_PAY] 订单不存在: {out_trade_no}")
+            return JSONResponse({"code": "FAIL", "message": "订单不存在"})
+
+        if order.status == "paid":
+            print(f"[WECHAT_PAY] 订单已处理: {out_trade_no}")
+            return JSONResponse({"code": "SUCCESS", "message": "成功"})
+
+        order.status = "paid"
+        user = db.query(User).filter(User.id == order.user_id).first()
+        if user:
+            user.credits += order.credits
+            print(f"[WECHAT_PAY] 用户 {user.id} 充值 {order.credits} 点，当前 {user.credits}")
+        db.commit()
+
+        return JSONResponse({"code": "SUCCESS", "message": "成功"})
+
+    except Exception as e:
+        import traceback
+        print(f"[WECHAT_PAY] 回调处理失败: {e}")
+        print(traceback.format_exc())
+        return JSONResponse({"code": "FAIL", "message": str(e)})
+
+
 # ========== 管理员充值接口（内部使用） ==========
 @router.post("/admin_add_credits")
 async def admin_add_credits(

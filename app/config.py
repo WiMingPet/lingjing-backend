@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     OSS_ACCESS_KEY_SECRET: str = os.getenv("OSS_ACCESS_KEY_SECRET", "")
     OSS_BUCKET_NAME: str = "lingjing-media"
     OSS_ENDPOINT: str = "oss-cn-shenzhen.aliyuncs.com"
+    OSS_PRIVATE_BUCKET_NAME: str = "lingjing-media-private"
     OSS_INTERNAL_ENDPOINT: str = "oss-cn-shenzhen-internal.aliyuncs.com"
 
     # 阿里云短信配置
@@ -43,6 +44,16 @@ class Settings(BaseSettings):
     SMS_SIGN_NAME: str = os.getenv("SMS_SIGN_NAME", "")
     SMS_TEMPLATE_CODE: str = os.getenv("SMS_TEMPLATE_CODE", "")
 
+    # 微信支付
+    WECHAT_MCHID: str = os.getenv("WECHAT_MCHID", "")
+    WECHAT_APPID: str = os.getenv("WECHAT_APPID", "")
+    WECHAT_APIV3_KEY: str = os.getenv("WECHAT_APIV3_KEY", "")
+    WECHAT_CERT_SERIAL: str = os.getenv("WECHAT_CERT_SERIAL", "")
+    WECHAT_PRIVATE_KEY: str = os.getenv("WECHAT_PRIVATE_KEY", "")
+    WECHAT_PUBLIC_KEY: str = os.getenv("WECHAT_PUBLIC_KEY", "")
+    WECHAT_PUBLIC_KEY_ID: str = os.getenv("WECHAT_PUBLIC_KEY_ID", "")
+    WECHAT_APIV2_KEY: str = os.getenv("WECHAT_APIV2_KEY", "")
+    
     # File Storage
     UPLOAD_DIR: str = "./uploads"
     MAX_FILE_SIZE: int = 10485760

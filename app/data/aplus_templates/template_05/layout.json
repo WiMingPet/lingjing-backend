@@ -1,0 +1,57 @@
+{
+  "canvas_size": [
+    1464,
+    600
+  ],
+  "placeholders": [
+    {
+      "type": "image",
+      "name": "image_left",
+      "x": 0,
+      "y": 90,
+      "w": 728,
+      "h": 438
+    },
+    {
+      "type": "image",
+      "name": "image_right",
+      "x": 736,
+      "y": 90,
+      "w": 728,
+      "h": 438
+    },
+    {
+      "type": "text",
+      "name": "title",
+      "x": 732,
+      "y": 45,
+      "max_w": 1171,
+      "font": "SourceHanSerif-Bold",
+      "size": 42,
+      "color": "#FFFFFF",
+      "anchor": "mm"
+    },
+    {
+      "type": "text",
+      "name": "label_left",
+      "x": 364,
+      "y": 564,
+      "max_w": 672,
+      "font": "SourceHanSans",
+      "size": 24,
+      "color": "#FFFFFF",
+      "anchor": "mm"
+    },
+    {
+      "type": "text",
+      "name": "label_right",
+      "x": 1100,
+      "y": 564,
+      "max_w": 672,
+      "font": "SourceHanSans",
+      "size": 24,
+      "color": "#FFFFFF",
+      "anchor": "mm"
+    }
+  ]
+}

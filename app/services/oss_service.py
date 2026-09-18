@@ -43,49 +43,60 @@ class OSSService:
         self, 
         file_content: bytes, 
         file_extension: str,
-        sub_folder: str = "uploads"
+        sub_folder: str = "uploads",
+        bucket_name: str = None
     ) -> str:
         """
         上传文件到 OSS
+        - bucket_name 为空：用默认 Bucket（公共读）
+        - bucket_name 传入：用指定 Bucket（私有 Bucket）
         """
         filename = f"{sub_folder}/{uuid.uuid4()}.{file_extension}"
-        
-        # 获取正确的 Content-Type
         content_type = self._get_content_type(file_extension)
-        
-        # 设置请求头
-        headers = {
-            'Content-Type': content_type,
-            'x-oss-object-acl': 'public-read',
-            'Content-Disposition': 'inline'
-        }
-        
-        # 上传文件（带上 headers）
-        self.bucket.put_object(filename, file_content, headers=headers)
-        
-        # 返回公网 URL
-        url = f"https://{settings.OSS_BUCKET_NAME}.{settings.OSS_ENDPOINT}/{filename}"
-        print(f"[OSS] 文件上传成功: {url}, Content-Type: {content_type}")
+
+        actual_bucket_name = bucket_name or settings.OSS_BUCKET_NAME
+
+        if bucket_name and bucket_name != settings.OSS_BUCKET_NAME:
+            # 私有 Bucket
+            auth = oss2.Auth(settings.OSS_ACCESS_KEY_ID, settings.OSS_ACCESS_KEY_SECRET)
+            target_bucket = oss2.Bucket(auth, settings.OSS_ENDPOINT, actual_bucket_name)
+            headers = {
+                'Content-Type': content_type,
+                'Content-Disposition': 'inline',
+            }
+        else:
+            # 默认公共读 Bucket
+            target_bucket = self.bucket
+            headers = {
+                'Content-Type': content_type,
+                'x-oss-object-acl': 'public-read',
+                'Content-Disposition': 'inline',
+            }
+
+        target_bucket.put_object(filename, file_content, headers=headers)
+
+        url = f"https://{actual_bucket_name}.{settings.OSS_ENDPOINT}/{filename}"
+        print(f"[OSS] 文件上传成功: {url}, Content-Type: {content_type}, Bucket: {actual_bucket_name}")
         return url
     
     async def upload_file_from_url(
         self,
         file_url: str,
         file_extension: str,
-        sub_folder: str = "uploads"
+        sub_folder: str = "uploads",
+        bucket_name: str = None
     ) -> str:
-        """
-        从网络 URL 下载文件并上传到 OSS
-        """
+        """从网络 URL 下载文件并上传到 OSS"""
         import httpx
-        
+
         async with httpx.AsyncClient() as client:
             response = await client.get(file_url)
             response.raise_for_status()
             return await self.upload_file(
                 response.content,
                 file_extension,
-                sub_folder
+                sub_folder,
+                bucket_name=bucket_name,
             )
     
     def delete_file(self, file_url: str) -> bool:

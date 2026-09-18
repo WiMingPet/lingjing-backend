@@ -27,9 +27,6 @@ def generate_digital_human_task(task_id: int, user_id: int, request_data: dict):
     return _generic_task(task_id, user_id, request_data, "digital_human", "数字人分身")
 
 
-def generate_ecommerce_video_task(task_id: int, user_id: int, request_data: dict):
-    return _generic_task(task_id, user_id, request_data, "ecommerce", "AI带货视频")
-
 
 def generate_merchant_task(task_id: int, user_id: int, request_data: dict):
     return _generic_task(task_id, user_id, request_data, "merchant", "电商商品套图")
@@ -195,85 +192,6 @@ def _generic_task(task_id, user_id, request_data, task_type, task_name):
                 db.add(history)
                 db.commit()
         
-        elif task_type == "ecommerce":
-            from app.services.ecommerce_service import EcommerceService
-            from app.schemas.ecommerce import ProductInfo, VideoTaskRequest
-            
-            service = EcommerceService()
-            
-            # 1. 解析商品
-            product = None
-            if request_data.get("url"):
-                try:
-                    product = _run_async(service.parse_product_url(request_data["url"]))
-                except Exception as e:
-                    print(f"[RQ-OTHER] 解析URL失败: {e}")
-            
-            if not product:
-                product = ProductInfo(
-                    title="商品",
-                    price="0",
-                    description=request_data.get("description") or "",
-                    images=[request_data.get("image_url")] if request_data.get("image_url") else [],
-                    platform="manual"
-                )
-            
-            is_manual = not request_data.get("url") and (
-                request_data.get("image_url") or request_data.get("description")
-            )
-            
-            # 2. 生成文案
-            script = _run_async(service.generate_copywriting(product, is_manual_mode=is_manual))
-            
-            # 3. 生成视频
-            result = _run_async(
-                service.create_product_video(
-                    script,
-                    product,
-                    digital_image_url=request_data.get("digital_image_url"),
-                    digital_human_id=request_data.get("digital_human_id"),
-                    user_token=None,
-                    is_manual_mode=is_manual
-                )
-            )
-            
-            video_url = result.get("video_url")
-            if not video_url:
-                raise Exception("视频生成失败")
-            
-            # 4. 生成封面
-            thumbnail_url = None
-            try:
-                from app.services.video_service import VideoService
-                thumbnail_url = _run_async(VideoService.extract_thumbnail(video_url))
-            except Exception as e:
-                print(f"[RQ-OTHER] 封面生成失败: {e}")
-            
-            # 5. 更新任务
-            task.status = "completed"
-            task.output_data = {"video_url": video_url, "thumbnail": thumbnail_url}
-            db.commit()
-            
-            # 6. 保存历史记录
-            existing = db.query(History).filter(
-                History.user_id == user_id,
-                History.url == video_url,
-                History.type == "AI带货视频"
-            ).first()
-            
-            if not existing:
-                history = History(
-                    user_id=user_id,
-                    url=video_url,
-                    type="AI带货视频",
-                    thumbnail=thumbnail_url,
-                    created_at=datetime.datetime.utcnow()
-                )
-                db.add(history)
-                db.commit()
-            
-            print(f"[RQ-OTHER] AI带货视频完成: task_id={task_id}")
-            return {"task_id": task_id, "status": "completed"}
         
         elif task_type == "merchant":
             from app.routers.merchant import _generate_package_logic

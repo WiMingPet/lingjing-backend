@@ -39,7 +39,7 @@ class TryonService:
 
             # ========== 图片安全审核 ==========
             from app.services.image_service import ImageService
-            from fastapi import HTTPException
+            
             
             if model_image_url and not await ImageService.check_image_safety(model_image_url):
                 task.status = "failed"
