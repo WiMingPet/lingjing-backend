@@ -169,7 +169,6 @@ async def generate_talking_agent(
     else:
         # 同步模式
         from app.services.kling import kling_service
-        from app.utils.credits import check_and_deduct_credits
         from app.utils.refund import refund_credits
         from app.models.history import History
         import datetime
