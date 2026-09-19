@@ -63,7 +63,7 @@ class WeChatPayService:
         return self._sign_app_pay_params(prepay_id)
 
     def _sign_app_pay_params(self, prepay_id: str) -> dict:
-        """APP 支付二次签名（RSA-SHA256）"""
+        """APP 支付二次签名（RSA-SHA256），只用 4 个字段，驼峰"""
         import time
         import random
         import string
@@ -77,26 +77,23 @@ class WeChatPayService:
         noncestr = ''.join(random.choices(string.ascii_letters + string.digits, k=32))
         timestamp = str(int(time.time()))
 
-        # 待签名串：每行 key=value，末尾换行
+        # 微信 APP 支付调起签名串：4 个字段，驼峰，每行一个，末尾换行
         sign_lines = [
-            f"appid={appid}",
-            f"noncestr={noncestr}",
-            f"package={package}",
-            f"partnerid={partnerid}",
-            f"prepayid={prepay_id}",
-            f"timestamp={timestamp}",
+            f"appId={appid}",
+            f"timeStamp={timestamp}",
+            f"nonceStr={noncestr}",
+            f"prepayId={prepay_id}",
             "",
         ]
         sign_str = "\n".join(sign_lines)
 
-        # 读取商户 API 私钥（优先文件，其次环境变量）
+        # 读取商户 API 私钥
         private_key_pem = self._load_pem(
             file_path="/app/wechat_private_key.pem",
             env_value=settings.WECHAT_PRIVATE_KEY,
         )
-
         if not private_key_pem:
-            raise Exception("WECHAT_PRIVATE_KEY 未配置（环境变量和文件都没有）")
+            raise Exception("WECHAT_PRIVATE_KEY 未配置")
 
         private_key = serialization.load_pem_private_key(
             private_key_pem.encode(),
