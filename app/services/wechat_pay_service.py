@@ -63,24 +63,49 @@ class WeChatPayService:
         return self._sign_app_pay_params(prepay_id)
 
     def _sign_app_pay_params(self, prepay_id: str) -> dict:
+        """APP 支付二次签名（RSA-SHA256）"""
+        import time
+        import random
+        import string
+        import base64
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import padding
+
         appid = settings.WECHAT_APPID
         partnerid = settings.WECHAT_MCHID
         package = "Sign=WXPay"
         noncestr = ''.join(random.choices(string.ascii_letters + string.digits, k=32))
         timestamp = str(int(time.time()))
 
-        params = {
-            "appid": appid,
-            "noncestr": noncestr,
-            "package": package,
-            "partnerid": partnerid,
-            "prepayid": prepay_id,
-            "timestamp": timestamp,
-        }
+        # 待签名串：每行 key=value，末尾换行
+        sign_lines = [
+            f"appid={appid}",
+            f"noncestr={noncestr}",
+            f"package={package}",
+            f"partnerid={partnerid}",
+            f"prepayid={prepay_id}",
+            f"timestamp={timestamp}",
+            "",
+        ]
+        sign_str = "\n".join(sign_lines)
 
-        sign_str = "&".join(f"{k}={v}" for k, v in sorted(params.items()))
-        sign_str += f"&key={settings.WECHAT_APIV2_KEY}"
-        sign = hashlib.md5(sign_str.encode("utf-8")).hexdigest().upper()
+        # 读取商户 API 私钥
+        private_key_pem = settings.WECHAT_PRIVATE_KEY
+        if "\\n" in private_key_pem:
+            private_key_pem = private_key_pem.replace("\\n", "\n")
+
+        private_key = serialization.load_pem_private_key(
+            private_key_pem.encode(),
+            password=None,
+        )
+
+        # RSA-SHA256 签名，Base64
+        signature = private_key.sign(
+            sign_str.encode("utf-8"),
+            padding.PKCS1v15(),
+            hashes.SHA256(),
+        )
+        sign = base64.b64encode(signature).decode()
 
         return {
             "appid": appid,
