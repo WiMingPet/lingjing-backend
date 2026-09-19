@@ -21,9 +21,9 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     # Third Party APIs
-    KLING_API_KEY: str = os.getenv("KLING_API_KEY", "api-key-kling-bFE9cP6vueYLnBn3DILQN8CaMIp3r2KQHaKD1nnnzxE")
+    KLING_API_KEY: str = os.getenv("KLING_API_KEY", "")
     KLING_API_SECRET: str = os.getenv("KLING_API_SECRET", "")
-    KLING_API_URL: str = "https://api-beijing.klingai.com/v1"
+    KLING_API_URL: str = "https://api-beijing.klingai.com"
     
 
     # 腾讯云 TTS

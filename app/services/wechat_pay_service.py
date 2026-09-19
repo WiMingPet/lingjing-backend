@@ -89,10 +89,14 @@ class WeChatPayService:
         ]
         sign_str = "\n".join(sign_lines)
 
-        # 读取商户 API 私钥
-        private_key_pem = settings.WECHAT_PRIVATE_KEY
-        if "\\n" in private_key_pem:
-            private_key_pem = private_key_pem.replace("\\n", "\n")
+        # 读取商户 API 私钥（优先文件，其次环境变量）
+        private_key_pem = self._load_pem(
+            file_path="/app/wechat_private_key.pem",
+            env_value=settings.WECHAT_PRIVATE_KEY,
+        )
+
+        if not private_key_pem:
+            raise Exception("WECHAT_PRIVATE_KEY 未配置（环境变量和文件都没有）")
 
         private_key = serialization.load_pem_private_key(
             private_key_pem.encode(),
