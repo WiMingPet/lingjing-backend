@@ -1,5 +1,9 @@
 import logging
+import time
+import jwt
+import requests as sync_requests
 import os
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy.orm import Session
@@ -173,61 +177,120 @@ async def verify_iap_receipt(
     request: Request,
     db: Session = Depends(get_db)
 ):
-    import requests as sync_requests
-    
     body = await request.json()
-    logger.info(f"[IAP-VERIFY] 收到请求: {body}")
+    logger.info(f"[IAP-VERIFY] 收到请求")
     
-    receipt = body.get("receipt", "")
-    package_id = body.get("package_id", 0)
+    jws = body.get("jws_representation", "")
     credits = body.get("credits", 0)
     user_id = body.get("user_id", None)
-    transaction_id = body.get("transaction_id", None)
     
-    if not receipt:
-        raise HTTPException(status_code=400, detail="缺少收据")
+    if not jws:
+        raise HTTPException(status_code=400, detail="缺少支付凭证")
     if not user_id:
         raise HTTPException(status_code=400, detail="缺少用户ID")
     
-    # 先走正式环境
-    verify_url = "https://buy.itunes.apple.com/verifyReceipt"
-    resp = sync_requests.post(verify_url, json={
-        "receipt-data": receipt,
-        "password": settings.IAP_SHARED_SECRET
-    })
-    result = resp.json()
-    logger.info(f"[IAP-VERIFY] 正式环境返回: {result.get('status')}")
+    # ========== 读取私钥 ==========
+    private_key = ""
+    key_path = Path("/app/JWT.P8/SubscriptionKey_7D2S3326TF.p8")
+    if not key_path.exists():
+        key_path = Path(__file__).parent.parent.parent / "JWT.P8" / "SubscriptionKey_7D2S3326TF.p8"
+
+    if key_path.exists():
+        with open(key_path, "r") as f:
+            private_key = f.read()
+        logger.info(f"[IAP-VERIFY] 私钥读取成功")
+    else:
+        raise HTTPException(status_code=500, detail="私钥文件不存在")
     
-    # 21007 = 沙盒收据，改用沙盒
-    if result.get("status") == 21007:
-        verify_url = "https://sandbox.itunes.apple.com/verifyReceipt"
-        resp = sync_requests.post(verify_url, json={
-            "receipt-data": receipt,
-            "password": settings.IAP_SHARED_SECRET
-        })
-        result = resp.json()
-        logger.info(f"[IAP-VERIFY] 沙盒环境返回: {result.get('status')}")
+    # ========== 2. 生成 JWT ==========
+    try:
+        ISSUER_ID = "cc9a7145-e0d9-4aa1-b9cb-3c97b4967d58"
+        KEY_ID = "7D2S3326TF"
+        BUNDLE_ID = "com.lingjing-media.app"
+        
+        now = int(time.time())
+        payload = {
+            "iss": ISSUER_ID,
+            "iat": now,
+            "exp": now + 3600,
+            "aud": "appstoreconnect-v1",
+            "bid": BUNDLE_ID,
+        }
+        headers = {"alg": "ES256", "kid": KEY_ID, "typ": "JWT"}
+        
+        token = jwt.encode(payload, private_key, algorithm="ES256", headers=headers)
+        logger.info(f"[IAP-VERIFY] JWT 生成成功")
+    except Exception as e:
+        logger.error(f"[IAP-VERIFY] JWT 生成失败: {e}")
+        raise HTTPException(status_code=500, detail=f"服务器配置错误: {e}")
     
-    if result.get("status") != 0:
-        raise HTTPException(status_code=400, detail=f"收据验证失败: {result.get('status')}")
+    # ========== 3. 解析 JWS ==========
+    import base64
+    import json
+    try:
+        parts = jws.split('.')
+        payload_b64 = parts[1]
+        padding = 4 - len(payload_b64) % 4
+        if padding != 4:
+            payload_b64 += '=' * padding
+        jws_payload = json.loads(base64.urlsafe_b64decode(payload_b64).decode('utf-8'))
+        
+        transaction_id = jws_payload.get("transactionId")
+        product_id = jws_payload.get("productId")
+        environment = jws_payload.get("environment")
+        bundle_id = jws_payload.get("bundleId")
+        
+        logger.info(f"[IAP-VERIFY] JWS: tx={transaction_id}, product={product_id}, env={environment}")
+    except Exception as e:
+        logger.error(f"[IAP-VERIFY] JWS 解析失败: {e}")
+        raise HTTPException(status_code=400, detail=f"凭证解析失败: {e}")
     
-    latest_receipt_info = result.get("latest_receipt_info", [])
-    if not latest_receipt_info:
-        raise HTTPException(status_code=400, detail="收据中无交易信息")
+    if not transaction_id:
+        raise HTTPException(status_code=400, detail="缺少交易ID")
     
-    latest = latest_receipt_info[-1]
-    apple_transaction_id = latest.get("transaction_id")
+    # ========== 4. 校验 bundleId 和 productId ==========
+    if bundle_id != "com.lingjing-media.app":
+        raise HTTPException(status_code=400, detail="Bundle ID 不匹配")
     
-    # 防重复
-    if apple_transaction_id:
-        existing = db.query(RechargeOrder).filter(
-            RechargeOrder.order_no == f"iap_{apple_transaction_id}"
-        ).first()
-        if existing:
-            user = db.query(User).filter(User.id == user_id).first()
-            return {"code": 200, "message": "已充值", "credits": user.credits if user else 0}
+    expected_products = [
+        "com.lingjing_media.app.credits_100",
+        "com.lingjing_media.app.credits_350",
+        "com.lingjing_media.app.credits_900",
+        "com.lingjing_media.app.credits_2000"
+    ]
+    if product_id not in expected_products:
+        raise HTTPException(status_code=400, detail="商品ID无效")
     
-    # 加灵境点
+    # ========== 5. 调用 App Store Server API ==========
+    try:
+        if environment == "Sandbox":
+            api_base = "https://api.storekit-sandbox.itunes.apple.com"
+        else:
+            api_base = "https://api.storekit.itunes.apple.com"
+        
+        api_url = f"{api_base}/inApps/v1/transactions/{transaction_id}"
+        resp = sync_requests.get(api_url, headers={"Authorization": f"Bearer {token}"})
+        
+        if resp.status_code != 200:
+            logger.error(f"[IAP-VERIFY] Apple API 返回 {resp.status_code}: {resp.text}")
+            raise HTTPException(status_code=400, detail=f"Apple 验证失败: {resp.status_code}")
+        
+        logger.info(f"[IAP-VERIFY] Apple API 验证成功")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[IAP-VERIFY] Apple API 调用失败: {e}")
+        raise HTTPException(status_code=500, detail=f"Apple API 调用失败: {e}")
+    
+    # ========== 6. 防重复 ==========
+    existing = db.query(RechargeOrder).filter(
+        RechargeOrder.order_no == f"iap_{transaction_id}"
+    ).first()
+    if existing:
+        user = db.query(User).filter(User.id == user_id).first()
+        return {"code": 200, "message": "已充值", "credits": user.credits if user else 0}
+    
+    # ========== 7. 加灵境点 ==========
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
@@ -235,17 +298,15 @@ async def verify_iap_receipt(
     user.credits += credits
     db.commit()
     
-    # 记录订单
-    if apple_transaction_id:
-        order = RechargeOrder(
-            order_no=f"iap_{apple_transaction_id}",
-            user_id=user_id,
-            amount=0,
-            credits=credits,
-            status="paid",
-        )
-        db.add(order)
-        db.commit()
+    order = RechargeOrder(
+        order_no=f"iap_{transaction_id}",
+        user_id=user_id,
+        amount=0,
+        credits=credits,
+        status="paid",
+    )
+    db.add(order)
+    db.commit()
     
     logger.info(f"[IAP-VERIFY] 用户 {user_id} 充值 {credits} 点，当前余额 {user.credits}")
     return {"code": 200, "message": "充值成功", "credits": user.credits}
