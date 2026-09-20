@@ -712,6 +712,7 @@ class KlingService:
         if base_url.endswith('/v1'):
             base_url = base_url[:-3]
 
+        retried = False
         start_time = time.time()
 
         while time.time() - start_time < max_wait:
@@ -753,7 +754,16 @@ class KlingService:
                         }
                 return {"video_url": None, "duration": 0}
             elif status == "failed":
-                raise Exception(f"口播任务失败: {task_data.get('message', '未知错误')}")
+                error_detail = task_data.get("message", "未知错误")
+                print(f"[KLING-TALKING] 失败详情: {task_data}")
+
+                if "Internal error" in error_detail and not retried:
+                    retried = True
+                    print(f"[KLING-TALKING] 可灵内部错误，5秒后重试")
+                    time.sleep(5)
+                    continue
+
+                raise Exception(f"口播任务失败: {error_detail}")
 
             time.sleep(poll_interval)
 

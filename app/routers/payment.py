@@ -186,11 +186,10 @@ async def verify_iap_receipt(
     
     if not receipt:
         raise HTTPException(status_code=400, detail="缺少收据")
-    
     if not user_id:
         raise HTTPException(status_code=400, detail="缺少用户ID")
     
-    # ========== 1. 先走正式环境 ==========
+    # 先走正式环境
     verify_url = "https://buy.itunes.apple.com/verifyReceipt"
     resp = sync_requests.post(verify_url, json={
         "receipt-data": receipt,
@@ -199,9 +198,8 @@ async def verify_iap_receipt(
     result = resp.json()
     logger.info(f"[IAP-VERIFY] 正式环境返回: {result.get('status')}")
     
-    # ========== 2. 如果是沙盒收据（21007），改用沙盒 ==========
+    # 21007 = 沙盒收据，改用沙盒
     if result.get("status") == 21007:
-        logger.info("[IAP-VERIFY] 检测到沙盒收据，切换沙盒验证")
         verify_url = "https://sandbox.itunes.apple.com/verifyReceipt"
         resp = sync_requests.post(verify_url, json={
             "receipt-data": receipt,
@@ -213,37 +211,31 @@ async def verify_iap_receipt(
     if result.get("status") != 0:
         raise HTTPException(status_code=400, detail=f"收据验证失败: {result.get('status')}")
     
-    # ========== 3. 提取交易信息 ==========
     latest_receipt_info = result.get("latest_receipt_info", [])
     if not latest_receipt_info:
         raise HTTPException(status_code=400, detail="收据中无交易信息")
     
     latest = latest_receipt_info[-1]
-    product_id = latest.get("product_id")
     apple_transaction_id = latest.get("transaction_id")
     
-    logger.info(f"[IAP-VERIFY] 商品: {product_id}, 交易ID: {apple_transaction_id}")
-    
-    # ========== 4. 防重复 ==========
+    # 防重复
     if apple_transaction_id:
         existing = db.query(RechargeOrder).filter(
             RechargeOrder.order_no == f"iap_{apple_transaction_id}"
         ).first()
         if existing:
-            logger.info(f"[IAP-VERIFY] 交易 {apple_transaction_id} 已处理过")
             user = db.query(User).filter(User.id == user_id).first()
             return {"code": 200, "message": "已充值", "credits": user.credits if user else 0}
     
-    # ========== 5. 给用户加灵境点 ==========
+    # 加灵境点
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
     
     user.credits += credits
     db.commit()
-    logger.info(f"[IAP-VERIFY] 用户 {user_id} 充值 {credits} 点，当前余额 {user.credits}")
     
-    # ========== 6. 记录订单 ==========
+    # 记录订单
     if apple_transaction_id:
         order = RechargeOrder(
             order_no=f"iap_{apple_transaction_id}",
@@ -255,6 +247,7 @@ async def verify_iap_receipt(
         db.add(order)
         db.commit()
     
+    logger.info(f"[IAP-VERIFY] 用户 {user_id} 充值 {credits} 点，当前余额 {user.credits}")
     return {"code": 200, "message": "充值成功", "credits": user.credits}
 
     
