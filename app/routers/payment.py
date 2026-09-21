@@ -373,11 +373,10 @@ async def wechat_notify(request: Request, db: Session = Depends(get_db)):
             return JSONResponse({"code": "SUCCESS", "message": "成功"})
 
         resource = result.get("resource", {})
-        decrypted = wechat_pay_service.wxpay.decrypt_callback(resource)
 
-        out_trade_no = decrypted.get("out_trade_no")
-        transaction_id = decrypted.get("transaction_id")
-        trade_state = decrypted.get("trade_state")
+        out_trade_no = resource.get("out_trade_no")
+        transaction_id = resource.get("transaction_id")
+        trade_state = resource.get("trade_state")
 
         print(f"[WECHAT_PAY] 支付回调: order_no={out_trade_no}, txn={transaction_id}, state={trade_state}")
 
