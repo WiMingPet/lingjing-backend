@@ -46,17 +46,27 @@ class WeChatPayService:
         return ""
 
     def create_app_order(self, out_trade_no: str, total_fee: int, description: str) -> dict:
+        print("=" * 50)
+        print("[WECHAT_PAY] 开始下单")
+        print(f"[WECHAT_PAY] out_trade_no={out_trade_no}, total_fee={total_fee}, description={description}")
+        print(f"[WECHAT_PAY] appid={settings.WECHAT_APPID}, mchid={settings.WECHAT_MCHID}")
+
         code, message = self.wxpay.pay(
             description=description,
             out_trade_no=out_trade_no,
             amount={"total": total_fee},
         )
 
+        print(f"[WECHAT_PAY] 微信下单响应: code={code}")
+        print(f"[WECHAT_PAY] 微信下单响应: message={message}")
+
         if code != 200:
             raise Exception(f"微信下单失败: {message}")
 
         result = json.loads(message) if isinstance(message, str) else message
         prepay_id = result.get("prepay_id")
+        print(f"[WECHAT_PAY] prepay_id={prepay_id}")
+
         if not prepay_id:
             raise Exception(f"微信返回没有 prepay_id: {result}")
 
@@ -77,15 +87,17 @@ class WeChatPayService:
         noncestr = ''.join(random.choices(string.ascii_letters + string.digits, k=32))
         timestamp = str(int(time.time()))
 
-        # 微信 APP 支付调起签名串：4 个字段，驼峰，每行一个，末尾换行
-        sign_lines = [
-            f"appId={appid}",
-            f"timeStamp={timestamp}",
-            f"nonceStr={noncestr}",
-            f"prepayId={prepay_id}",
-            "",
-        ]
-        sign_str = "\n".join(sign_lines)
+        # ✅ 正确的二次签名串：4 个字段的「值」，每行一个，末尾换行
+        sign_str = f"{appid}\n{timestamp}\n{noncestr}\n{prepay_id}\n"
+
+        print("=" * 50)
+        print("[WECHAT_PAY] 二次签名")
+        print(f"[WECHAT_PAY] appid={appid}")
+        print(f"[WECHAT_PAY] partnerid={partnerid}")
+        print(f"[WECHAT_PAY] prepay_id={prepay_id}")
+        print(f"[WECHAT_PAY] noncestr={noncestr}")
+        print(f"[WECHAT_PAY] timestamp={timestamp}")
+        print(f"[WECHAT_PAY] 签名串 repr: {repr(sign_str)}")
 
         # 读取商户 API 私钥
         private_key_pem = self._load_pem(
@@ -107,6 +119,9 @@ class WeChatPayService:
             hashes.SHA256(),
         )
         sign = base64.b64encode(signature).decode()
+
+        print(f"[WECHAT_PAY] sign={sign}")
+        print("=" * 50)
 
         return {
             "appid": appid,
