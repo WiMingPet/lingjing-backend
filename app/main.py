@@ -180,7 +180,19 @@ async def log_all_requests(request: Request, call_next):
     response = await call_next(request)
     print(f"[RES] {request.method} {request.url.path} -> {response.status_code}")
     return response
-# ====================================
+    
+# ========== 全局异常处理器 ==========   ← 加在这里
+import traceback
+from fastapi.responses import JSONResponse
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    print("=" * 60)
+    print(f"[GLOBAL-ERROR] {request.method} {request.url.path}")
+    print(f"[GLOBAL-ERROR] {type(exc).__name__}: {exc}")
+    traceback.print_exc()
+    print("=" * 60)
+    return JSONResponse(status_code=500, content={"detail": str(exc)})
 
 # 添加 OPTIONS 请求处理
 @app.options("/{rest_of_path:path}")

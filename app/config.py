@@ -3,6 +3,7 @@ from typing import List
 import os
 
 
+
 class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/ai_creative")

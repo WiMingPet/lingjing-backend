@@ -23,10 +23,39 @@ from fastapi.responses import Response
 
 router = APIRouter(prefix="/merchant", tags=["电商商品套图"])
 
-# ========== 是否使用异步模式 ==========
 USE_ASYNC = os.getenv("USE_ASYNC", "false").lower() == "true"
 print(f"[MERCHANT] USE_ASYNC = {USE_ASYNC}")
-# =====================================
+
+
+# ==================== 兜底场景（仅当 AI 完全失败时使用）====================
+FALLBACK_SCENES = [
+    "A minimalist studio with soft natural light",
+    "A cozy modern living room with warm lighting",
+    "A bright outdoor park on a sunny day",
+    "A modern office desk with a laptop and coffee",
+    "A stylish urban street at dusk",
+    "A clean kitchen counter with morning light",
+]
+
+
+def _build_scene_prompts_from_analysis(analysis: Dict, scene_count: int) -> List[Dict]:
+    """从 analysis 里提取场景，优先用 images，兜底用 FALLBACK_SCENES"""
+    selling_points = analysis.get("selling_points", [])
+    images_plan = analysis.get("images", [])
+    if images_plan:
+        return [
+            {
+                "selling_point": img.get("highlight_feature", ""),
+                "scene": img.get("scene_prompt", ""),
+            }
+            for img in images_plan
+        ]
+    # 兜底
+    return [
+        {"selling_point": selling_points[i % len(selling_points)] if selling_points else "",
+         "scene": FALLBACK_SCENES[i % len(FALLBACK_SCENES)]}
+        for i in range(scene_count)
+    ]
 
 
 @router.post("/generate_package", response_model=APIResponse)
@@ -39,6 +68,8 @@ async def generate_package(
     scene_count: int = Form(1),
     gender: str = Form("female"),
     scene_text: str = Form(""),
+    region: str = Form(""),
+    platform: str = Form(""),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -47,25 +78,21 @@ async def generate_package(
     if template not in TEMPLATE_MODELS:
         raise HTTPException(status_code=400, detail="模板不存在")
 
-    # ========== 计算扣费 ==========
     cost = get_merchant_cost(template, scene_count)
     if cost <= 0:
         raise HTTPException(status_code=400, detail="无效的扣费金额")
 
-    # ========== 上传图片 ==========
     cloth_urls = []
     for img in images:
         cloth_url, _ = await upload_file_helper(img, "merchant/products")
         cloth_urls.append(cloth_url)
         print(f"[DEBUG] 商品图片已上传: {cloth_url}")
 
-    # ========== 图片安全审核 ==========
     from app.services.image_service import ImageService
     for cloth_url in cloth_urls:
         if not await ImageService.check_image_safety(cloth_url):
             raise HTTPException(status_code=400, detail="商品图片未通过安全审核，请更换图片")
 
-    # ========== 构建请求数据 ==========
     request_data = {
         "cloth_urls": cloth_urls,
         "template": template,
@@ -75,23 +102,20 @@ async def generate_package(
         "scene_count": scene_count,
         "gender": gender,
         "scene_text": scene_text,
+        "region": region,
+        "platform": platform,
     }
 
     user = current_user
     user_id = current_user.id
 
-    # ========== 判断模式 ==========
     if USE_ASYNC:
-        # ========== 异步模式 ==========
         print(f"[MERCHANT] 使用异步模式")
-
         if queue_other is None:
             raise HTTPException(status_code=500, detail="异步队列未初始化，请检查Redis连接")
 
-        # 先扣费
         check_and_deduct_credits(user, db, cost, "电商商品套图")
 
-        # 创建任务
         from app.models.task import Task
         task = Task(
             user_id=user_id,
@@ -104,31 +128,22 @@ async def generate_package(
         db.commit()
         db.refresh(task)
 
-        # 提交队列
         job = queue_other.enqueue(generate_merchant_task, task.id, user_id, request_data)
         print(f"[MERCHANT] RQ 任务已提交: task_id={task.id}, job_id={job.id}")
 
         return APIResponse(
             code=200,
             message="电商套图任务已提交，预计3-10分钟完成",
-            data={
-                "task_id": task.id,
-                "status": "pending",
-                "async": True
-            }
+            data={"task_id": task.id, "status": "pending", "async": True}
         )
     else:
-        # ========== 同步模式（原有逻辑） ==========
         print(f"[MERCHANT] 使用同步模式")
-
         from app.services.kling import kling_service
         from app.data.merchant_templates import MODEL_IMAGES
 
-        # 生成前检查余额
         if user.credits < cost:
             raise HTTPException(status_code=403, detail=f"灵境点不足，需要{cost}点，当前{user.credits}点")
 
-        # 调用生成逻辑（抽出为独立函数）
         results = await _generate_package_logic(
             cloth_urls=cloth_urls,
             template=template,
@@ -138,12 +153,12 @@ async def generate_package(
             scene_count=scene_count,
             gender=gender,
             scene_text=scene_text,
+            region=region,
+            platform=platform,
         )
 
-        # 生成成功后扣费
         check_and_deduct_credits(user, db, cost, "电商商品套图")
 
-        # 保存历史记录
         from app.models.history import History
         for item in results:
             all_images = []
@@ -164,14 +179,9 @@ async def generate_package(
 
         db.commit()
 
-        return APIResponse(
-            code=200,
-            message="生成成功",
-            data={"results": results}
-        )
+        return APIResponse(code=200, message="生成成功", data={"results": results})
 
 
-# ========== 抽出生成逻辑（供同步和异步共用） ==========
 async def _generate_package_logic(
     cloth_urls: List[str],
     template: str,
@@ -181,6 +191,8 @@ async def _generate_package_logic(
     scene_count: int,
     gender: str,
     scene_text: str,
+    region: str = "",
+    platform: str = "",
 ) -> List[dict]:
     """生成电商套图的核心逻辑"""
     from app.services.kling import kling_service
@@ -194,25 +206,25 @@ async def _generate_package_logic(
     for cloth_url in cloth_urls:
         result_item = {"cloth_url": cloth_url}
 
-        # ========== 每个商品图先分析一次（只在场景图时需要） ==========
+        # ========== 商品分析（仅在场景图时） ==========
         analysis = {}
         if template == "scene":
             try:
                 analysis = await product_analyzer.analyze_product(
                     image_url=cloth_url,
-                    selling_points="",
+                    selling_points=scene_text,
                     usage="",
-                    region="",
-                    platform="",
+                    region=region,
+                    platform=platform,
+                    suite_type="scene",
+                    count=scene_count,
                 )
                 print(f"[MERCHANT] 商品分析完成: {analysis.get('product_name', '未知')}")
             except Exception as e:
                 print(f"[MERCHANT] 商品分析失败，使用降级逻辑: {e}")
                 analysis = {}
-        # ============================================================
 
         if product_type == "clothing":
-            # 服装类
             model_image = MODEL_IMAGES.get(gender, MODEL_IMAGES["female"])
             tryon_images = []
             try:
@@ -230,7 +242,6 @@ async def _generate_package_logic(
                 print(f"[DEBUG] 试穿失败: {e}")
                 result_item["tryon_images"] = []
 
-            # 白底主图
             if template == "white_bg":
                 try:
                     main_task_id = kling_service.generate_image(
@@ -247,9 +258,7 @@ async def _generate_package_logic(
                         white_bg_bytes = MerchantService.force_white_background(main_images[0])
                         if white_bg_bytes:
                             oss_url = await oss_service.upload_file(
-                                white_bg_bytes,
-                                "jpg",
-                                "merchant/white_bg"
+                                white_bg_bytes, "jpg", "merchant/white_bg"
                             )
                             result_item["main_images"] = [oss_url]
                         else:
@@ -258,18 +267,9 @@ async def _generate_package_logic(
                     print(f"[DEBUG] 白底图生成失败: {e}")
                     result_item["main_images"] = []
 
-            # 场景图
             if template == "scene":
                 result_item["scene_images"] = []
-                selling_points = analysis.get("selling_points", [])
-                scene_prompts = analysis.get("scene_prompts", [])
-                if not scene_prompts:
-                    scenes = ["简约场景", "自然光场景", "生活场景", "时尚场景", "家居场景", "街拍场景"]
-                    scene_prompts = [
-                        {"selling_point": selling_points[i % len(selling_points)] if selling_points else "",
-                         "scene": scenes[i % len(scenes)]}
-                        for i in range(scene_count)
-                    ]
+                scene_prompts = _build_scene_prompts_from_analysis(analysis, scene_count)
                 scene_texts = MerchantService.split_scene_texts(scene_text, scene_count)
 
                 for i in range(scene_count):
@@ -291,15 +291,11 @@ async def _generate_package_logic(
                         if imgs:
                             if scene_texts[i]:
                                 text_image_bytes = MerchantService.add_text_to_image(
-                                    imgs[0],
-                                    scene_texts[i],
-                                    position="bottom"
+                                    imgs[0], scene_texts[i], position="bottom"
                                 )
                                 if text_image_bytes:
                                     oss_url = await oss_service.upload_file(
-                                        text_image_bytes,
-                                        "jpg",
-                                        "merchant/scene_with_text"
+                                        text_image_bytes, "jpg", "merchant/scene_with_text"
                                     )
                                     result_item["scene_images"].append(oss_url)
                                 else:
@@ -310,7 +306,6 @@ async def _generate_package_logic(
                         print(f"[DEBUG] 场景图{i+1}失败: {e}")
 
         else:
-            # 其他商品
             prompt = f"电商商品图，{template_data['prompt_suffix']}"
             try:
                 image_task_id = kling_service.generate_image(
@@ -327,15 +322,7 @@ async def _generate_package_logic(
 
             if template == "scene":
                 result_item["scene_images"] = []
-                selling_points = analysis.get("selling_points", [])
-                scene_prompts = analysis.get("scene_prompts", [])
-                if not scene_prompts:
-                    scenes = ["简约场景", "自然光场景", "生活场景", "商务场景", "时尚场景", "家居场景"]
-                    scene_prompts = [
-                        {"selling_point": selling_points[i % len(selling_points)] if selling_points else "",
-                         "scene": scenes[i % len(scenes)]}
-                        for i in range(scene_count)
-                    ]
+                scene_prompts = _build_scene_prompts_from_analysis(analysis, scene_count)
                 scene_texts = MerchantService.split_scene_texts(scene_text, scene_count)
 
                 for i in range(scene_count):
@@ -357,15 +344,11 @@ async def _generate_package_logic(
                         if imgs:
                             if scene_texts[i]:
                                 text_image_bytes = MerchantService.add_text_to_image(
-                                    imgs[0],
-                                    scene_texts[i],
-                                    position="bottom"
+                                    imgs[0], scene_texts[i], position="bottom"
                                 )
                                 if text_image_bytes:
                                     oss_url = await oss_service.upload_file(
-                                        text_image_bytes,
-                                        "jpg",
-                                        "merchant/scene_with_text"
+                                        text_image_bytes, "jpg", "merchant/scene_with_text"
                                     )
                                     result_item["scene_images"].append(oss_url)
                                 else:
@@ -382,17 +365,14 @@ async def _generate_package_logic(
 
     return results
 
+
 @router.get("/task/{task_id}", response_model=APIResponse)
-def get_merchant_task(
-    task_id: int,
-    db: Session = Depends(get_db),
-):
-    """获取电商套图任务状态"""
+def get_merchant_task(task_id: int, db: Session = Depends(get_db)):
     from app.models.task import Task
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
-    
+
     return APIResponse(
         code=200,
         message="获取成功",
@@ -404,11 +384,13 @@ def get_merchant_task(
         }
     )
 
-# ========== 套图类型价格 ==========
+
 SUITE_PRICES = {
     "white_bg": 10,
     "scene": 15,
-    "aplus": 50,
+    "premium_aplus": 50,
+    "standard_aplus": 30,
+    "phone_aplus": 20,
 }
 
 
@@ -419,27 +401,28 @@ async def analyze_product(
     usage: str = Form(""),
     region: str = Form(""),
     platform: str = Form(""),
+    suite_type: str = Form("premium_aplus"),
+    count: int = Form(6),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """商品分析"""
     cloth_url, _ = await upload_file_helper(image, "merchant/products")
-    
+
     analysis = await product_analyzer.analyze_product(
         image_url=cloth_url,
         selling_points=selling_points,
         usage=usage,
         region=region,
         platform=platform,
+        suite_type=suite_type,
+        count=count,
     )
-    
+
     return APIResponse(
         code=200,
         message="分析成功",
-        data={
-            "cloth_url": cloth_url,
-            "analysis": analysis,
-        }
+        data={"cloth_url": cloth_url, "analysis": analysis}
     )
 
 
@@ -447,53 +430,66 @@ async def analyze_product(
 async def generate_suite(
     image: UploadFile = File(...),
     suite_type: str = Form(...),
+    count: int = Form(1),
     selling_points: str = Form(""),
     usage: str = Form(""),
     region: str = Form(""),
     platform: str = Form(""),
-    scene_count: int = Form(4),
-    aplus_count: int = Form(2),   # ← 新增
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """生成套图"""
+    """生成套图（白底图 / 场景图 / 高级A+ / 标准A+ / 手机A+）"""
+    from app.data.suite_types import SUITE_MODULES
+
+    if suite_type not in SUITE_MODULES:
+        raise HTTPException(400, f"无效的套图类型：{suite_type}")
+
+    if suite_type == "white_bg":
+        count = 1
+    elif count not in (2, 4, 6):
+        raise HTTPException(400, "数量只能选 2、4 或 6")
+
     cloth_url, _ = await upload_file_helper(image, "merchant/products")
-    
+
+    # ========== AI 分析 ==========
     analysis = await product_analyzer.analyze_product(
         image_url=cloth_url,
         selling_points=selling_points,
         usage=usage,
         region=region,
         platform=platform,
+        suite_type=suite_type,
+        count=count,
     )
-    
-    # 计算费用
-    if suite_type == "white_bg":
-        cost = SUITE_PRICES["white_bg"]
-    elif suite_type == "scene":
-        cost = SUITE_PRICES["scene"] * scene_count
-    elif suite_type == "aplus":
-        cost = SUITE_PRICES["aplus"] * aplus_count   # ← 乘以数量
-    else:
-        raise HTTPException(400, "无效的套图类型")
-    
+    analysis["product_images"] = [cloth_url]
+    print(f"[MERCHANT] 商品分析完成: {analysis.get('product_name', '未知')}")
+
+    # ★ AI 分析失败，直接报错（还没扣费）
+    if analysis.get("_fallback") or not analysis.get("images"):
+        if suite_type != "white_bg":  # 白底图不需要 images
+            raise HTTPException(500, "AI 分析失败，未扣费，请重试")
+
+    unit_cost = SUITE_PRICES.get(suite_type, 10)
+    cost = unit_cost * count
+
     if current_user.credits < cost:
-        raise HTTPException(403, f"需要 {cost} 点，余额不足")
-    
+        raise HTTPException(403, f"需要 {cost} 点，当前 {current_user.credits} 点，余额不足")
+
     request_data = {
         "cloth_url": cloth_url,
         "suite_type": suite_type,
+        "count": count,
         "analysis": analysis,
-        "scene_count": scene_count,
-        "aplus_count": aplus_count,   # ← 新增
+        "unit_cost": unit_cost, 
     }
-    
+
+    # ========== 异步模式 ==========
     if USE_ASYNC:
         if queue_other is None:
             raise HTTPException(500, "异步队列未初始化")
-        
+
         check_and_deduct_credits(current_user, db, cost, f"套图生成-{suite_type}")
-        
+
         from app.models.task import Task
         task = Task(
             user_id=current_user.id,
@@ -505,57 +501,129 @@ async def generate_suite(
         db.add(task)
         db.commit()
         db.refresh(task)
-        
+
         from app.tasks.merchant_suite_tasks import generate_suite_task
         job = queue_other.enqueue(generate_suite_task, task.id, current_user.id, request_data)
         print(f"[MERCHANT] RQ 任务已提交: task_id={task.id}")
-        
+
         return APIResponse(
             code=200,
-            message=f"套图任务已提交，需要 {cost} 点",
-            data={
-                "task_id": task.id,
-                "status": "pending",
-                "async": True,
-                "cost": cost,
-            }
+            message=f"套图任务已提交，需要 {cost} 点，预计 2-5 分钟完成",
+            data={"task_id": task.id, "status": "pending", "async": True, "cost": cost, "count": count}
         )
-    else:
-        check_and_deduct_credits(current_user, db, cost, f"套图生成-{suite_type}")
-        
+
+    # ========== 同步模式 ==========
+    check_and_deduct_credits(current_user, db, cost, f"套图生成-{suite_type}")
+
+    actual_count = 0
+    refund_amount = 0
+
+    try:
         if suite_type == "white_bg":
             images = await suite_generator.generate_white_bg(cloth_url)
         elif suite_type == "scene":
-            images = await suite_generator.generate_scene_images(cloth_url, analysis, scene_count)
-        elif suite_type == "aplus":
-            aplus_count = request_data.get("aplus_count", 2)
-            images = await suite_generator.generate_aplus_images(cloth_url, analysis, aplus_count)
-        
-        # images 现在是 List[dict]，每个含 watermarked 和 clean
-        # 保存历史（存完整 [{watermarked, clean}]）
-        import json
-        from app.models.history import History
-        import datetime
-        history = History(
-            user_id=current_user.id,
-            url=json.dumps(images),
-            type="电商商品套图",
-            thumbnail=images[0]["watermarked"] if images else None,
-            created_at=datetime.datetime.utcnow()
-        )
-        db.add(history)
-        db.commit()
-        
-        return APIResponse(
-            code=200,
-            message="生成成功",
-            data={
-                "images": images,
-                "analysis": analysis,
-                "cost": cost,
-                "history_id": history.id,  # ← 加这行
-            }
-        )
+            images = await suite_generator.generate_scene_images(cloth_url, analysis, count)
+        elif suite_type == "premium_aplus":
+            images = await suite_generator.generate_premium_aplus(cloth_url, analysis, count)
+        elif suite_type == "standard_aplus":
+            images = await suite_generator.generate_standard_aplus(cloth_url, analysis, count)
+        elif suite_type == "phone_aplus":
+            images = await suite_generator.generate_phone_aplus(cloth_url, analysis, count)
+        else:
+            images = []
+
+        actual_count = len(images) if images else 0
+
+        # ★ 全部失败：抛错，全额退款
+        if actual_count == 0:
+            raise Exception("全部生成失败")
+
+        # ★ 部分成功：按比例退款
+        if actual_count < count:
+            refund_count = count - actual_count
+            refund_amount = unit_cost * refund_count
+            print(f"[SUITE] 部分成功: {actual_count}/{count}，退款 {refund_amount} 点")
+
+            # 退款
+            try:
+                from app.utils.refund import refund_credits
+                from app.models.task import Task
+                tmp_task = Task(
+                    user_id=current_user.id,
+                    task_type="merchant_suite_partial_refund",
+                    status="failed",
+                    input_data=request_data,
+                    credits_cost=refund_amount,
+                )
+                db.add(tmp_task)
+                db.commit()
+                db.refresh(tmp_task)
+                refund_credits(db, tmp_task.id, reason=f"部分成功: {actual_count}/{count}")
+                print(f"[SUITE] 已退款 {refund_amount} 点")
+            except Exception as refund_err:
+                print(f"[SUITE] 退款失败: {refund_err}")
+
+    except Exception as e:
+        import traceback
+        print("=" * 60)
+        print(f"[SUITE-ERROR] {type(e).__name__}: {e}")
+        traceback.print_exc()
+        print("=" * 60)
+
+        # ★ 全额退款
+        try:
+            from app.utils.refund import refund_credits
+            from app.models.task import Task
+            tmp_task = Task(
+                user_id=current_user.id,
+                task_type="merchant_suite_refund",
+                status="failed",
+                input_data=request_data,
+                credits_cost=cost,
+            )
+            db.add(tmp_task)
+            db.commit()
+            db.refresh(tmp_task)
+            refund_credits(db, tmp_task.id, reason=f"套图生成失败: {e}")
+            print(f"[SUITE-ERROR] 已全额退款 {cost} 点")
+        except Exception as refund_err:
+            print(f"[SUITE-ERROR] 退款失败: {refund_err}")
+
+        raise HTTPException(500, f"套图生成失败，已退款 {cost} 点: {e}")
+
+    # 保存历史
+    import json
+    import datetime
+    from app.models.history import History
+    history = History(
+        user_id=current_user.id,
+        url=json.dumps(images),
+        type="电商商品套图",
+        thumbnail=images[0]["watermarked"] if images else None,
+        created_at=datetime.datetime.utcnow()
+    )
+    db.add(history)
+    db.commit()
+
+    # ★ 根据是否部分成功，返回不同消息
+    if refund_amount > 0:
+        message = f"生成成功 {actual_count}/{count} 张，已退款 {refund_amount} 点"
+    else:
+        message = "生成成功"
+
+    return APIResponse(
+        code=200,
+        message=message,
+        data={
+            "images": images,
+            "analysis": analysis,
+            "cost": cost,
+            "refund_amount": refund_amount,
+            "actual_count": actual_count,
+            "history_id": history.id,
+        }
+    )
+
 
 @router.get("/download_clean_file/{history_id}/{index}")
 async def download_clean_file(
@@ -564,12 +632,11 @@ async def download_clean_file(
     token: str = "",
     db: Session = Depends(get_db),
 ):
-    """后端代理下载无水印图（支持 ?token= 认证，兼容所有平台）"""
+    """后端代理下载无水印图"""
     import oss2
     from app.models.history import History
     from app.config import settings
 
-    # 验证 token
     if token:
         from app.utils.auth import get_user_from_token
         user = get_user_from_token(token, db)
@@ -613,9 +680,7 @@ async def download_clean_file(
         return Response(
             content=data,
             media_type="image/jpeg",
-            headers={
-                "Content-Disposition": f'inline; filename="clean_{history_id}_{index}.jpg"'
-            }
+            headers={"Content-Disposition": f'inline; filename="clean_{history_id}_{index}.jpg"'}
         )
     except Exception as e:
         print(f"[DOWNLOAD-CLEAN-FILE] 失败: {e}")
