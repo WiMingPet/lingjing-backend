@@ -5,7 +5,7 @@ import os
 import json
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from sqlalchemy.orm import Session
-from typing import Optional, List
+from typing import Optional, List, Dict
 from app.database import get_db
 from app.models.user import User
 from app.utils.auth import get_current_user
