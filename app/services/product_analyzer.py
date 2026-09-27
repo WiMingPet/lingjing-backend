@@ -181,7 +181,7 @@ class ProductAnalyzer:
 **第二步：生成 {count} 张图的布局规格**
 
 每张图是一个独立的"画布"，包含若干 `elements`：
-- `type: "image"`：AI 生成的图，需要 `scene_prompt`（英文，15-25 词）
+- `type: "image"`：AI 生成的图，需要 `scene_prompt`（英文，15-25 词）和 `highlight_feature`（这张图突出的功能卖点）
 - `type: "text"`：文案，需要 `text`、`font`、`size`、`color`、`maxLines`
 
 **画布尺寸**：
@@ -189,6 +189,41 @@ class ProductAnalyzer:
 - 所有元素的坐标必须在画布范围内（x >= 0, y >= 0, x+w <= 画布宽, y+h <= 画布高）
 
 {layout_instruction}
+
+**功能多样化（必须遵守）**：
+- 先提取 6 个 `selling_points`（不同卖点）
+- {count} 张图的 `highlight_feature` 必须来自 `selling_points` 里的**不同项**
+- **禁止两张图突出同一个卖点**
+- `highlight_feature` 必须**具体**，不能是泛泛的词
+- 例如：
+  - 卖点"50m 防水" → `highlight_feature`: "50m water resistance for swimming"
+  - 卖点"EL 背光" → `highlight_feature`: "EL backlight for night visibility"
+  - 卖点"双时间" → `highlight_feature`: "dual time zones for travel"
+  - 卖点"抗震" → `highlight_feature`: "shock absorption for outdoor use"
+  - 卖点"秒表" → `highlight_feature`: "1/100s precision stopwatch"
+  - 卖点"长续航" → `highlight_feature`: "long battery life for extended use"
+
+**场景多样化（必须遵守）**：
+- {count} 张图的场景必须覆盖以下 **16 种环境类型**，尽可能分散：
+  1. 室内家居（客厅、卧室、书房）
+  2. 厨房餐厅（厨房、餐厅、咖啡角）
+  3. 卫浴空间（浴室、洗手台、淋浴间）
+  4. 衣帽间 / 衣柜（衣帽间、衣柜、梳妆台）
+  5. 办公场所（办公室、会议室、工位）
+  6. 城市环境（街道、地铁、机场、咖啡馆）
+  7. 户外自然（森林、山脉、草原、峡谷）
+  8. 水边（海滩、湖泊、河流、码头）
+  9. 花园 / 庭院（花园、阳台、露台、庭院）
+  10. 运动场所（健身房、跑道、球场、泳池）
+  11. 交通工具（自行车、汽车、帆船、飞机）
+  12. 夜间场景（夜跑、夜街、夜间露营）
+  13. 工作场所（车间、工地、实验室、仓库）
+  14. 商业空间（商场、超市、店铺、展览馆）
+  15. 户外营地（露营地、帐篷、篝火旁）
+  16. 特殊场景（沙漠、雪地、温泉、游乐园）
+- **禁止 {count} 张图里有超过 2 个是同一环境类型**
+- **环境必须匹配产品属性**（手表配户外/运动/办公，不配化妆台；口红配化妆台/派对/商场，不配工地）
+- **优先选择"用户日常真实会遇到"的环境**
 
 **每个 scene_prompt 的要求**：
 - 15-25 个英文单词，环境为主
@@ -227,16 +262,16 @@ class ProductAnalyzer:
     {{
       "index": 1,
       "elements": [
-        {{"type": "image", "name": "scene_1", "x": 0, "y": 0, "w": 660, "h": 600, "scene_prompt": "English scene 1"}},
-        {{"type": "image", "name": "scene_2", "x": 660, "y": 0, "w": 804, "h": 300, "scene_prompt": "English scene 2"}},
-        {{"type": "image", "name": "scene_3", "x": 660, "y": 300, "w": 804, "h": 300, "scene_prompt": "English scene 3"}},
+        {{"type": "image", "name": "scene_1", "x": 0, "y": 0, "w": 660, "h": 600, "scene_prompt": "English scene 1", "highlight_feature": "卖点1的具体功能"}},
+        {{"type": "image", "name": "scene_2", "x": 660, "y": 0, "w": 804, "h": 300, "scene_prompt": "English scene 2", "highlight_feature": "卖点2的具体功能"}},
+        {{"type": "image", "name": "scene_3", "x": 660, "y": 300, "w": 804, "h": 300, "scene_prompt": "English scene 3", "highlight_feature": "卖点3的具体功能"}},
         {{"type": "text", "x": 40, "y": 40, "text": "主标题1", "font": "SourceHanSerif-Bold", "size": 48, "color": "#FFFFFF", "maxLines": 2}}
       ]
     }},
     {{
       "index": 2,
       "elements": [
-        {{"type": "image", "name": "scene_1", "x": 0, "y": 0, "w": 1464, "h": 600, "scene_prompt": "English scene 1"}},
+        {{"type": "image", "name": "scene_1", "x": 0, "y": 0, "w": 1464, "h": 600, "scene_prompt": "English scene 1", "highlight_feature": "卖点4的具体功能"}},
         {{"type": "text", "x": 40, "y": 40, "text": "主标题2", "font": "SourceHanSerif-Bold", "size": 56, "color": "#FFFFFF", "maxLines": 2}}
       ]
     }}

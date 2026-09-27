@@ -28,13 +28,15 @@ class SuiteGenerator:
     )
 
     @staticmethod
-    def _build_scene_prompt(analysis: Dict, scene_prompt: str) -> str:
+    def _build_scene_prompt(analysis: Dict, scene_prompt: str, highlight_feature: str = "") -> str:
         product_appearance = (analysis.get("product_appearance", "") or "")[:200]
         usage_analysis = (analysis.get("usage_analysis", "") or "")[:200]
         scene_prompt = (scene_prompt or "")[:400]
+        highlight_feature = (highlight_feature or "")[:80]
 
         prompt = (
             f"Scene: {scene_prompt}. "
+            f"Highlight: {highlight_feature}. "
             f"Product appearance: {product_appearance}. "
             f"Usage context: {usage_analysis}. "
             f"{SuiteGenerator.COMMON_NEGATIVE}"
@@ -140,7 +142,11 @@ class SuiteGenerator:
 
                 r = await asyncio.gather(*[
                     _gen_async(
-                        SuiteGenerator._build_scene_prompt(analysis, el.get("scene_prompt", "")),
+                        SuiteGenerator._build_scene_prompt(
+                            analysis,
+                            el.get("scene_prompt", ""),
+                            el.get("highlight_feature", ""),
+                        ),
                         f"图{index}-{el.get('name', '')}"
                     )
                     for el in image_elements

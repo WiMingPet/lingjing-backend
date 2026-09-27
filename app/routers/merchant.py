@@ -387,10 +387,10 @@ def get_merchant_task(task_id: int, db: Session = Depends(get_db)):
 
 SUITE_PRICES = {
     "white_bg": 10,
-    "scene": 15,
-    "premium_aplus": 50,
-    "standard_aplus": 30,
-    "phone_aplus": 20,
+    "scene": 10,
+    "premium_aplus": 15,
+    "standard_aplus": 15,
+    "phone_aplus": 15,
 }
 
 
