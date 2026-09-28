@@ -704,7 +704,7 @@ class KlingService:
         # 轮询等待
         return self._wait_for_talking_agent(task_id)
     
-    def _wait_for_talking_agent(self, task_id: str, max_wait: int = 1200, poll_interval: int = 10) -> dict:
+    def _wait_for_talking_agent(self, task_id: str, max_wait: int = 1800, poll_interval: int = 10) -> dict:
         """轮询等待口播带货任务完成"""
         import time
 
