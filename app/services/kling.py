@@ -704,7 +704,7 @@ class KlingService:
         # 轮询等待
         return self._wait_for_talking_agent(task_id)
     
-    def _wait_for_talking_agent(self, task_id: str, max_wait: int = 900, poll_interval: int = 10) -> dict:
+    def _wait_for_talking_agent(self, task_id: str, max_wait: int = 1200, poll_interval: int = 10) -> dict:
         """轮询等待口播带货任务完成"""
         import time
 
@@ -737,7 +737,8 @@ class KlingService:
                 task_data = data
 
             status = task_data.get("status")
-            print(f"[DEBUG] 口播任务状态: {status}")
+            elapsed = time.time() - start_time
+            print(f"[DEBUG] 口播任务状态: {status}, 已等 {elapsed:.0f} 秒")
 
             if status in ("succeeded", "succeed"):
                 outputs = task_data.get("outputs", [])
@@ -766,6 +767,34 @@ class KlingService:
                 raise Exception(f"口播任务失败: {error_detail}")
 
             time.sleep(poll_interval)
+
+        # ★ 超时后，再查一次（抓住"刚好在超时后完成"的任务）
+        print(f"[DEBUG] 口播任务超时，最后再查一次: {task_id}")
+        try:
+            url = f"{base_url}/solutions"
+            params = {"task_ids": task_id}
+            response = requests.get(url, headers=self._get_headers(), params=params, timeout=30)
+            result = response.json()
+            data = result.get("data", [])
+            if data:
+                task_data = data[0] if isinstance(data, list) else data
+                status = task_data.get("status")
+                print(f"[DEBUG] 超时后最后查询状态: {status}")
+                if status in ("succeeded", "succeed"):
+                    outputs = task_data.get("outputs", [])
+                    for output in outputs:
+                        if output.get("type") == "video":
+                            duration = output.get("duration", 0)
+                            try:
+                                duration = float(duration)
+                            except (ValueError, TypeError):
+                                duration = 0
+                            return {
+                                "video_url": output.get("url"),
+                                "duration": duration
+                            }
+        except Exception as e:
+            print(f"[DEBUG] 超时后最后查询失败: {e}")
 
         raise Exception(f"口播任务超时: {task_id}")
 
