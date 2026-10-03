@@ -27,7 +27,7 @@ print(f"[VIDEO] USE_ASYNC = {USE_ASYNC}")
 
 @router.post("/generate", response_model=APIResponse)
 async def generate_video(
-    image: UploadFile = File(...),
+    image: Optional[UploadFile] = File(None),
     prompt: Optional[str] = Form(""),
     duration: int = Form(5),
     mode: str = Form("std"),
@@ -62,9 +62,17 @@ async def generate_video(
     if credits > 0 and credits != cost:
         raise HTTPException(status_code=400, detail=f"扣费金额不正确，应为{cost}点")
     
+    # ★ 文生视频必须有提示词
+    if (not image or not image.filename) and not prompt.strip():
+        raise HTTPException(status_code=400, detail="文生视频需要填写提示词")
+        
     # ========== 1. 上传用户图片到 OSS ==========
-    image_url, image_id = await upload_file_helper(image, "video")
-    print(f"[DEBUG] 用户图片已上传到 OSS: {image_url}")
+    image_url = ""
+    if image and image.filename:
+        image_url, image_id = await upload_file_helper(image, "video")
+        print(f"[DEBUG] 用户图片已上传到 OSS: {image_url}")
+    else:
+        print(f"[DEBUG] 无图片，走文生视频")
     
     # ========== 2. 构建请求数据 ==========
     request_data = {

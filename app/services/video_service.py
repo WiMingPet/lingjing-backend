@@ -39,10 +39,11 @@ class VideoService:
             image_url = request_data.get("image_url", "")
             print(f"[DEBUG] 使用图片 URL: {image_url}")
             
-            # 图片安全审核
-            from app.services.image_service import ImageService
-            if not await ImageService.check_image_safety(image_url):
-                raise HTTPException(status_code=400, detail="图片未通过安全审核，请更换图片")
+            # 图片安全审核（仅当有图时）
+            if image_url:
+                from app.services.image_service import ImageService
+                if not await ImageService.check_image_safety(image_url):
+                    raise HTTPException(status_code=400, detail="图片未通过安全审核，请更换图片")
             
             prompt = request_data.get("prompt", "")
             duration = request_data.get("duration", 5)

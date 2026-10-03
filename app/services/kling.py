@@ -304,74 +304,87 @@ class KlingService:
         raise Exception(f"图片O1任务超时，task_id={task_id}, 最后状态={last_status}")
 
     # ========== 视频生成（图生视频）==========
-    def generate_video(self, image_url: str = None, prompt: str = "", 
-                       duration: int = 5, mode: str = "std",
-                       model: str = "2.6", sound: str = "off") -> str:
+    def generate_video(self, image_url: str = None, prompt: str = "",
+                    duration: int = 5, mode: str = "std",
+                    model: str = "2.6", sound: str = "off") -> str:
         """
-        视频生成 - 支持2.6基础版和3.0增强版
+        视频生成 - 支持图生视频 + 文生视频
         - model: '2.6' 或 '3.0'
         - sound: 'off' 或 'native'（仅3.0支持native）
-        - duration: 5, 10（2.6）；5, 10, 15（3.0）
+        - duration: 5, 10（2.6）；3~15（3.0）
         """
-        # ========== 修复：新版API不需要 /v1 前缀 ==========
         base_url = self.api_url.rstrip('/')
         if base_url.endswith('/v1'):
-            base_url = base_url[:-3]  # 移除末尾的 /v1
-        # ==================================================
-        
-        # 根据模型选择API端点
-        if model == "3.0":
-            url = f"{base_url}/image-to-video/kling-3.0"
-            print(f"[DEBUG] 使用3.0增强版 API")
-        else:
-            url = f"{base_url}/image-to-video/kling-2.6"
-            print(f"[DEBUG] 使用2.6基础版 API")
-        
-        # ========== 增强提示词 ==========
+            base_url = base_url[:-3]
+
         enhanced_prompt = enhance_prompt(prompt, model=model, sound=sound)
         print(f"[DEBUG] 原始提示词: {prompt}")
         print(f"[DEBUG] 增强后提示词: {enhanced_prompt}")
-        # ==============================
-        
-        # 构建请求参数（新版API格式）
-        payload = {
-            "contents": [
-                {
-                    "type": "prompt",
-                    "text": enhanced_prompt
+
+        # ========== 判断：有图 → 图生视频；无图 → 文生视频 ==========
+        if image_url:
+            # ---------- 图生视频 ----------
+            if model == "3.0":
+                url = f"{base_url}/image-to-video/kling-3.0"
+            else:
+                url = f"{base_url}/image-to-video/kling-2.6"
+
+            payload = {
+                "contents": [
+                    {"type": "prompt", "text": enhanced_prompt},
+                    {"type": "first_frame", "url": image_url}
+                ],
+                "settings": {
+                    "resolution": "720p",
+                    "duration": duration,
+                    "audio": sound if model == "3.0" else "off",
                 },
-                {
-                    "type": "first_frame",
-                    "url": image_url
-                }
-            ],
-            "settings": {
-                "resolution": "720p",
-                "duration": duration,
-                "audio": sound if model == "3.0" else "off",
-            },
-            "options": {
-                "watermark_info": {
-                    "enabled": False
+                "options": {
+                    "watermark_info": {"enabled": False}
                 }
             }
-        }
-        
-        # 3.0模型需要multi_shot参数
-        if model == "3.0":
-            payload["settings"]["multi_shot"] = False
-        
-        print(f"[DEBUG] 视频生成请求URL: {url}")
+
+            if model == "3.0":
+                payload["settings"]["multi_shot"] = False
+
+            print(f"[DEBUG] 图生视频 URL: {url}")
+
+        else:
+            # ---------- 文生视频 ----------
+            if model == "3.0":
+                url = f"{base_url}/text-to-video/kling-3.0"
+            else:
+                url = f"{base_url}/text-to-video/kling-2.6"
+
+            # ★ 文生视频：prompt 在顶层，不是 contents
+            payload = {
+                "prompt": enhanced_prompt,
+                "settings": {
+                    "resolution": "720p",
+                    "duration": duration,
+                    "audio": sound if model == "3.0" else "off",
+                    "aspect_ratio": "16:9",   # ★ 文生视频需要
+                },
+                "options": {
+                    "watermark_info": {"enabled": False}
+                }
+            }
+
+            if model == "3.0":
+                payload["settings"]["multi_shot"] = False
+
+            print(f"[DEBUG] 文生视频 URL: {url}")
+
         print(f"[DEBUG] 视频生成请求参数: {payload}")
-        
+
         response = requests.post(url, json=payload, headers=self._get_headers(), timeout=30)
         result = response.json()
         print(f"[DEBUG] 视频生成响应状态码: {response.status_code}")
         print(f"[DEBUG] 视频生成响应: {result}")
-        
+
         if result.get("code") != 0:
             raise Exception(f"视频API错误: {result.get('message')}")
-        
+
         return result["data"]["id"]
     
     @retry(stop=stop_after_attempt(3), wait=wait_fixed(2), retry=retry_if_exception_type(Exception))
@@ -431,42 +444,63 @@ class KlingService:
         
         return formatted_data
     
-    def wait_for_video_result(self, task_id: str, max_wait: int = 600, 
-                              poll_interval: int = 15) -> Dict:
-        """轮询等待视频任务完成（优化版：降低频率，避免并发限制）"""
+    def wait_for_video_result(self, task_id: str, max_wait: int = 2400,
+                            poll_interval: int = 15) -> Dict:
+        """轮询等待视频任务完成（兼容新版 3.0 outputs 结构）"""
         import time as time_module
         start_time = time_module.time()
-        
-        # 初始轮询间隔15秒，逐步递增到30秒
+
         current_interval = poll_interval
-        
+
         while time_module.time() - start_time < max_wait:
             try:
                 status_data = self.get_video_task_status(task_id)
                 task_status = status_data.get("task_status")
                 print(f"[DEBUG] 视频任务状态: {task_status}")
-                
+
                 if task_status == "succeed":
-                    task_result = status_data.get("task_result", {})
-                    videos = task_result.get("videos", [])
-                    if videos:
-                        status_data["task_result"]["video_url"] = videos[0].get("url", "")
+                    video_url = ""
+
+                    # ★ 优先从新结构取：data[0].outputs[]
+                    data_list = status_data.get("data", [])
+                    if data_list and isinstance(data_list, list):
+                        outputs = data_list[0].get("outputs", [])
+                        for out in outputs:
+                            if out.get("type") == "video" and out.get("url"):
+                                video_url = out.get("url")
+                                break
+
+                    # ★ 兼容旧结构：task_result.videos[]
+                    if not video_url:
+                        task_result = status_data.get("task_result", {})
+                        videos = task_result.get("videos", [])
+                        if videos:
+                            video_url = videos[0].get("url", "")
+
+                    # ★ 兜底：task_result.video_url
+                    if not video_url:
+                        video_url = status_data.get("task_result", {}).get("video_url", "")
+
+                    # 统一返回
+                    status_data["video_url"] = video_url
+                    if "task_result" not in status_data:
+                        status_data["task_result"] = {}
+                    status_data["task_result"]["video_url"] = video_url
+
                     return status_data
                 elif task_status == "failed":
                     error_msg = status_data.get("task_status_msg", "未知错误")
                     raise Exception(f"视频任务失败: {error_msg}")
             except Exception as e:
-                # 如果是并发限制错误，退避重试
                 if "parallel task" in str(e).lower() or "1303" in str(e):
                     print(f"[DEBUG] 并发限制，稍后重试...")
                     time_module.sleep(current_interval * 2)
                     continue
                 raise e
-            
+
             time_module.sleep(current_interval)
-            # 逐步递增间隔，最大30秒
             current_interval = min(current_interval + 5, 30)
-        
+
         raise Exception(f"视频任务超时，task_id: {task_id}")
 
     def generate_tryon_video(self, image_url: str = None, prompt: str = "", 

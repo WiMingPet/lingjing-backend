@@ -1,0 +1,179 @@
+[
+  {
+    "module": "ai_drama",
+    "title": "AI漫剧",
+    "thumbnail": "https://media.lingjing-media.com/动漫短剧.jpg",
+    "preview_video": "https://media.lingjing-media.com/动漫短剧.mp4",
+    "result_url": "https://media.lingjing-media.com/动漫短剧.mp4",
+    "template_prompt": "哪吒大战三太子",
+    "template_params": "{\"mode\":\"anime\",\"duration\":1,\"language\":\"zh\"}",
+    "section": "ai_video",
+    "position": 0,
+    "is_case": true
+  },
+  {
+    "module": "ai_drama",
+    "title": "AI人生剧场",
+    "thumbnail": "https://media.lingjing-media.com/真人短剧.jpg",
+    "result_url": "https://media.lingjing-media.com/真人短剧.mp4",
+    "template_prompt": "办公室三角恋,当场被戳破",
+    "template_params": "{\"mode\":\"real\",\"duration\":1,\"language\":\"zh\"}",
+    "section": "ai_video",
+    "position": 1,
+    "is_case": true
+  },
+  {
+    "module": "ai_drama",
+    "title": "AI人生剧场 2",
+    "thumbnail": "https://media.lingjing-media.com/真人短剧2.jpg",
+    "result_url": "https://media.lingjing-media.com/真人短剧2.mp4",
+    "template_prompt": "三国演义之赤壁之战（英文版）",
+    "template_params": "{\"mode\":\"real\",\"duration\":1,\"language\":\"zh\"}",
+    "section": "ai_video",
+    "position": 2,
+    "is_case": true
+  },
+  {
+    "module": "video",
+    "title": "AI有声视频",
+    "thumbnail": "https://media.lingjing-media.com/视频.jpg",
+    "result_url": "https://media.lingjing-media.com/视频.mp4",
+    "template_prompt": "视频开头海边日落,海浪拍打礁石,美女张开双手在海滩漫步,说着,哇:好美呀!",
+    "template_params": "{\"duration\":5,\"model\":\"3.0\",\"sound\":\"native\",\"reference_image\":\"https://media.lingjing-media.com/视频.jpg\"}",
+    "section": "ai_video",
+    "position": 3,
+    "is_case": true
+  },
+  {
+    "module": "video",
+    "title": "AI虚拟试穿",
+    "thumbnail": "https://media.lingjing-media.com/试穿.jpg",
+    "result_url": "https://media.lingjing-media.com/虚拟试穿.mp4",
+    "template_prompt": "无需提示词",
+    "template_params": "{\"model_image\":\"https://media.lingjing-media.com/试穿模特图.jpg\",\"garment_image\":\"https://media.lingjing-media.com/试穿服装图.jpg\"}",
+    "section": "ai_video",
+    "position": 4,
+    "is_case": true
+  },
+  {
+    "module": "ai_drama",
+    "title": "悟空三打白骨精",
+    "thumbnail": "https://media.lingjing-media.com/悟空三打白骨精.jpg",
+    "result_url": "https://media.lingjing-media.com/悟空三打白骨精.mp4",
+    "template_prompt": "悟空三打白骨精",
+    "template_params": "{\"mode\":\"real\",\"duration\":1,\"language\":\"zh\",\"reference_image\":\"https://media.lingjing-media.com/悟空三打白骨精.jpg\"}",
+    "section": "ai_video",
+    "position": 5,
+    "is_case": true
+  },
+  {
+    "module": "digital_custom",
+    "title": "AI口播带货",
+    "thumbnail": "https://media.lingjing-media.com/口播带货.jpg",
+    "result_url": "https://media.lingjing-media.com/口播带货_1790920713736.mp4",
+    "template_prompt": "做电商的朋友们,还在手工P图,美工外包吗?今天给大家推荐这款灵境AI软件,集成了各大平台的规则,AI自主识别图片,提取产品卖点,一键生成各大平台的A+图,场景图,视频,大大节约了时间成本.",
+    "template_params": "{\"reference_image\":\"https://media.lingjing-media.com/口播带货.jpg\"}",
+    "section": "ai_video",
+    "position": 6,
+    "is_case": true
+  },
+  {
+    "module": "digital_custom",
+    "title": "AI口播带货 3",
+    "thumbnail": "https://media.lingjing-media.com/口播5.jpg",
+    "result_url": "https://media.lingjing-media.com/口播5.mp4",
+    "template_prompt": "战术尼龙腰带，采用高强度黑色编织尼龙材质，耐磨抗撕裂，搭配哑光金属质感自动扣设计，轻便耐用。核心卖点包括：一键快速调节，佩戴便捷；防滑纹理设计，稳固贴合；无孔设计，避免传统孔眼磨损；防水防汗，适合全天候使用；简约硬朗造型，兼顾实用与时尚。适用于户外运动、日常通勤、战术训练等多种场景，尤其适合追求高效与品质的都市男性、户外爱好者及军事风格爱好者。其低调沉稳的外观与卓越性能，满足对功能性与美观性双重需求",
+    "template_params": "{\"reference_image\":\"https://media.lingjing-media.com/口播5.jpg\"}",
+    "section": "ai_video",
+    "position": 7,
+    "is_case": true
+  },
+  {
+    "module": "video",
+    "title": "视频6",
+    "thumbnail": "https://media.lingjing-media.com/视频6.png",
+    "result_url": "https://media.lingjing-media.com/视频6.mp4",
+    "template_prompt": "视频开头美女优雅的哼着英文歌曲，一边看书，一边听着音乐",
+    "template_params": "{\"duration\":5,\"model\":\"3.0\",\"sound\":\"off\",\"reference_image\":\"https://media.lingjing-media.com/视频6.png\"}",
+    "section": "ai_video",
+    "position": 8,
+    "is_case": true
+  },
+  {
+    "module": "video",
+    "title": "AI视频 2",
+    "thumbnail": "https://media.lingjing-media.com/视频2.jpg",
+    "result_url": "https://media.lingjing-media.com/视频2.mp4",
+    "template_prompt": "模特在T台上走秀,表情自然",
+    "template_params": "{\"duration\":5,\"model\":\"3.0\",\"sound\":\"off\",\"reference_image\":\"https://media.lingjing-media.com/视频2.jpg\"}",
+    "section": "ai_video",
+    "position": 9,
+    "is_case": true
+  },
+  {
+    "module": "video",
+    "title": "AI视频 3",
+    "thumbnail": "https://media.lingjing-media.com/视频3.jpg",
+    "result_url": "https://media.lingjing-media.com/视频3.mp4",
+    "template_prompt": "美女开心的跳着中国民族舞，魅力四射",
+    "template_params": "{\"duration\":5,\"model\":\"3.0\",\"sound\":\"off\",\"reference_image\":\"https://media.lingjing-media.com/视频3.jpg\"}",
+    "section": "ai_video",
+    "position": 10,
+    "is_case": true
+  },
+  {
+    "module": "merchant",
+    "title": "AI电商套图 1",
+    "thumbnail": "https://media.lingjing-media.com/电商套图1.jpg",
+    "result_url": "https://media.lingjing-media.com/电商套图1.jpg",
+    "template_prompt": "白色背景商品图",
+    "template_params": "{}",
+    "section": "ai_fun",
+    "position": 0,
+    "is_case": true
+  },
+  {
+    "module": "merchant",
+    "title": "AI电商套图 2",
+    "thumbnail": "https://media.lingjing-media.com/电商套图2.jpg",
+    "result_url": "https://media.lingjing-media.com/电商套图2.jpg",
+    "template_prompt": "场景图",
+    "template_params": "{}",
+    "section": "ai_fun",
+    "position": 1,
+    "is_case": true
+  },
+  {
+    "module": "merchant",
+    "title": "AI电商套图 3",
+    "thumbnail": "https://media.lingjing-media.com/电商套图3.jpg",
+    "result_url": "https://media.lingjing-media.com/电商套图3.jpg",
+    "template_prompt": "A+ 图",
+    "template_params": "{}",
+    "section": "ai_fun",
+    "position": 2,
+    "is_case": true
+  },
+  {
+    "module": "image",
+    "title": "AI图片生成",
+    "thumbnail": "https://media.lingjing-media.com/图片生成.png",
+    "result_url": "https://media.lingjing-media.com/图片生成.png",
+    "template_prompt": "赛博朋克风格的城市夜景",
+    "template_params": "{}",
+    "section": "ai_fun",
+    "position": 3,
+    "is_case": true
+  },
+  {
+    "module": "image",
+    "title": "AI图片生成 2",
+    "thumbnail": "https://media.lingjing-media.com/图片2.png",
+    "result_url": "https://media.lingjing-media.com/图片2.png",
+    "template_prompt": "未来科技感的产品概念图",
+    "template_params": "{}",
+    "section": "ai_fun",
+    "position": 4,
+    "is_case": true
+  }
+]

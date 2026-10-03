@@ -20,6 +20,16 @@ DIGITAL_HUMAN_COST = 60
 ECOMMERCE_VIDEO_COST = 100
 MULTI_ANGLE_COST = 80
 
+# AI 短剧
+SHORT_DRAMA_COST = {
+    "real_1": 600,     # 真人短剧 1 分钟
+    "real_3": 1800,    # 真人短剧 3 分钟
+    "real_5": 2980,    # 真人短剧 5 分钟
+    "anime_1": 600,    # 动漫短剧 1 分钟
+    "anime_3": 1800,   # 动漫短剧 3 分钟
+    "anime_5": 2980,   # 动漫短剧 5 分钟
+}
+
 # ========== 电商套图 ==========
 MERCHANT_WHITE_BG_COST = 10
 MERCHANT_SCENE_COST_PER_IMAGE = 10
