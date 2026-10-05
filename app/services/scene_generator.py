@@ -44,7 +44,7 @@ class SceneGenerator:
                 f"{scene_prompt}. "
                 f"Characters in scene: {', '.join(characters_in_scene)}.{others_hint} "
                 f"{style_hint}, "
-                f"**characters with reference images MUST match the reference faces exactly**, "
+                f"**CRITICAL: characters' faces, hairstyles, skin tones, and clothing MUST be IDENTICAL to the reference images. DO NOT change any facial features. DO NOT change hairstyles. DO NOT change clothing colors.** "
                 f"all characters acting naturally, "
                 f"highly detailed, no text, no subtitle"
             )

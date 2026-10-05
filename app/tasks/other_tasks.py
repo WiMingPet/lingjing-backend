@@ -225,8 +225,15 @@ async def _generate_short_drama_core(user_id: int, request_data: dict) -> dict:
                 if d.get("character") and d.get("text")
             ])
 
+            # ★ 加"承接上文"
+            prev_scene_desc = ""
+            if i > 0:
+                prev_scene = scenes[i - 1]
+                prev_scene_desc = f" Continuing from previous scene: {prev_scene.get('scene_prompt', '')[:100]}."
+
             video_prompt = (
-                f"{scene_prompt}. Characters are talking. "
+                f"{scene_prompt}.{prev_scene_desc} "
+                f"Characters are talking. "
                 f"Speak the following dialogue {accent_hint}: {dialogue_text}. "
                 f"Cinematic motion, natural acting, lips moving as they speak, "
                 f"no text overlay."
