@@ -76,5 +76,3 @@ yarl==1.23.0
 Pillow
 numpy
 wechatpayv3
-
-
