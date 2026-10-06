@@ -7,15 +7,18 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y \
     ffmpeg \
+    fonts-noto-cjk \
+    fontconfig \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 
 RUN pip cache purge && \
-    pip install --no-cache-dir --retries 10 --timeout 60 \
+    pip install --no-cache-dir --retries 10 --timeout 120 \
     -r requirements.txt \
     -i https://mirrors.aliyun.com/pypi/simple/ \
-    --trusted-host mirrors.aliyun.com
+    --trusted-host mirrors.aliyun.com \
+    --prefer-binary
 
 COPY . .
 

@@ -10,9 +10,8 @@ from typing import List
 
 
 # 字体目录（兼容本地和 Docker）
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-FONT_DIR = os.path.join(BASE_DIR, "app", "data", "fonts")
-FONT_NAME = "SourceHanSans"
+FONT_DIR = "/usr/share/fonts/opentype/noto"
+FONT_NAME = "Noto Sans CJK SC"
 
 
 class VideoComposer:
