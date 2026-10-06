@@ -173,23 +173,33 @@ class ScriptGenerator:
 - 必须包含：年龄 + 性别 + 发型 + 服装 + 特征
 
 **3. 分镜设计**：
-- 每个分镜 = 一个场景 + 多个角色
+- 每个分镜 = 一个场景 + 多个角色 + **明确动作过程**
 - scene_prompt 英文，20-40 词
 - characters_in_scene 包含所有出场角色
 - 场景必须多样化
 - 剧情要有"起承转合"
 
-**3.1 剧情连贯性（非常重要）**：
-- {scene_count} 个分镜必须是一条**完整的时间线**，前后逻辑连贯
-- 每个分镜的**开头**必须承接上一个分镜的**结尾**（同一地点、同一人物状态、同一情绪）
-- **不允许**场景、人物、情绪突然跳变
-- 分镜之间要有"因果"关系，不是孤立片段
+**3.1 动作连贯性（重要，通用要求）**：
+- 每个分镜的 `scene_prompt` 必须包含**明确动作**，不是静态场景
+- 格式建议：`[角色] is [doing action], [角色] [does another action], ...`
+- ✅ 好例子（通用，不限剧情）：
+  - "A man walks into the room, looks around, then sits on the chair"
+  - "A woman picks up a cup, drinks, then puts it down"
+- ❌ 差例子：
+  - "A man in the room"（没动作）
+  - "A busy street scene"（没动作）
+- **每个分镜的"结尾动作"，要能衔接下一个分镜的"开头动作"**
+- 每个分镜额外输出 `end_action` 字段（英文，10-20 词），描述"这个分镜的结尾动作"
+
+**3.2 剧情连贯性（重要，通用要求）**：
+- {scene_count} 个分镜是一条**完整时间线**，前后逻辑连贯
+- 每个分镜的开头必须承接上一个分镜的结尾
+- 不允许场景、人物、情绪突变
 - 剧情结构：
   - 第 1 个分镜：建立冲突/悬念
-  - 中间分镜：冲突升级/铺垫
-  - 倒数第 2 个分镜：反转/高潮
-  - 最后 1 个分镜：结局/打脸
-- 每个分镜的 `scene_prompt` 要体现**"上一个分镜发生了什么"的延续**
+  - 中间分镜：升级/铺垫
+  - 倒数第 2 个：反转/高潮
+  - 最后 1 个：结局
 
 **4. 对话**：
 - 每个分镜 3~6 句
@@ -207,7 +217,8 @@ class ScriptGenerator:
   "scenes": [
     {{
       "index": 1,
-      "scene_prompt": "English scene, 20-40 words",
+      "scene_prompt": "English scene with clear actions, 20-40 words",
+      "end_action": "English, the ending action of this scene, 10-20 words",
       "characters_in_scene": ["角色名1", "角色名2"],
       "dialogue": [
         {{"character": "角色名", "text": "对话（用 {lang_name}）"}}
@@ -219,6 +230,7 @@ class ScriptGenerator:
 **注意**：
 - characters 数组必须有"所有角色"
 - scenes 数组必须有 {scene_count} 个元素
+- scenes 数组每个元素必须有 `end_action` 字段（这个分镜的结尾动作）
 - **所有剧情由你根据用户输入"自由生成"，不要套用任何"固定剧情"**
 """
 

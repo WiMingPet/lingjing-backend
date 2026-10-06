@@ -32,6 +32,7 @@ MarkupSafe==3.0.3
 multidict==6.7.1
 numpy==2.4.3
 openai==2.32.0
+opencv-contrib-python==4.13.0.92
 opencv-python-headless==4.13.0.92
 oss2==2.19.1
 packaging==26.0
@@ -72,4 +73,6 @@ urllib3==2.6.3
 uvicorn==0.44.0
 watchfiles==1.1.1
 yarl==1.23.0
+Pillow
+numpy
 wechatpayv3

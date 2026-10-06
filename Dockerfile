@@ -12,11 +12,10 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 
 RUN pip cache purge && \
-    pip install --no-cache-dir --retries 10 --timeout 120 \
+    pip install --no-cache-dir --retries 10 --timeout 60 \
     -r requirements.txt \
     -i https://mirrors.aliyun.com/pypi/simple/ \
-    --trusted-host mirrors.aliyun.com \
-    --prefer-binary
+    --trusted-host mirrors.aliyun.com
 
 COPY . .
 
