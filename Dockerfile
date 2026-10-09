@@ -17,8 +17,6 @@ RUN pip cache purge && \
     pip install --no-cache-dir \
     --retries 10 --timeout 300 \
     -r requirements.txt \
-    -i https://pypi.tuna.tsinghua.edu.cn/simple/ \
-    --trusted-host pypi.tuna.tsinghua.edu.cn \
     --prefer-binary
 
 COPY . .
