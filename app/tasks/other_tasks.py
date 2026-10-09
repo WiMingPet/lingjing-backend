@@ -120,10 +120,16 @@ async def _generate_short_drama_core(user_id: int, request_data: dict) -> dict:
     language = request_data.get("language", "zh")
 
     # ★ 画风由 mode 决定，不由用户传
-    if mode == "anime":
-        style = "anime"          # 动漫短剧：国产 3D 动画风
+    if mode == "anime_cn":
+        style = "anime_cn"
+    elif mode == "anime_jp":
+        style = "anime_jp"
+    elif mode == "anime_pixar":
+        style = "anime_pixar"
+    elif mode == "anime_us":
+        style = "anime_us"
     else:
-        style = "realistic"      # 真人短剧：真人写实
+        style = "real"
 
     from app.services.script_generator import script_generator
     from app.services.character_generator import character_generator

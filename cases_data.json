@@ -6,7 +6,7 @@
     "preview_video": "https://media.lingjing-media.com/动漫短剧.mp4",
     "result_url": "https://media.lingjing-media.com/动漫短剧.mp4",
     "template_prompt": "哪吒大战三太子",
-    "template_params": "{\"mode\":\"anime\",\"duration\":1,\"language\":\"zh\"}",
+    "template_params": "{\"mode\":\"anime_cn\",\"duration\":1,\"language\":\"zh\"}",
     "section": "ai_video",
     "position": 0,
     "is_case": true

@@ -23,11 +23,14 @@ class CharacterGenerator:
             ref_idx = character.get("reference_index", 0)
             reference_urls = reference_urls or []
 
-            # ★ 只保留画风维度
-            # realistic = 真人写实；anime = 国产 3D 动画风
+            # ★ 只保留画风维度（5 种）
+            # real = 真人写实；anime_cn = 国漫 3D；anime_jp = 日漫 2D；anime_pixar = 皮克斯 3D；anime_us = 美漫 2D
             style_map = {
-                "realistic": "photorealistic, cinematic portrait, 4K HD",
-                "anime": "Chinese 3D animation, donghua 3D, CGI character, cinematic lighting, highly detailed",
+                "real": "photorealistic, cinematic portrait, 4K HD",
+                "anime_cn": "Chinese 3D animation, donghua 3D, CGI character, cinematic lighting, highly detailed",
+                "anime_jp": "Japanese anime style, 2D illustration, cel shading, clean line art, vibrant colors",
+                "anime_pixar": "Pixar style, Disney 3D animation, CGI character, cute and stylized, cinematic lighting",
+                "anime_us": "American comic style, 2D animation, bold outlines, vibrant colors, comic book illustration",
             }
             style_hint = style_map.get(style, "photorealistic, cinematic portrait, 4K HD")
 

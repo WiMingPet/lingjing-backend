@@ -13,7 +13,7 @@ from app.schemas.task import APIResponse
 from app.utils.credits import check_and_deduct_credits
 from app.rq_app import queue_other
 from app.tasks.other_tasks import generate_short_drama_task
-from app.data.prices import SHORT_DRAMA_COST
+from app.data.prices import SHORT_DRAMA_BASE_PRICE, SHORT_DRAMA_MODES
 
 router = APIRouter(prefix="/short-drama", tags=["AI短剧"])
 
@@ -32,12 +32,12 @@ async def generate_short_drama(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    cost_key = f"{mode}_{duration}"
-    cost = SHORT_DRAMA_COST.get(cost_key)
-    if not cost:
-        raise HTTPException(400, f"无效模式或时长: {mode}, {duration}")
+    if mode not in SHORT_DRAMA_MODES:
+        raise HTTPException(400, f"无效模式: {mode}")
 
-    # style 由 _generate_short_drama_core 按 mode 自动决定，这里不再设默认值
+    cost = SHORT_DRAMA_BASE_PRICE.get(duration)
+    if not cost:
+        raise HTTPException(400, f"无效时长: {duration}")
 
     # 上传参考图
     reference_urls = []

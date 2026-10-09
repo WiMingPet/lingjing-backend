@@ -17,11 +17,14 @@ class SceneGenerator:
     ) -> Optional[str]:
         """生成分镜图（多人物 + 场景）"""
         try:
-            # ★ 只保留画风维度
-            # realistic = 真人写实；anime = 国产 3D 动画风
+            # ★ 只保留画风维度（5 种）
+            # real = 真人写实；anime_cn = 国漫 3D；anime_jp = 日漫 2D；anime_pixar = 皮克斯 3D；anime_us = 美漫 2D
             style_map = {
-                "realistic": "photorealistic, cinematic wide shot, 4K HD",
-                "anime": "Chinese 3D animation, donghua 3D, CGI scene, cinematic wide shot, highly detailed",
+                "real": "photorealistic, cinematic wide shot, 4K HD",
+                "anime_cn": "Chinese 3D animation, donghua 3D, CGI scene, cinematic wide shot, highly detailed",
+                "anime_jp": "Japanese anime style, 2D illustration, cel shading, cinematic wide shot",
+                "anime_pixar": "Pixar style, Disney 3D animation, CGI scene, cinematic wide shot",
+                "anime_us": "American comic style, 2D animation, bold outlines, cinematic wide shot",
             }
             style_hint = style_map.get(style, "photorealistic, cinematic wide shot, 4K HD")
 
