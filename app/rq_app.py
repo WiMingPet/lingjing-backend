@@ -24,7 +24,7 @@ if RQ_AVAILABLE:
     redis_conn = redis.from_url(REDIS_URL)
     queue_image = Queue("image", connection=redis_conn, default_timeout=1800)
     queue_video = Queue("video", connection=redis_conn, default_timeout=1800)
-    queue_other = Queue("other", connection=redis_conn, default_timeout=1800)
+    queue_other = Queue("other", connection=redis_conn, default_timeout=5400)
     print("[RQ] 队列初始化完成: image / video / other")
 else:
     queue_image = None
