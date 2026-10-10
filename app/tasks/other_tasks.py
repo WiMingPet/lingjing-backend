@@ -174,7 +174,7 @@ async def _generate_short_drama_core(user_id: int, request_data: dict) -> dict:
         raise Exception("角色图生成失败")
 
     # ========== 3. 分镜并发生成（并发4 + 重试 + 失败即中止退款） ==========
-    MAX_CONCURRENT_SCENES = 3        # 并发数
+    MAX_CONCURRENT_SCENES = 4        # 并发数
     MAX_RETRY_PER_SCENE = 2          # 每个分镜最多重试2次（共3次尝试）
     sem = asyncio.Semaphore(MAX_CONCURRENT_SCENES)
 

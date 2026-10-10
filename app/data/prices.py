@@ -25,6 +25,8 @@ SHORT_DRAMA_BASE_PRICE = {
     1: 600,
     3: 1800,
     5: 2980,
+    6: 3600,
+    10: 5600,
 }
 
 SHORT_DRAMA_MODES = [

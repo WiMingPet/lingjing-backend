@@ -17,16 +17,21 @@ class ScriptGenerator:
                             language: str = "zh", mode: str = "real") -> Dict:
         """生成剧本"""
         if duration == 1:
-            scene_count = 6       # 1 分钟 = 6 个 10 秒
+            scene_count = 6
         elif duration == 3:
-            scene_count = 18      # 3 分钟 = 18 个 10 秒
+            scene_count = 18
+        elif duration == 5:
+            scene_count = 30
+        elif duration == 6:
+            scene_count = 36
+        elif duration == 10:
+            scene_count = 60
         else:
-            scene_count = 30      # 5 分钟 = 30 个 10 秒
+            scene_count = 30
 
-        # ★ 动漫短剧：AI 自动匹配国产 3D 动画风（真人短剧不加，prompt 不变）
-        # ========== 画风映射 ==========
+        # ★ 画风映射
         if mode == "real":
-            mode_hint = ""   # 真人，不加画风提示
+            mode_hint = ""
         elif mode == "anime_cn":
             mode_hint = """
 **画风要求（重要）**：这是**国产 3D 动画短剧**，所有角色和场景必须是**国产 3D 动画风格**（类似哪吒之魔童降世、姜子牙、白蛇缘起）。
@@ -81,15 +86,14 @@ class ScriptGenerator:
         }
         lang_name = lang_map.get(language, "中文（普通话）")
 
-        # ★ 方言提示
         if language in ("dongbei", "sichuan", "chongqing", "yue", "nan"):
             lang_hint = f"""
 **输出语言**：{lang_name}（方言）
 
 **注意**：
-- **所有"对话"（dialogue.text）必须用"{lang_name}"的"方言表达"**，不要用"普通话"。
-- **其他字段（title、summary、name）可以用"普通话"**，方便"阅读"。
-- **appearance 和 scene_prompt 用英文**（因为要传给 AI 生图模型）。
+- **所有"对话"（dialogue.text）必须用"{lang_name}"的"方言表达"**。
+- **其他字段（title、summary、name）可以用"普通话"**。
+- **appearance 和 scene_prompt 用英文**。
 """
         else:
             lang_hint = f"""
@@ -98,12 +102,11 @@ class ScriptGenerator:
 **所有"文字字段"必须用 {lang_name} 输出**：
 - title、summary、name、dialogue.text
 
-**appearance 和 scene_prompt 用英文**（因为要传给 AI 生图模型）。
+**appearance 和 scene_prompt 用英文**。
 """
 
-        # 根据"是否有参考图"，生成不同的提示
+        # ★ 参考图规则
         if reference_count > 0 and reference_info:
-            # ★ 有分析结果：用视觉模型分析出的性别/年龄/外貌匹配
             ref_desc = "\n".join([
                 f"- 图 {info['reference_index']}: 性别={info.get('gender', 'unknown')}, "
                 f"年龄={info.get('age_range', 'unknown')}, "
@@ -119,50 +122,24 @@ class ScriptGenerator:
 - 根据每张参考图的**性别、年龄、外貌**，自动匹配最合适的角色
 - 为匹配的角色添加 `reference_index` 字段（对应图号 1~N）
 - 其他角色 `reference_index` 为 0
-- **匹配依据**：
-  - 性别必须一致（male 配 male，female 配 female）
-  - 年龄尽量接近（如 mid 20s 配 young adult）
-  - 外貌特征相符（发型、气质）
 - **如果用户提示词里明确说了"图 X 是 XXX"，以用户说的为准**
-- **如果有多张参考图，按用户说明或 AI 自动匹配**
-
-**示例**：
-- 图 1 是 female, mid 20s → 匹配到女性主角
-- 图 2 是 male, early 30s → 匹配到男性主角
 
 **输出示例**：
 {{
   "characters": [
     {{"name": "王丽", "role": "main", "reference_index": 1, "appearance": "Chinese female..."}},
-    {{"name": "李明", "role": "main", "reference_index": 2, "appearance": "Chinese male..."}},
-    {{"name": "张华", "role": "supporting", "reference_index": 0, "appearance": "..."}}
+    {{"name": "李明", "role": "main", "reference_index": 2, "appearance": "Chinese male..."}}
   ]
 }}
 """
         elif reference_count > 0:
-            # 兜底：没分析结果时，沿用旧的 ref_rule
             ref_rule = f"""
 **用户上传了 {reference_count} 张参考图**。
 
 **角色来源规则**：
-- 用户会在"主题/提示词"里说明每张参考图的角色，例如"图 1 是唐僧，图 2 是孙悟空"
-- **你必须仔细阅读用户的提示词，识别出"哪张图对应哪个角色"**
-- 为每个角色添加 `reference_index` 字段：
-  - `reference_index`: 1~N（对应第 N 张参考图）
-  - `reference_index`: 0（没有参考图，AI 生成）
+- 用户会在"主题/提示词"里说明每张参考图的角色
+- 为每个角色添加 `reference_index` 字段：1~N 或 0
 - **如果用户"没说清楚"，你根据"主题"自行推断**
-
-**示例**：
-用户输入："图 1 是唐僧，图 2 是孙悟空，图 3 是猪八戒。主题：三打白骨精。"
-输出：
-{{
-  "characters": [
-    {{"name": "唐僧", "role": "main", "reference_index": 1, "appearance": "..."}},
-    {{"name": "孙悟空", "role": "main", "reference_index": 2, "appearance": "..."}},
-    {{"name": "猪八戒", "role": "main", "reference_index": 3, "appearance": "..."}},
-    {{"name": "白骨精", "role": "supporting", "reference_index": 0, "appearance": "..."}}
-  ]
-}}
 """
         else:
             ref_rule = """
@@ -170,7 +147,35 @@ class ScriptGenerator:
 所有角色由 AI 生成，`reference_index` 全部为 0。
 """
 
-        prompt = f"""你是一个专业的短剧编剧。根据用户输入，生成一个完整的短剧剧本。
+        prompt = f"""你是一个专业的短剧编剧。用户会给你**一段剧情**（不是整部剧），你要把**这一段**写细、写满、写连贯。
+
+**核心原则（重要）**：
+- 用户会给你**一段剧情**（不是整部剧），你要把**这一段**写细、写满、写连贯
+- 你只需要讲好**这一段**，不要压缩整个故事
+- **不要试图"讲完整部剧"**，只讲好"这一段"
+- 用户会自己拼接多段素材，组成完整剧集
+- 这一段必须有：**开头 → 发展 → 高潮 → 小结尾**
+- 但**不要求"大结局"**，可以留悬念给下一段
+
+**用户输入的两种情况（重要）**：
+
+**情况 1：一句话主题**（短，10~30 字）
+- 用户只给了"这一段讲什么"
+- 你**自由发挥**，生成角色、场景、分镜、对白
+
+**情况 2：几百字大纲**（长，100~2000 字，含角色、场景、情节）
+- 用户已经写了"框架"
+- 你**严格按大纲执行**：
+  - 用户写的**角色**，必须全部用（不改名、不改设定）
+  - 用户写的**场景**，必须出现
+  - 用户写的**情节**，必须保留（顺序不打乱）
+  - 用户写的**对白**（如果有），优先用
+- 你只**补充细节**（分镜、动作、情绪、次要对白）
+- **不要改变用户写的核心内容**
+
+**判断方法**：
+- 输入短（< 50 字）→ 情况 1
+- 输入长（≥ 50 字）→ 情况 2
 
 **用户输入的主题/提示词**：
 {theme}
@@ -193,11 +198,7 @@ class ScriptGenerator:
 
 **2. 角色外观（appearance）**：
 - **英文**，20-40 词
-- 必须包含"人种/国籍"，根据主题推断：
-  - 古装/中国主题 → Chinese, Asian
-  - 日式主题 → Japanese
-  - 欧美主题 → American / European
-  - 其他 → 根据主题判断
+- 必须包含"人种/国籍"
 - 必须包含：年龄 + 性别 + 发型 + 服装 + 特征
 
 **3. 分镜设计**：
@@ -207,27 +208,51 @@ class ScriptGenerator:
 - 场景必须多样化
 - 剧情要有"起承转合"
 
-**3.1 动作连贯性（重要，通用要求）**：
-- 每个分镜的 `scene_prompt` 必须包含**明确动作**，不是静态场景
+**3.1 动作连贯性（重要）**：
+- 每个分镜的 `scene_prompt` 必须包含**明确动作**
 - 格式建议：`[角色] is [doing action], [角色] [does another action], ...`
-- ✅ 好例子（通用，不限剧情）：
-  - "A man walks into the room, looks around, then sits on the chair"
-  - "A woman picks up a cup, drinks, then puts it down"
-- ❌ 差例子：
-  - "A man in the room"（没动作）
-  - "A busy street scene"（没动作）
+- ✅ 好例子："A man walks into the room, looks around, then sits on the chair"
+- ❌ 差例子："A man in the room"
 - **每个分镜的"结尾动作"，要能衔接下一个分镜的"开头动作"**
-- 每个分镜额外输出 `end_action` 字段（英文，10-20 词），描述"这个分镜的结尾动作"
+- 每个分镜额外输出 `end_action` 字段（英文，10-20 词）
 
-**3.2 剧情连贯性（重要，通用要求）**：
+**3.2 剧情连贯性（重要）**：
 - {scene_count} 个分镜是一条**完整时间线**，前后逻辑连贯
 - 每个分镜的开头必须承接上一个分镜的结尾
 - 不允许场景、人物、情绪突变
-- 剧情结构：
-  - 第 1 个分镜：建立冲突/悬念
-  - 中间分镜：升级/铺垫
-  - 倒数第 2 个：反转/高潮
-  - 最后 1 个：结局
+
+**3.3 这一段的结构（重要）**：
+- 前 1/4：进入这一段的情境
+- 中间 1/2：展开这一段的情节
+- 后 1/4：这一段的小结或悬念
+- **不要求"大结局"**
+
+**3.4 写细写满（重要）**：
+- 你要把"这一段"**展开**成 {scene_count} 个分镜
+- **不要为了"赶进度"压缩剧情**
+- **不要反复重复同一句台词**
+- 用**细节**填充：动作、环境、情绪、对话
+- 如果"这一段"本身很短，你要**把它展开**：
+  - 一个情绪节点 → 拆成 3~5 个分镜
+  - 一句对白 → 拆成 2~3 个来回
+  - 一个动作 → 拆成"预备 → 执行 → 反应"
+
+**3.4.1 用户输入是大纲时（重要）**：
+- 用户写的**角色**：全部保留（不改名、不改设定），为每个角色生成 `appearance`
+- 用户写的**场景**：全部保留，为每个场景生成 `scene_prompt`
+- 用户写的**情节**：全部保留，按用户写的顺序
+- 用户写的**对白**：优先用，可以补充
+- 把大纲**展开**成 {scene_count} 个分镜
+
+**3.5 时长与展开程度（重要）**：
+- 用户选择的时长决定"展开程度"，**不是"故事长度"**
+- **1 分钟**：只讲这一段的核心冲突
+- **3 分钟**：加上环境、人物、情绪的细节
+- **6 分钟**：加上次要人物、次要事件、内心戏
+- **10 分钟**：展开成"一场完整的戏"，有起承转合、伏笔、留白
+- **不要为了填满时长而重复啰嗦**
+- **不要写"无意义的寒暄"**
+- 每个分镜都要有"信息量"或"情绪"
 
 **4. 对话（类型自适应）**：
 
@@ -250,8 +275,7 @@ class ScriptGenerator:
 - 家庭/伦理 → 矛盾 → 冲突 → 理解 → 和解
 - 古装/宫斗 → 争斗 → 结盟 → 背叛 → 胜利
 - 搞笑/日常 → 冲突 → 升级 → 反转 → 笑点
-- 根据主题选择最适合的结构
-- 每个分镜必须有"钩子"：让观众想看下一段
+- 每个分镜必须有"钩子"
 
 **4.3 台词风格（根据类型自适应）**：
 - 逆袭/复仇 → 短、有力、打脸
@@ -262,12 +286,12 @@ class ScriptGenerator:
 
 **4.4 情绪与动作**：
 - 对话要带"情绪"
-- 可以用"动作"辅助情绪：甩手、冷笑、转身、跪下
+- 可以用"动作"辅助情绪
 
 **5. 输出格式**：
 
 {{
-  "title": "短剧标题",
+  "title": "标题",
   "summary": "一句话简介",
   "characters": [
     {{"name": "角色名", "role": "main", "reference_index": 0, "appearance": "English, 20-40 words"}}
@@ -288,8 +312,9 @@ class ScriptGenerator:
 **注意**：
 - characters 数组必须有"所有角色"
 - scenes 数组必须有 {scene_count} 个元素
-- scenes 数组每个元素必须有 `end_action` 字段（这个分镜的结尾动作）
+- scenes 数组每个元素必须有 `end_action` 字段
 - **所有剧情由你根据用户输入"自由生成"，不要套用任何"固定剧情"**
+- **如果用户输入是大纲，严格按大纲执行**
 """
 
         def _sync():
