@@ -116,6 +116,27 @@ class VideoComposer:
 
                 merged_path = output_path
 
+            try:
+                colored_path = os.path.join(tmp_dir, "colored.mp4")
+                COLOR_FILTER = "eq=brightness=0.02:saturation=1.1:contrast=1.05"
+                cmd = [
+                    "ffmpeg", "-y",
+                    "-i", merged_path,
+                    "-vf", COLOR_FILTER,
+                    "-c:v", "libx264",
+                    "-c:a", "aac", 
+                    "-preset", "fast",
+                    colored_path,
+                ]
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+                if result.returncode == 0:
+                    merged_path = colored_path
+                    print(f"[VIDEO_COMPOSER] 调色完成")
+                else:
+                    print(f"[VIDEO_COMPOSER] 调色失败: {result.stderr[:200]}")
+            except Exception as e:
+                print(f"[VIDEO_COMPOSER] 调色异常: {e}")
+
             # ★ 烧字幕（如果有对话）
             if scene_dialogues:
                 srt_content = VideoComposer._build_srt(scene_dialogues)

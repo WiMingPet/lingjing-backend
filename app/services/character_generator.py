@@ -58,11 +58,11 @@ class CharacterGenerator:
                 task_id = kling_service.generate_image_o1(
                     prompt=prompt,
                     image_urls=ref_images,
-                    resolution="2k",
+                    resolution="4k",       # ★ 从 2k 改成 4k
                     aspect_ratio="1:1",
                     n=1,
                 )
-                result = kling_service.wait_for_o1_result(task_id, max_wait=300)
+                result = kling_service.wait_for_o1_result(task_id, max_wait=600)  # ★ 时间也放宽
                 return result.get("output_url", "")
 
             url = await asyncio.to_thread(_sync)

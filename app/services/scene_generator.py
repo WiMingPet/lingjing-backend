@@ -47,7 +47,12 @@ class SceneGenerator:
                 f"{scene_prompt}. "
                 f"Characters in scene: {', '.join(characters_in_scene)}.{others_hint} "
                 f"{style_hint}, "
-                f"**CRITICAL: characters' faces, hairstyles, skin tones, and clothing MUST be IDENTICAL to the reference images. DO NOT change any facial features. DO NOT change hairstyles. DO NOT change clothing colors.** "
+                f"**CRITICAL REFERENCE MATCHING (HIGHEST PRIORITY)**: "
+                f"- Characters' faces MUST be EXACTLY the same as the reference images. "
+                f"- Do NOT change age, gender, hairstyle, hair color, skin tone, eye shape, nose shape, mouth shape. "
+                f"- Do NOT change clothing, accessories, or any visual detail. "
+                f"- Treat the reference images as IDENTICAL twins. "
+                f"- The scene/environment/lighting may change, but the CHARACTERS MUST remain identical. "
                 f"all characters acting naturally, "
                 f"highly detailed, no text, no subtitle"
             )
