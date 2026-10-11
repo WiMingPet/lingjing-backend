@@ -14,6 +14,7 @@ class SceneGenerator:
         character_images: Dict[str, str],
         characters_in_scene: List[str],
         style: str = "",
+        prev_scene_image: str = None,   # ★ 新增
     ) -> Optional[str]:
         """生成分镜图（多人物 + 场景）"""
         try:
@@ -28,8 +29,14 @@ class SceneGenerator:
             }
             style_hint = style_map.get(style, "photorealistic, cinematic wide shot, 4K HD")
 
-            # 只取"有定妆照"的角色作参考
+            # ★ 参考图：优先上一个分镜图，再加定妆照
             reference_images = []
+
+            # 1. 上一个分镜图（放最前，权重最高）
+            if prev_scene_image:
+                reference_images.append(prev_scene_image)
+
+            # 2. 角色定妆照
             for char_name in characters_in_scene:
                 img = character_images.get(char_name)
                 if img:
@@ -43,16 +50,24 @@ class SceneGenerator:
             if unnamed:
                 others_hint = f" Also visible: {', '.join(unnamed)}."
 
+            # ★ 连续性提示
+            continuity_hint = ""
+            if prev_scene_image:
+                continuity_hint = (
+                    "**CONTINUITY (HIGHEST PRIORITY)**: This scene MUST be a direct continuation of the previous scene. "
+                    "Same location, same lighting, same time of day, same camera angle (or slight variation). "
+                    "The characters must be in the exact same position they ended in the previous scene. "
+                )
+
             prompt = (
                 f"{scene_prompt}. "
                 f"Characters in scene: {', '.join(characters_in_scene)}.{others_hint} "
                 f"{style_hint}, "
+                f"{continuity_hint}"
                 f"**CRITICAL REFERENCE MATCHING (HIGHEST PRIORITY)**: "
                 f"- Characters' faces MUST be EXACTLY the same as the reference images. "
                 f"- Do NOT change age, gender, hairstyle, hair color, skin tone, eye shape, nose shape, mouth shape. "
                 f"- Do NOT change clothing, accessories, or any visual detail. "
-                f"- Treat the reference images as IDENTICAL twins. "
-                f"- The scene/environment/lighting may change, but the CHARACTERS MUST remain identical. "
                 f"all characters acting naturally, "
                 f"highly detailed, no text, no subtitle"
             )

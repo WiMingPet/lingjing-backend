@@ -174,7 +174,7 @@ async def _generate_short_drama_core(user_id: int, request_data: dict) -> dict:
         raise Exception("角色图生成失败")
 
     # ========== 3. 分镜并发生成（并发4 + 重试 + 失败即中止退款） ==========
-    MAX_CONCURRENT_SCENES = 4        # 并发数
+    MAX_CONCURRENT_SCENES = 1        # 并发数
     MAX_RETRY_PER_SCENE = 2          # 每个分镜最多重试2次（共3次尝试）
     sem = asyncio.Semaphore(MAX_CONCURRENT_SCENES)
 
@@ -197,6 +197,9 @@ async def _generate_short_drama_core(user_id: int, request_data: dict) -> dict:
     fail_event = asyncio.Event()
     fail_detail = {"index": None, "error": None}
 
+    # ★ 已生成的分镜图（按 index 存，用于传给下一个分镜作参考）
+    scene_images_cache = {}
+
     async def _gen_one_scene(i: int, scene: dict):
         """生成单个分镜；返回 (video_url, dialogue_dict)"""
         async with sem:
@@ -209,8 +212,14 @@ async def _generate_short_drama_core(user_id: int, request_data: dict) -> dict:
 
             # 先生成分镜图
             try:
+                # ★ 取上一个分镜图（并发 1 时，上一个分镜已生成）
+                prev_scene_img = None
+                if i > 0:
+                    prev_scene_img = scene_images_cache.get(i - 1)
+
                 scene_img = await scene_generator.generate_scene_image(
-                    scene_prompt, character_images, characters_in_scene, style
+                    scene_prompt, character_images, characters_in_scene, style,
+                    prev_scene_image=prev_scene_img,   # ★ 传上一个分镜图
                 )
             except Exception as e:
                 scene_img = None
@@ -224,6 +233,9 @@ async def _generate_short_drama_core(user_id: int, request_data: dict) -> dict:
                     fail_detail["index"] = i + 1
                     fail_detail["error"] = err
                 raise Exception(err)
+
+            # ★ 存到 cache（供下一个分镜用）
+            scene_images_cache[i] = scene_img
 
             dialogue_text = " | ".join([
                 f"{d.get('character', '')}: {d.get('text', '')}"
