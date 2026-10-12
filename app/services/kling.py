@@ -7,12 +7,16 @@ from typing import Dict, Optional, List
 from app.config import settings
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 
-def enhance_prompt(prompt: str, model: str = "2.6", sound: str = "off") -> str:
+def enhance_prompt(prompt: str, model: str = "2.6", sound: str = "off", multi_shot: bool = False) -> str:
     """
     增强提示词，提升动作精准度
     - 用户没写：不干预
     - 用户写了：只补充缺失的信息
+    - multi_shot=True：跳过增强（避免污染多镜头格式）
     """
+    if multi_shot:
+        return prompt   # ★ 多镜头模式不增强
+    
     if not prompt or not prompt.strip():
         return ""  # 不干预，让可灵自由发挥
     
@@ -164,8 +168,8 @@ class KlingService:
         raise Exception(f"任务超时，task_id: {task_id}")
     
     def generate_image_o1(self, prompt: str, image_urls: list,
-                          resolution: str = "2k", aspect_ratio: str = "1:1",
-                          n: int = 1) -> str:
+                        resolution: str = "2k", aspect_ratio: str = "1:1",
+                        n: int = 1, auto_aspect: bool = True) -> str:
         """
         可灵图片O1 - 多模态图像编辑/生成
         用自然语言描述哪里要改、哪里不变，无需手动mask
@@ -177,22 +181,25 @@ class KlingService:
         url = f"{base_url}/images/omni-image"
 
         # ========== 根据原图比例动态设置 aspect_ratio ==========
-        try:
-            from PIL import Image as _PILImage
-            from io import BytesIO as _BytesIO
-            _resp = requests.get(image_urls[0], timeout=30)
-            _img = _PILImage.open(_BytesIO(_resp.content))
-            _w, _h = _img.size
-            _ratio = _w / _h
-            if _ratio > 1.2:
-                aspect_ratio = "16:9"
-            elif _ratio < 0.8:
-                aspect_ratio = "9:16"
-            else:
-                aspect_ratio = "1:1"
-            print(f"[KLING-O1] 动态比例: {aspect_ratio} (原图 {_w}x{_h})")
-        except Exception as e:
-            print(f"[KLING-O1] 计算比例失败，用默认 1:1: {e}")
+        if auto_aspect and image_urls:
+            try:
+                from PIL import Image as _PILImage
+                from io import BytesIO as _BytesIO
+                _resp = requests.get(image_urls[0], timeout=30)
+                _img = _PILImage.open(_BytesIO(_resp.content))
+                _w, _h = _img.size
+                _ratio = _w / _h
+                if _ratio > 1.2:
+                    aspect_ratio = "16:9"
+                elif _ratio < 0.8:
+                    aspect_ratio = "9:16"
+                else:
+                    aspect_ratio = "1:1"
+                print(f"[KLING-O1] 动态比例: {aspect_ratio} (原图 {_w}x{_h})")
+            except Exception as e:
+                print(f"[KLING-O1] 计算比例失败，用默认 1:1: {e}")
+        else:
+            print(f"[KLING-O1] 使用调用方传入的比例: {aspect_ratio}")
         # ====================================================
 
         payload = {
@@ -304,7 +311,8 @@ class KlingService:
         raise Exception(f"图片O1任务超时，task_id={task_id}, 最后状态={last_status}")
 
     # ========== 视频生成（图生视频）==========
-    def generate_video(self, image_url: str = None, prompt: str = "",
+    def generate_video(self, image_url: str = None, last_frame_url: str = None,
+                    prompt: str = "",
                     duration: int = 5, mode: str = "std",
                     model: str = "2.6", sound: str = "off",
                     multi_shot: bool = False) -> str:
@@ -318,7 +326,7 @@ class KlingService:
         if base_url.endswith('/v1'):
             base_url = base_url[:-3]
 
-        enhanced_prompt = enhance_prompt(prompt, model=model, sound=sound)
+        enhanced_prompt = enhance_prompt(prompt, model=model, sound=sound, multi_shot=multi_shot)
         print(f"[DEBUG] 原始提示词: {prompt}")
         print(f"[DEBUG] 增强后提示词: {enhanced_prompt}")
 
@@ -330,11 +338,15 @@ class KlingService:
             else:
                 url = f"{base_url}/image-to-video/kling-2.6"
 
+            contents = [
+                {"type": "prompt", "text": enhanced_prompt},
+                {"type": "first_frame", "url": image_url},
+            ]
+            if last_frame_url:
+                contents.append({"type": "last_frame", "url": last_frame_url})
+
             payload = {
-                "contents": [
-                    {"type": "prompt", "text": enhanced_prompt},
-                    {"type": "first_frame", "url": image_url}
-                ],
+                "contents": contents,
                 "settings": {
                     "resolution": "720p",
                     "duration": duration,
@@ -446,12 +458,10 @@ class KlingService:
         return formatted_data
     
     def wait_for_video_result(self, task_id: str, max_wait: int = 2400,
-                            poll_interval: int = 15) -> Dict:
-        """轮询等待视频任务完成（兼容新版 3.0 outputs 结构）"""
+                            poll_interval: int = 10) -> Dict:
+        """轮询等待视频任务完成"""
         import time as time_module
         start_time = time_module.time()
-
-        current_interval = poll_interval
 
         while time_module.time() - start_time < max_wait:
             try:
@@ -460,32 +470,17 @@ class KlingService:
                 print(f"[DEBUG] 视频任务状态: {task_status}")
 
                 if task_status == "succeed":
-                    video_url = ""
+                    # 从 task_result.videos[] 取
+                    task_result = status_data.get("task_result", {})
+                    videos = task_result.get("videos", [])
+                    video_url = videos[0].get("url", "") if videos else ""
 
-                    # ★ 优先从新结构取：data[0].outputs[]
-                    data_list = status_data.get("data", [])
-                    if data_list and isinstance(data_list, list):
-                        outputs = data_list[0].get("outputs", [])
-                        for out in outputs:
-                            if out.get("type") == "video" and out.get("url"):
-                                video_url = out.get("url")
-                                break
-
-                    # ★ 兼容旧结构：task_result.videos[]
+                    # 兜底：task_result.video_url
                     if not video_url:
-                        task_result = status_data.get("task_result", {})
-                        videos = task_result.get("videos", [])
-                        if videos:
-                            video_url = videos[0].get("url", "")
-
-                    # ★ 兜底：task_result.video_url
-                    if not video_url:
-                        video_url = status_data.get("task_result", {}).get("video_url", "")
+                        video_url = task_result.get("video_url", "")
 
                     # 统一返回
                     status_data["video_url"] = video_url
-                    if "task_result" not in status_data:
-                        status_data["task_result"] = {}
                     status_data["task_result"]["video_url"] = video_url
 
                     return status_data
@@ -495,16 +490,16 @@ class KlingService:
             except Exception as e:
                 if "parallel task" in str(e).lower() or "1303" in str(e):
                     print(f"[DEBUG] 并发限制，稍后重试...")
-                    time_module.sleep(current_interval * 2)
+                    time_module.sleep(poll_interval * 2)
                     continue
                 raise e
 
-            time_module.sleep(current_interval)
-            current_interval = min(current_interval + 5, 30)
+            time_module.sleep(poll_interval)
 
         raise Exception(f"视频任务超时，task_id: {task_id}")
 
-    def generate_tryon_video(self, image_url: str = None, prompt: str = "", 
+    def generate_tryon_video(self, image_url: str = None, last_frame_url: str = None,
+                            prompt: str = "", 
                             duration: int = 5, mode: str = "std",
                             model: str = "3.0", sound: str = "off") -> str:
         """
@@ -525,17 +520,15 @@ class KlingService:
             print(f"[DEBUG] 试穿视频使用2.6基础版 API")
         
         # 新版API参数格式
+        contents = [
+            {"type": "prompt", "text": prompt},
+            {"type": "first_frame", "url": image_url},
+        ]
+        if last_frame_url:
+            contents.append({"type": "last_frame", "url": last_frame_url})
+
         payload = {
-            "contents": [
-                {
-                    "type": "prompt",
-                    "text": prompt
-                },
-                {
-                    "type": "first_frame",
-                    "url": image_url
-                }
-            ],
+            "contents": contents,
             "settings": {
                 "resolution": "720p",
                 "duration": duration,
