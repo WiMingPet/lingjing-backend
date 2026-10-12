@@ -328,6 +328,20 @@ class ScriptGenerator:
   - `A continuous 15-second shot: The boy is sleeping on his desk. The camera slowly pushes in. His shoulder rises and falls with each breath. Sunlight moves across his face.`
   - `A continuous 15-second shot: The teacher walks toward him slowly. The classroom falls silent. The camera follows the teacher's hand as it reaches the desk.`
 
+**动作描写规范（重要，避免画面呆板）**：
+- 每段 15 秒，只描述 **1~2 个具体动作**，不要塞太多
+- 动作要 **有明确对象**（看谁、对谁说话、做什么）
+- 动作要 **有位移或变化**（走近、坐下、抬头、转身、伸手）
+- **禁止**只写"站着、深呼吸、看镜头"这种静态描述
+- **禁止**写"镜头慢慢推近"这种纯运镜，要有角色动作
+- **禁止**一段里塞 3 个以上不同动作（可灵安排不过来，会乱动）
+- **好例子**：
+  - `Li Ming walks into the room, looks around, spots Zhang Wei, and smiles.`
+  - `Wang Li walks up to Li Ming, looks at him with concern, and speaks softly.`
+- **坏例子**（禁止）：
+  - `Li Ming stands at the door, takes a deep breath.`（太静态，人物会不动）
+  - `Li Ming enters, Zhang Wei spots him, walks over, pats his shoulder, and they talk.`（动作太多，人物会乱动）
+
 **段之间**：
 - 第 N 段的开头，必须紧接着第 N-1 段的结尾
 - 动作、情绪、场景必须连续

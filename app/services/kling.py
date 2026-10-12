@@ -13,6 +13,7 @@ def enhance_prompt(prompt: str, model: str = "2.6", sound: str = "off", multi_sh
     - 用户没写：不干预
     - 用户写了：只补充缺失的信息
     - multi_shot=True：跳过增强（避免污染多镜头格式）
+    - shot_prompt（A continuous 15-second shot 开头）：跳过增强（避免污染分镜描述）
     """
     if multi_shot:
         return prompt   # ★ 多镜头模式不增强
@@ -21,6 +22,10 @@ def enhance_prompt(prompt: str, model: str = "2.6", sound: str = "off", multi_sh
         return ""  # 不干预，让可灵自由发挥
     
     prompt = prompt.strip()
+    
+    # ★ shot_prompt（短剧分镜）跳过增强
+    if prompt.startswith("A continuous 15-second shot"):
+        return prompt
     
     # ========== 1. 动作类：补充节奏描述 ==========
     action_keywords = [
