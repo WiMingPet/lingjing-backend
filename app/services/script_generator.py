@@ -29,25 +29,6 @@ class ScriptGenerator:
         }
         lang_name = lang_map.get(language, "中文（普通话）")
         
-        # ★ JSON 示例单独成变量，避免 f-string 嵌套过深
-        json_example = f'''{{
-  "title": "标题",
-  "summary": "一句话简介",
-  "characters": [
-    {{"name": "角色名", "role": "main", "reference_index": 0, "appearance": "English, 20-40 words"}}
-  ],
-  "scenes": [
-    {{
-      "index": 1,
-      "shot_prompt": "A continuous 15-second shot: English description, 150-300 chars",
-      "end_action": "English, the ending action of this segment, 10-20 words",
-      "characters_in_scene": ["角色名1", "角色名2"],
-      "dialogue": [
-        {{"character": "角色名", "text": "对话（用 {lang_name}）"}}
-      ]
-    }}
-  ]
-}}'''
         
         prompt = f"""你是一个专业的短剧编剧。用户给了一句话：
 "{theme}"
@@ -251,6 +232,26 @@ class ScriptGenerator:
 **用户没有上传参考图**。
 所有角色由 AI 生成，`reference_index` 全部为 0。
 """
+
+        # ★ JSON 示例单独成变量，避免 f-string 嵌套过深
+        json_example = f'''{{
+  "title": "标题",
+  "summary": "一句话简介",
+  "characters": [
+    {{"name": "角色名", "role": "main", "reference_index": 0, "appearance": "English, 20-40 words"}}
+  ],
+  "scenes": [
+    {{
+      "index": 1,
+      "shot_prompt": "A continuous 15-second shot: English description, 150-300 chars",
+      "end_action": "English, the ending action of this segment, 10-20 words",
+      "characters_in_scene": ["角色名1", "角色名2"],
+      "dialogue": [
+        {{"character": "角色名", "text": "对话（用 {lang_name}）"}}
+      ]
+    }}
+  ]
+}}'''
 
         prompt = f"""你是一个专业的短剧编剧。用户会给你**一段剧情**（可能是主题，也可能是大纲），你只需要讲**这段剧情的前 {duration} 分钟**。
 
