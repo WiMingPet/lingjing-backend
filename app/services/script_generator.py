@@ -29,15 +29,6 @@ class ScriptGenerator:
         }
         lang_name = lang_map.get(language, "中文（普通话）")
         
-        # 根据时长决定场景数
-        if duration == 1:
-            scene_hint = "1 个场景"
-        elif duration <= 3:
-            scene_hint = "1~2 个场景"
-        elif duration <= 6:
-            scene_hint = "2~3 个场景"
-        else:
-            scene_hint = "3~5 个场景"
         
         prompt = f"""你是一个专业的短剧编剧。用户给了一句话：
 "{theme}"
@@ -59,7 +50,6 @@ class ScriptGenerator:
 
 **大纲必须包含**：
 
-1. **场景**：{scene_hint}
 2. **人物**：3~5 个，每个有名字、年龄、身份、性格
 3. **这一个瞬间的细节**：把这个瞬间拆成 5~10 个小动作
 4. **情绪弧线**：从低到高（只在"这一个瞬间"内）
@@ -119,18 +109,19 @@ class ScriptGenerator:
         
         # ========== 下面保持原逻辑 ==========
         
+        # ★ 每段 15 秒（3 个镜头）
         if duration == 1:
-            scene_count = 6
+            scene_count = 4       # 1 分钟 = 4 段 × 15 秒
         elif duration == 3:
-            scene_count = 18
+            scene_count = 12      # 3 分钟 = 12 段
         elif duration == 5:
-            scene_count = 30
+            scene_count = 20      # 5 分钟 = 20 段
         elif duration == 6:
-            scene_count = 36
+            scene_count = 24      # 6 分钟 = 24 段
         elif duration == 10:
-            scene_count = 60
+            scene_count = 40      # 10 分钟 = 40 段
         else:
-            scene_count = 30
+            scene_count = 20
 
         # ★ 画风映射
         if mode == "real":
@@ -275,7 +266,7 @@ class ScriptGenerator:
 {theme}
 
 **总时长**：{duration} 分钟
-**分镜数**：{scene_count} 个（每个 10 秒）
+**段数**：{scene_count} 段（每段 15 秒，含 3 个镜头）
 
 {mode_hint}
 
@@ -294,58 +285,45 @@ class ScriptGenerator:
 - **英文**，20-40 词
 - 包含：人种 + 年龄 + 性别 + 发型 + 服装 + 特征
 
-**3. 镜头脚本（重要，核心规则）**：
+**3. 段脚本（重要，核心规则）**：
 
-**你要写的是一个"连续镜头脚本"，不是"分镜列表"。**
+**每个"段"（15 秒）包含 3 个镜头**：
+- 段内 3 个镜头连贯（可灵 multi_shot 保证）
+- 每个镜头 5 秒
+- 格式：`镜头 1, 5, 描述1; 镜头 2, 5, 描述2; 镜头 3, 5, 描述3`
 
-**规则**：
-- {scene_count} 个镜头是**同一个地点、同一时间、同一事件的连续记录**
-- 镜头 1 是开头，镜头 {scene_count} 是结尾
-- **每个镜头的结尾动作，必须是下一个镜头的开头动作**
-- **所有镜头必须在同一地点**（如"马路上"）
-- **不允许换地点、换时间、换人物**
-- **每个 scene_prompt 必须包含"Continuing from the previous shot..."**
-- 每个 scene_prompt 英文，20-40 词
-- 每个镜头有一个明确动作，不要多个动作
+**每个 `multi_shot_prompt` 字段**：
+- 格式：`镜头 n, 5, 英文描述; 镜头 n, 5, 英文描述; 镜头 n, 5, 英文描述`
+- 每个描述 ≤100 字符
+- 3 个镜头连贯
+- 例：
+  - 镜头 1, 5, A boy rides a bicycle on a sunny street
+  - 镜头 2, 5, An old man falls off his bicycle ahead
+  - 镜头 3, 5, The boy brakes hard and stops
 
-**示例**（通用，不绑定剧情）：
-- 镜头 1：A person starts the first action
-- 镜头 2：Continuing from shot 1, the person completes the first action and starts the second
-- 镜头 3：Continuing from shot 2, the person completes the second action
-- ...
-- 镜头 N：Continuing from shot N-1, the person completes the final action
+**段之间**：
+- 段与段之间可以用 `end_action` 衔接
+- 允许换场景（因为段是“章节”）
 
-**禁止**：
-- 换地点（如从室内到室外）
-- 换时间（如从白天到晚上）
-- 换人物
-- 跳事件
-- 一个镜头讲多件事
-
-**3.1 动作连贯性（重要）**：
-- 每个分镜的 `scene_prompt` 必须包含**明确动作**
-- **每个分镜的"结尾动作"，要能衔接下一个分镜的"开头动作"**
-- 每个分镜额外输出 `end_action` 字段
+**3.1 段连贯性（重要）**：
+- 每段 3 个镜头必须连贯（可灵 multi_shot 保证）
+- 每段的 `end_action` 要能衔接下一段的开头
 
 **3.2 剧情连贯性（重要）**：
-- {scene_count} 个分镜是一条**完整时间线**
-- 每个分镜的开头必须承接上一个分镜的结尾
+- {scene_count} 段是一条**完整时间线**
+- 每段的开头必须承接上一段的结尾
 
 
 **3.5 情绪弧线（重要）**：
 - 情绪要有起伏（从低到高，或从平到紧）
-- 每个分镜必须有"钩子"，让观众想看下一段
-- **不要求"三幕结构"**
+- 每段必须有"钩子"，让观众想看下一段
 
 
 **4. 对话（类型自适应）**：
 
-**4.1 对话基本要求**：
-- 每个分镜 **4~8 句**
-- 对话 **20~50 字**（**用 {lang_name}**）
-- 对话要紧凑、有冲突、有情绪
-- 每句对白都要推动剧情
-- 禁止无意义的寒暄
+- 每段 **4~6 句**
+- 对话 **10~30 字**（**用 {lang_name}**）
+- 每段 15 秒，4~6 句对白，每句 2~4 秒
 
 
 **4.3 台词风格（根据类型自适应）**：
@@ -372,8 +350,8 @@ class ScriptGenerator:
   "scenes": [
     {{
       "index": 1,
-      "scene_prompt": "English scene with clear actions, 20-40 words",
-      "end_action": "English, the ending action of this scene, 10-20 words",
+      "multi_shot_prompt": "镜头 1, 5, English description 1; 镜头 2, 5, English description 2; 镜头 3, 5, English description 3",
+      "end_action": "English, the ending action of this segment, 10-20 words",
       "characters_in_scene": ["角色名1", "角色名2"],
       "dialogue": [
         {{"character": "角色名", "text": "对话（用 {lang_name}）"}}
@@ -386,6 +364,8 @@ class ScriptGenerator:
 - characters 数组必须有"所有角色"
 - scenes 数组必须有 {scene_count} 个元素
 - scenes 数组每个元素必须有 `end_action` 字段
+- 每个 scene 必须有 `multi_shot_prompt` 字段（3 个镜头，格式如上）
+- 每个 scene 必须有 `end_action` 字段（这一段的结尾动作）
 - **所有剧情由你根据用户输入"自由生成"，不要套用任何"固定剧情"**
 """
 

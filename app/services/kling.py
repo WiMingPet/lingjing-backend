@@ -306,7 +306,8 @@ class KlingService:
     # ========== 视频生成（图生视频）==========
     def generate_video(self, image_url: str = None, prompt: str = "",
                     duration: int = 5, mode: str = "std",
-                    model: str = "2.6", sound: str = "off") -> str:
+                    model: str = "2.6", sound: str = "off",
+                    multi_shot: bool = False) -> str:
         """
         视频生成 - 支持图生视频 + 文生视频
         - model: '2.6' 或 '3.0'
@@ -345,7 +346,7 @@ class KlingService:
             }
 
             if model == "3.0":
-                payload["settings"]["multi_shot"] = False
+                payload["settings"]["multi_shot"] = multi_shot
 
             print(f"[DEBUG] 图生视频 URL: {url}")
 
@@ -371,7 +372,7 @@ class KlingService:
             }
 
             if model == "3.0":
-                payload["settings"]["multi_shot"] = False
+                payload["settings"]["multi_shot"] = multi_shot
 
             print(f"[DEBUG] 文生视频 URL: {url}")
 

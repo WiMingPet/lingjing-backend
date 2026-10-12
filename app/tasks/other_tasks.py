@@ -201,72 +201,69 @@ async def _generate_short_drama_core(user_id: int, request_data: dict) -> dict:
     scene_images_cache = {}
 
     async def _gen_one_scene(i: int, scene: dict):
-        """生成单个分镜；返回 (video_url, dialogue_dict)"""
+        """生成单个段（15 秒多镜头）；返回 (video_url, dialogue_dict)"""
         async with sem:
             if fail_event.is_set():
-                raise asyncio.CancelledError(f"分镜 {i+1} 因其他分镜失败被取消")
+                raise asyncio.CancelledError(f"段 {i+1} 因其他段失败被取消")
 
-            scene_prompt = scene.get("scene_prompt", "")
+            multi_shot_prompt = scene.get("multi_shot_prompt", "")
             characters_in_scene = scene.get("characters_in_scene", [])
             dialogue = scene.get("dialogue", [])
 
-            # 先生成分镜图
+            # 先生成分镜图（用第一个镜头的描述）
+            first_shot_desc = multi_shot_prompt.split(";")[0].split(",", 2)[-1].strip() if multi_shot_prompt else ""
+
             try:
-                # ★ 取上一个分镜图（并发 1 时，上一个分镜已生成）
+                # ★ 取上一段的最后一帧（如果有）
                 prev_scene_img = None
                 if i > 0:
                     prev_scene_img = scene_images_cache.get(i - 1)
 
                 scene_img = await scene_generator.generate_scene_image(
-                    scene_prompt, character_images, characters_in_scene, style,
-                    prev_scene_image=prev_scene_img,   # ★ 传上一个分镜图
+                    first_shot_desc, character_images, characters_in_scene, style,
+                    prev_scene_image=prev_scene_img,
                 )
             except Exception as e:
                 scene_img = None
-                print(f"[SHORT_DRAMA] 分镜 {i+1} 生图异常: {e}")
+                print(f"[SHORT_DRAMA] 段 {i+1} 生图异常: {e}")
 
             if not scene_img:
-                # 生图失败也算分镜失败，进入统一失败处理
-                err = f"分镜 {i+1} 生图失败"
+                err = f"段 {i+1} 生图失败"
                 if not fail_event.is_set():
                     fail_event.set()
                     fail_detail["index"] = i + 1
                     fail_detail["error"] = err
                 raise Exception(err)
 
-            # ★ 存到 cache（供下一个分镜用）
+            # ★ 存到 cache（供下一段用）
             scene_images_cache[i] = scene_img
 
+            # 口音
+            accent_hint = KLING_ACCENT_MAP.get(language, "")
+
+            # 对话文本
             dialogue_text = " | ".join([
                 f"{d.get('character', '')}: {d.get('text', '')}"
                 for d in dialogue
                 if d.get("character") and d.get("text")
             ])
 
-            # ★ 取上一个分镜的 end_action
-            prev_end_action = ""
-            if i > 0:
-                prev_end_action = scenes[i - 1].get("end_action", "")
-                if prev_end_action:
-                    prev_end_action = f" Continuing from the previous scene where {prev_end_action}."
-
-            video_prompt = (
-                f"{scene_prompt}.{prev_end_action} "
-                f"**Show the full action sequence smoothly, not a static pose.** "
-                f"Characters are talking. "
-                f"Speak the following dialogue {accent_hint}: {dialogue_text}. "
-                f"Cinematic motion, natural acting, lips moving as they speak, "
-                f"no text overlay."
-            )
+            # ★ 完整 prompt：多镜头 + 口音
+            full_prompt = multi_shot_prompt
+            if accent_hint:
+                full_prompt += f" ({accent_hint})"
+            if dialogue_text:
+                full_prompt += f" Dialogue: {dialogue_text}"
 
             def _gen_video():
                 task_id = kling_service.generate_video(
                     image_url=scene_img,
-                    prompt=video_prompt,
-                    duration=10,
+                    prompt=full_prompt,
+                    duration=15,           # ★ 15 秒
                     mode="std",
                     model="3.0",
                     sound="native",
+                    multi_shot=True,       # ★ 开启多镜头
                 )
                 result = kling_service.wait_for_video_result(task_id, max_wait=2400)
                 video_url = ""
@@ -275,27 +272,25 @@ async def _generate_short_drama_core(user_id: int, request_data: dict) -> dict:
                         result.get("video_url", "")
                         or result.get("task_result", {}).get("video_url", "")
                     )
-                return video_url 
+                return video_url
 
             last_err = None
             for attempt in range(1, MAX_RETRY_PER_SCENE + 1):
-                # 每次尝试前再确认一次：别人已失败就撤
                 if fail_event.is_set():
-                    raise asyncio.CancelledError(f"分镜 {i+1} 因其他分镜失败被取消")
+                    raise asyncio.CancelledError(f"段 {i+1} 因其他段失败被取消")
 
                 try:
-                    print(f"[SHORT_DRAMA] 分镜 {i+1}/{len(scenes)} 第 {attempt} 次尝试")
+                    print(f"[SHORT_DRAMA] 段 {i+1}/{len(scenes)} 第 {attempt} 次尝试")
                     scene_video = await asyncio.to_thread(_gen_video)
                     if scene_video:
-                        print(f"[SHORT_DRAMA] 分镜 {i+1} 成功")
-                        return (scene_video, {"dialogue": dialogue, "duration": 10})
+                        print(f"[SHORT_DRAMA] 段 {i+1} 成功")
+                        return (scene_video, {"dialogue": dialogue, "duration": 15})
                     last_err = "返回空 url"
-                    print(f"[SHORT_DRAMA] 分镜 {i+1} 返回空 url")
+                    print(f"[SHORT_DRAMA] 段 {i+1} 返回空 url")
                 except Exception as e:
                     last_err = str(e)
-                    print(f"[SHORT_DRAMA] 分镜 {i+1} 第 {attempt} 次失败: {e}")
+                    print(f"[SHORT_DRAMA] 段 {i+1} 第 {attempt} 次失败: {e}")
 
-                    # ★ 不可重试错误：余额不足、鉴权失败等，直接中止
                     UNRETRYABLE_KEYWORDS = [
                         "Account balance not enough",
                         "1102",
@@ -305,7 +300,7 @@ async def _generate_short_drama_core(user_id: int, request_data: dict) -> dict:
                         "invalid api key",
                     ]
                     if any(kw.lower() in last_err.lower() for kw in UNRETRYABLE_KEYWORDS):
-                        err = f"分镜 {i+1} 不可重试错误: {last_err}"
+                        err = f"段 {i+1} 不可重试错误: {last_err}"
                         print(f"[SHORT_DRAMA] {err}")
                         if not fail_event.is_set():
                             fail_event.set()
@@ -316,8 +311,7 @@ async def _generate_short_drama_core(user_id: int, request_data: dict) -> dict:
                 if attempt < MAX_RETRY_PER_SCENE:
                     await asyncio.sleep(5 * attempt)
 
-            # 重试耗尽 → 触发全局失败
-            err = f"分镜 {i+1} 重试{MAX_RETRY_PER_SCENE}次后仍失败: {last_err}"
+            err = f"段 {i+1} 重试{MAX_RETRY_PER_SCENE}次后仍失败: {last_err}"
             print(f"[SHORT_DRAMA] {err}")
             if not fail_event.is_set():
                 fail_event.set()

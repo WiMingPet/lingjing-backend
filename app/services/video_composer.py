@@ -82,39 +82,7 @@ class VideoComposer:
             if len(local_paths) == 1:
                 merged_path = local_paths[0]
             else:
-                concat_file = os.path.join(tmp_dir, "concat.txt")
-                with open(concat_file, "w", encoding="utf-8") as f:
-                    for path in local_paths:
-                        f.write(f"file '{path}'\n")
-
-                output_path = os.path.join(tmp_dir, "output.mp4")
-                cmd = [
-                    "ffmpeg", "-y",
-                    "-f", "concat",
-                    "-safe", "0",
-                    "-i", concat_file,
-                    "-c", "copy",
-                    output_path,
-                ]
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-
-                if result.returncode != 0:
-                    # 重新编码
-                    cmd = [
-                        "ffmpeg", "-y",
-                        "-f", "concat",
-                        "-safe", "0",
-                        "-i", concat_file,
-                        "-c:v", "libx264",
-                        "-c:a", "aac",
-                        "-preset", "fast",
-                        output_path,
-                    ]
-                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
-                    if result.returncode != 0:
-                        raise Exception(f"FFmpeg 失败: {result.stderr[:500]}")
-
-                merged_path = output_path
+                merged_path = VideoComposer._concat_with_xfade(tmp_dir, local_paths)
 
             try:
                 colored_path = os.path.join(tmp_dir, "colored.mp4")
@@ -183,5 +151,71 @@ class VideoComposer:
 
         return await asyncio.to_thread(_sync_compose)
 
+    @staticmethod
+    def _get_duration(video_path: str) -> float:
+        try:
+            cmd = [
+                "ffprobe", "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                video_path,
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            return float(result.stdout.strip())
+        except Exception as e:
+            print(f"[VIDEO_COMPOSER] 获取时长失败: {e}")
+            return 15.0
+
+    @staticmethod
+    def _concat_with_xfade(tmp_dir: str, paths: list, transition_duration: float = 0.5) -> str:
+        current = paths[0]
+        current_duration = VideoComposer._get_duration(paths[0])
+
+        for i in range(1, len(paths)):
+            next_video = paths[i]
+            next_duration = VideoComposer._get_duration(next_video)
+            output = os.path.join(tmp_dir, f"merged_{i}.mp4")
+            offset = max(0, current_duration - transition_duration)
+
+            filter_complex = (
+                f"[0:v][1:v]xfade=transition=fade:duration={transition_duration}:offset={offset}[v];"
+                f"[0:a][1:a]acrossfade=d={transition_duration}[a]"
+            )
+
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", current,
+                "-i", next_video,
+                "-filter_complex", filter_complex,
+                "-map", "[v]",
+                "-map", "[a]",
+                "-c:v", "libx264", "-c:a", "aac",
+                "-preset", "fast",
+                output,
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+
+            if result.returncode != 0:
+                print(f"[VIDEO_COMPOSER] xfade 失败，回退 concat: {result.stderr[:300]}")
+                concat_file = os.path.join(tmp_dir, f"concat_{i}.txt")
+                with open(concat_file, "w", encoding="utf-8") as f:
+                    f.write(f"file '{current}'\n")
+                    f.write(f"file '{next_video}'\n")
+                cmd = [
+                    "ffmpeg", "-y",
+                    "-f", "concat", "-safe", "0",
+                    "-i", concat_file,
+                    "-c:v", "libx264", "-c:a", "aac",
+                    "-preset", "fast",
+                    output,
+                ]
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+                if result.returncode != 0:
+                    raise Exception(f"拼接失败: {result.stderr[:300]}")
+
+            current = output
+            current_duration = current_duration + next_duration - transition_duration
+
+        return current
 
 video_composer = VideoComposer()
