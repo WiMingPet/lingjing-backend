@@ -173,9 +173,12 @@ async def _generate_short_drama_core(user_id: int, request_data: dict) -> dict:
     if not character_images:
         raise Exception("角色图生成失败")
 
-    # ========== 3. 分镜生成（两轮：先生图，再生成视频） ==========
-    MAX_RETRY_PER_SCENE = 2
+    # ========== 3. 分镜并发生成（并发4 + 重试 + 失败即中止退款） ==========
+    MAX_CONCURRENT_SCENES = 1        # 并发数
+    MAX_RETRY_PER_SCENE = 2          # 每个分镜最多重试2次（共3次尝试）
+    sem = asyncio.Semaphore(MAX_CONCURRENT_SCENES)
 
+    # 可灵 3.0 口音标注
     KLING_ACCENT_MAP = {
         "zh": "",
         "dongbei": "in Northeastern Chinese accent (东北口音)",
@@ -190,104 +193,179 @@ async def _generate_short_drama_core(user_id: int, request_data: dict) -> dict:
     }
     accent_hint = KLING_ACCENT_MAP.get(language, "")
 
-    # ---------- 第一轮：生成所有分镜图 ----------
-    print(f"[SHORT_DRAMA] 第一轮：生成 {len(scenes)} 张分镜图")
-    scene_images = []
-    for i, scene in enumerate(scenes):
-        shot_prompt = scene.get("shot_prompt", "")
-        characters_in_scene = scene.get("characters_in_scene", [])
-        prev_img = scene_images[i - 1] if i > 0 else None
+    # 用于“一个失败就取消其他”的事件
+    fail_event = asyncio.Event()
+    fail_detail = {"index": None, "error": None}
 
-        img = await scene_generator.generate_scene_image(
-            shot_prompt, character_images, characters_in_scene, style,
-            prev_scene_image=prev_img,
-        )
-        if not img:
-            raise Exception(f"段 {i+1} 生图失败")
-        scene_images.append(img)
-        print(f"[SHORT_DRAMA] 分镜图 {i+1}/{len(scenes)} 完成")
+    # ★ 已生成的分镜图（按 index 存，用于传给下一个分镜作参考）
+    scene_images_cache = {}
 
-    # ---------- 第二轮：生成视频（首尾帧接续） ----------
-    print(f"[SHORT_DRAMA] 第二轮：生成 {len(scenes)} 段视频")
+    async def _gen_one_scene(i: int, scene: dict):
+        """生成单个段（15 秒多镜头）；返回 (video_url, dialogue_dict)"""
+        async with sem:
+            if fail_event.is_set():
+                raise asyncio.CancelledError(f"段 {i+1} 因其他段失败被取消")
 
-    def _gen_video_for_scene(i: int, scene: dict):
-        """生成单段视频；返回 (video_url, dialogue_dict)"""
-        shot_prompt = scene.get("shot_prompt", "")
-        dialogue = scene.get("dialogue", [])
+            multi_shot_prompt = scene.get("multi_shot_prompt", "")
+            characters_in_scene = scene.get("characters_in_scene", [])
+            dialogue = scene.get("dialogue", [])
 
-        first_frame = scene_images[i]
-        last_frame = scene_images[i + 1] if i + 1 < len(scene_images) else None
+            # 先生成分镜图（用第一个镜头的描述）
+            first_shot_desc = multi_shot_prompt.split(";")[0].split(",", 2)[-1].strip() if multi_shot_prompt else ""
 
-        # ★ 对白拼进 prompt（可灵 sound="native" 会按对白生成语音）
-        dialogue_text = " | ".join([
-            f"{d.get('character', '')}: {d.get('text', '')}"
-            for d in dialogue
-            if d.get("character") and d.get("text")
-        ])
-
-        full_prompt = shot_prompt
-        if accent_hint:
-            full_prompt += f" ({accent_hint})"
-        if dialogue_text:
-            full_prompt += f" Dialogue: {dialogue_text}"
-
-        def _sync():
-            task_id = kling_service.generate_video(
-                image_url=first_frame,
-                last_frame_url=last_frame,     # ★ 下一段首帧
-                prompt=full_prompt,
-                duration=15,
-                mode="std",
-                model="3.0",
-                sound="native",
-                multi_shot=False,              # ★ 关掉多镜头
-            )
-            result = kling_service.wait_for_video_result(task_id, max_wait=2400)
-            video_url = ""
-            if result and isinstance(result, dict):
-                video_url = (
-                    result.get("video_url", "")
-                    or result.get("task_result", {}).get("video_url", "")
-                )
-            return video_url
-
-        last_err = None
-        for attempt in range(1, MAX_RETRY_PER_SCENE + 1):
             try:
-                print(f"[SHORT_DRAMA] 段 {i+1}/{len(scenes)} 第 {attempt} 次尝试")
-                scene_video = _sync()
-                if scene_video:
-                    print(f"[SHORT_DRAMA] 段 {i+1} 成功")
-                    return (scene_video, {"dialogue": dialogue, "duration": 15})
-                last_err = "返回空 url"
+                # ★ 取上一段的最后一帧（如果有）
+                prev_scene_img = None
+                if i > 0:
+                    prev_scene_img = scene_images_cache.get(i - 1)
+
+                scene_img = await scene_generator.generate_scene_image(
+                    first_shot_desc, character_images, characters_in_scene, style,
+                    prev_scene_image=prev_scene_img,
+                )
             except Exception as e:
-                last_err = str(e)
-                print(f"[SHORT_DRAMA] 段 {i+1} 第 {attempt} 次失败: {e}")
+                scene_img = None
+                print(f"[SHORT_DRAMA] 段 {i+1} 生图异常: {e}")
 
-                UNRETRYABLE_KEYWORDS = [
-                    "Account balance not enough", "1102", "余额不足",
-                    "insufficient balance", "unauthorized", "invalid api key",
-                ]
-                if any(kw.lower() in last_err.lower() for kw in UNRETRYABLE_KEYWORDS):
-                    raise Exception(f"段 {i+1} 不可重试错误: {last_err}")
+            if not scene_img:
+                err = f"段 {i+1} 生图失败"
+                if not fail_event.is_set():
+                    fail_event.set()
+                    fail_detail["index"] = i + 1
+                    fail_detail["error"] = err
+                raise Exception(err)
 
-            if attempt < MAX_RETRY_PER_SCENE:
-                import time
-                time.sleep(5 * attempt)
+            # ★ 存到 cache（供下一段用）
+            scene_images_cache[i] = scene_img
 
-        raise Exception(f"段 {i+1} 重试{MAX_RETRY_PER_SCENE}次后仍失败: {last_err}")
+            # 口音
+            accent_hint = KLING_ACCENT_MAP.get(language, "")
 
-    # 串行生成视频（可灵有并发限制，串行最稳）
+            # 对话文本
+            dialogue_text = " | ".join([
+                f"{d.get('character', '')}: {d.get('text', '')}"
+                for d in dialogue
+                if d.get("character") and d.get("text")
+            ])
+
+            # ★ 完整 prompt：多镜头 + 口音
+            full_prompt = multi_shot_prompt
+            if accent_hint:
+                full_prompt += f" ({accent_hint})"
+            if dialogue_text:
+                full_prompt += f" Dialogue: {dialogue_text}"
+
+            def _gen_video():
+                task_id = kling_service.generate_video(
+                    image_url=scene_img,
+                    prompt=full_prompt,
+                    duration=15,           # ★ 15 秒
+                    mode="std",
+                    model="3.0",
+                    sound="native",
+                    multi_shot=True,       # ★ 开启多镜头
+                )
+                result = kling_service.wait_for_video_result(task_id, max_wait=2400)
+                video_url = ""
+                if result and isinstance(result, dict):
+                    video_url = (
+                        result.get("video_url", "")
+                        or result.get("task_result", {}).get("video_url", "")
+                    )
+                return video_url
+
+            last_err = None
+            for attempt in range(1, MAX_RETRY_PER_SCENE + 1):
+                if fail_event.is_set():
+                    raise asyncio.CancelledError(f"段 {i+1} 因其他段失败被取消")
+
+                try:
+                    print(f"[SHORT_DRAMA] 段 {i+1}/{len(scenes)} 第 {attempt} 次尝试")
+                    scene_video = await asyncio.to_thread(_gen_video)
+                    if scene_video:
+                        print(f"[SHORT_DRAMA] 段 {i+1} 成功")
+                        return (scene_video, {"dialogue": dialogue, "duration": 15})
+                    last_err = "返回空 url"
+                    print(f"[SHORT_DRAMA] 段 {i+1} 返回空 url")
+                except Exception as e:
+                    last_err = str(e)
+                    print(f"[SHORT_DRAMA] 段 {i+1} 第 {attempt} 次失败: {e}")
+
+                    UNRETRYABLE_KEYWORDS = [
+                        "Account balance not enough",
+                        "1102",
+                        "余额不足",
+                        "insufficient balance",
+                        "unauthorized",
+                        "invalid api key",
+                    ]
+                    if any(kw.lower() in last_err.lower() for kw in UNRETRYABLE_KEYWORDS):
+                        err = f"段 {i+1} 不可重试错误: {last_err}"
+                        print(f"[SHORT_DRAMA] {err}")
+                        if not fail_event.is_set():
+                            fail_event.set()
+                            fail_detail["index"] = i + 1
+                            fail_detail["error"] = last_err
+                        raise Exception(err)
+
+                if attempt < MAX_RETRY_PER_SCENE:
+                    await asyncio.sleep(5 * attempt)
+
+            err = f"段 {i+1} 重试{MAX_RETRY_PER_SCENE}次后仍失败: {last_err}"
+            print(f"[SHORT_DRAMA] {err}")
+            if not fail_event.is_set():
+                fail_event.set()
+                fail_detail["index"] = i + 1
+                fail_detail["error"] = err
+            raise Exception(err)
+
+    # 启动所有分镜
+    print(f"[SHORT_DRAMA] 开始并发生成 {len(scenes)} 个分镜（并发数={MAX_CONCURRENT_SCENES}）")
+    tasks = [asyncio.create_task(_gen_one_scene(i, scene)) for i, scene in enumerate(scenes)]
+
+    # gather：任一任务抛异常就立刻返回（return_exceptions=False 让异常直接冒出来）
+    # 但我们要“一个失败取消其他”，所以用 wait + FIRST_EXCEPTION
+    try:
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_EXCEPTION)
+    except Exception as e:
+        # 理论到不了这
+        for t in tasks:
+            t.cancel()
+        raise Exception(f"分镜调度异常: {e}")
+
+    # 有任务失败 → 取消所有未完成的 → 抛异常（触发退款）
+    if any(t.exception() is not None for t in done):
+        for t in pending:
+            t.cancel()
+        # 等取消生效
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
+        # 收集第一个真正的错误
+        err_msgs = []
+        for t in done:
+            exc = t.exception()
+            if exc is not None:
+                err_msgs.append(str(exc))
+        raise Exception(
+            f"分镜生成失败（分镜 {fail_detail['index']}）：{fail_detail['error']}"
+            if fail_detail["index"] else
+            f"分镜生成失败：{'; '.join(err_msgs) or '未知错误'}"
+        )
+
+    # 全部成功 → 按顺序取结果
     video_urls = []
     scene_dialogues = []
-    for i, scene in enumerate(scenes):
-        video_url, dialogue_dict = await asyncio.to_thread(_gen_video_for_scene, i, scene)
-        video_urls.append(video_url)
-        scene_dialogues.append(dialogue_dict)
+    for t in tasks:
+        r = t.result()
+        if not r or not r[0]:
+            raise Exception("分镜返回空 url（异常：不应到达此分支）")
+        video_urls.append(r[0])
+        scene_dialogues.append(r[1])
 
     if not video_urls:
         raise Exception("所有分镜失败")
-    # ========== 分镜生成结束 ==========
+    # ========== 分镜并发结束 ==========
 
     # 4. 合成（带字幕）
     print(f"[SHORT_DRAMA] 合成 {len(video_urls)} 个分镜")

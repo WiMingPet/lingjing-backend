@@ -10,13 +10,13 @@ class SceneGenerator:
 
     @staticmethod
     async def generate_scene_image(
-        shot_prompt: str,
+        scene_prompt: str,
         character_images: Dict[str, str],
         characters_in_scene: List[str],
         style: str = "",
-        prev_scene_image: str = None,
+        prev_scene_image: str = None,   # ★ 新增
     ) -> Optional[str]:
-        """生成分镜图（多人物 + 场景，一镜到底）"""
+        """生成分镜图（多人物 + 场景）"""
         try:
             # ★ 只保留画风维度（5 种）
             # real = 真人写实；anime_cn = 国漫 3D；anime_jp = 日漫 2D；anime_pixar = 皮克斯 3D；anime_us = 美漫 2D
@@ -32,15 +32,15 @@ class SceneGenerator:
             # ★ 参考图：优先上一个分镜图，再加定妆照
             reference_images = []
 
-            # 1. 角色定妆照（放最前，权重最高，保证角色一致）
+            # 1. 上一个分镜图（放最前，权重最高）
+            if prev_scene_image:
+                reference_images.append(prev_scene_image)
+
+            # 2. 角色定妆照
             for char_name in characters_in_scene:
                 img = character_images.get(char_name)
                 if img:
                     reference_images.append(img)
-
-            # 2. 上一个分镜图（放后面，保证场景连续）
-            if prev_scene_image:
-                reference_images.append(prev_scene_image)
 
             reference_images = reference_images[:10]
 
@@ -55,13 +55,12 @@ class SceneGenerator:
             if prev_scene_image:
                 continuity_hint = (
                     "**CONTINUITY (HIGHEST PRIORITY)**: This scene MUST be a direct continuation of the previous scene. "
-                    "Same location, same lighting, same time of day. "
+                    "Same location, same lighting, same time of day, same camera angle (or slight variation). "
                     "The characters must be in the exact same position they ended in the previous scene. "
-                    "The camera must continue smoothly from where the previous scene ended. "
                 )
 
             prompt = (
-                f"{shot_prompt}. "
+                f"{scene_prompt}. "
                 f"Characters in scene: {', '.join(characters_in_scene)}.{others_hint} "
                 f"{style_hint}, "
                 f"{continuity_hint}"
@@ -80,7 +79,6 @@ class SceneGenerator:
                     resolution="2k",
                     aspect_ratio="16:9",
                     n=1,
-                    auto_aspect=False,   # ★ 固定 16:9
                 )
                 result = kling_service.wait_for_o1_result(task_id, max_wait=600)
                 return result.get("output_url", "")

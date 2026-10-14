@@ -61,9 +61,8 @@ class CharacterGenerator:
                     resolution="2k",      
                     aspect_ratio="1:1",
                     n=1,
-                    auto_aspect=False,   # ★ 固定 1:1
                 )
-                result = kling_service.wait_for_o1_result(task_id, max_wait=600)  # ★ 时间也放宽
+                result = kling_service.wait_for_o1_result(task_id, max_wait=300)  # ★ 时间也放宽
                 return result.get("output_url", "")
 
             url = await asyncio.to_thread(_sync)
@@ -87,7 +86,7 @@ class CharacterGenerator:
         """
         reference_urls = reference_urls or []
 
-        main_characters = [c for c in characters if c.get("role") in ("main", "supporting")]
+        main_characters = [c for c in characters if c.get("role") == "main"]
         if not main_characters:
             main_characters = characters[:3]
 
@@ -107,20 +106,7 @@ class CharacterGenerator:
             *[gen_one(c) for c in main_characters],
             return_exceptions=True
         )
-
-        # ★ 加失败日志
-        success = {}
-        for c, r in zip(main_characters, results):
-            char_name = c.get("name", "?")
-            if isinstance(r, Exception):
-                print(f"[CHARACTER] {char_name} 生成异常: {r}")
-            elif isinstance(r, tuple) and r[1]:
-                success[r[0]] = r[1]
-            else:
-                print(f"[CHARACTER] {char_name} 生成失败（返回空）")
-
-        print(f"[CHARACTER] 成功 {len(success)}/{len(main_characters)} 个")
-        return success
+        return {r[0]: r[1] for r in results if isinstance(r, tuple) and r[1]}
 
 
 character_generator = CharacterGenerator()
