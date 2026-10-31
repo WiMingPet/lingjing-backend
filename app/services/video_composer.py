@@ -9,9 +9,9 @@ import requests
 from typing import List
 
 
-# 字体目录（兼容本地和 Docker）
-FONT_DIR = "/usr/share/fonts/opentype/noto"
-FONT_NAME = "Noto Sans CJK SC"
+# 动态获取当前文件所在目录，定位到内置的字体文件
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+FONT_FILE = os.path.join(BASE_DIR, "data", "fonts", "SourceHanSans.ttf")
 
 
 class VideoComposer:
@@ -30,15 +30,33 @@ class VideoComposer:
 
     @staticmethod
     def _build_srt(scene_dialogues: list) -> str:
-        """根据分镜对话，生成 srt 字幕内容（只显示对白）"""
+        """根据分镜对话，生成 srt 字幕内容（优先读精确的 subtitles，兜底平均分配）"""
         srt_lines = []
         idx = 1
         current_time = 0.0
 
         for scene in scene_dialogues:
-            dialogue = scene.get("dialogue", [])
-            duration = scene.get("duration", 15.041)  # ★ 可灵实际 15.041 秒
+            duration = scene.get("duration", 30.0)
+            
+            # 优先使用 Whisper 识别出的带时间戳的 subtitles
+            subtitles = scene.get("subtitles", [])
+            if subtitles:
+                for sub in subtitles:
+                    text = sub.get("text", "")
+                    if text.strip():
+                        # 相对时间加上当前段的绝对起始时间
+                        start = current_time + sub.get("start", 0)
+                        end = current_time + sub.get("end", 0)
+                        srt_lines.append(f"{idx}")
+                        srt_lines.append(f"{VideoComposer._format_time(start)} --> {VideoComposer._format_time(end)}")
+                        srt_lines.append(text)
+                        srt_lines.append("")
+                        idx += 1
+                current_time += duration
+                continue
 
+            # 兜底：如果没有 subtitles，走旧逻辑（按 dialogue 平均分配）
+            dialogue = scene.get("dialogue", [])
             if dialogue:
                 per_line = duration / len(dialogue)
                 for d in dialogue:
@@ -119,8 +137,11 @@ class VideoComposer:
                     srt_escaped = srt_path.replace("\\", "/").replace(":", "\\:")
                     font_dir_escaped = FONT_DIR.replace("\\", "/").replace(":", "\\:")
 
+                    # 对路径进行转义（兼容 Windows 和 Linux）
+                    font_file_escaped = FONT_FILE.replace("\\", "/").replace(":", "\\:")
+                    
                     style = (
-                        f"FontName={FONT_NAME},"
+                        f"FontFile={font_file_escaped},"
                         f"FontSize=14,"
                         f"PrimaryColour=&HFFFFFF&,"
                         f"OutlineColour=&H000000&,"
@@ -134,7 +155,7 @@ class VideoComposer:
                     cmd = [
                         "ffmpeg", "-y",
                         "-i", merged_path,
-                        "-vf", f"subtitles='{srt_escaped}':fontsdir='{font_dir_escaped}':force_style='{style}'",
+                        "-vf", f"subtitles='{srt_escaped}':force_style='{style}'",
                         "-c:v", "libx264",
                         "-c:a", "copy",
                         "-preset", "fast",
@@ -168,7 +189,7 @@ class VideoComposer:
 
     @staticmethod
     def _concat_with_xfade(tmp_dir: str, paths: list, transition_duration: float = 0.5,
-                           segment_duration: float = 15.041) -> str:
+                           segment_duration: float = 30.041) -> str:
         """一次性多路 xfade（不串行重编码），保留音频"""
         n = len(paths)
         if n == 1:
