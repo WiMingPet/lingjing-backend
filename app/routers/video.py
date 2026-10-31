@@ -25,6 +25,9 @@ print(f"[VIDEO] USE_ASYNC = {USE_ASYNC}")
 # =====================================
 
 
+def _model_label(model: str) -> str:
+    return {"2.6": "2.6基础版", "3.0": "3.0增强版", "4.0": "4.0"}.get(model, model)
+
 @router.post("/generate", response_model=APIResponse)
 async def generate_video(
     image: Optional[UploadFile] = File(None),
@@ -37,11 +40,15 @@ async def generate_video(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """图生视频 - 支持2.6基础版和3.0增强版"""
+    """图生视频 - 支持2.6基础版、3.0增强版和4.0"""
     
     # ========== 0. 参数验证 ==========
-    if model not in ["2.6", "3.0"]:
+    if model not in ["2.6", "3.0", "4.0"]:
         raise HTTPException(status_code=400, detail="无效的模型选择")
+
+    # 4.0 只有有声一个选项，强制 native
+    if model == "4.0":
+        sound = "native"
     
     if sound not in ["off", "native"]:
         raise HTTPException(status_code=400, detail="无效的声音模式")
@@ -51,9 +58,12 @@ async def generate_video(
             raise HTTPException(status_code=400, detail="2.6基础版仅支持无声视频")
         if duration not in [5, 10]:
             raise HTTPException(status_code=400, detail="2.6基础版仅支持5秒或10秒")
-    else:
+    elif model == "3.0":
         if duration not in [5, 10, 15]:
             raise HTTPException(status_code=400, detail="3.0增强版支持5秒、10秒或15秒")
+    else:  # 4.0
+        if duration not in [5, 10, 15, 30]:
+            raise HTTPException(status_code=400, detail="4.0支持5秒、10秒、15秒或30秒")
     
     cost = get_video_cost(model, sound, duration)
     if not cost:
@@ -99,7 +109,7 @@ async def generate_video(
         # 先扣费（失败抛异常，不创建任务）
         check_and_deduct_credits(
             user, db, cost,
-            f"{'3.0增强版' if model == '3.0' else '2.6基础版'}{duration}秒{'有声' if sound == 'native' else '无声'}视频生成"
+            f"{_model_label(model)}{duration}秒{'有声' if sound == 'native' else '无声'}视频生成"
         )
         
         # 创建任务
@@ -137,7 +147,7 @@ async def generate_video(
         if user.credits < cost:
             raise HTTPException(
                 status_code=403,
-                detail=f"{'3.0增强版' if model == '3.0' else '2.6基础版'}{duration}秒{'有声' if sound == 'native' else '无声'}视频需要{cost}灵境点，当前余额不足，请充值"
+                detail=f"{_model_label(model)}{duration}秒{'有声' if sound == 'native' else '无声'}视频需要{cost}灵境点，当前余额不足，请充值"
             )
         
         # 调用生成服务
@@ -149,7 +159,7 @@ async def generate_video(
         # 生成成功后扣费
         check_and_deduct_credits(
             user, db, cost,
-            f"{'3.0增强版' if model == '3.0' else '2.6基础版'}{duration}秒{'有声' if sound == 'native' else '无声'}视频生成"
+            f"{_model_label(model)}{duration}秒{'有声' if sound == 'native' else '无声'}视频生成"
         )
         
         # 保存历史记录

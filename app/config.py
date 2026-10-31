@@ -5,6 +5,7 @@ import os
 
 
 
+
 class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/ai_creative")
@@ -27,6 +28,10 @@ class Settings(BaseSettings):
     KLING_API_SECRET: str = os.getenv("KLING_API_SECRET", "")
     KLING_API_URL: str = "https://api-beijing.klingai.com"
     
+    # 小云雀（火山引擎视觉服务）
+    VOLC_ACCESS_KEY: str = os.getenv("VOLC_ACCESS_KEY", "")
+    VOLC_SECRET_KEY: str = os.getenv("VOLC_SECRET_KEY", "")
+    XIAOYUNQUE_USE_PRO: bool = os.getenv("XIAOYUNQUE_USE_PRO", "false").lower() == "true"
 
     # 腾讯云 TTS
     TENCENT_SECRET_ID: str = os.getenv("TENCENT_SECRET_ID", "")

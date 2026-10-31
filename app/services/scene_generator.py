@@ -62,6 +62,8 @@ class SceneGenerator:
             prompt = (
                 f"{scene_prompt}. "
                 f"Characters in scene: {', '.join(characters_in_scene)}.{others_hint} "
+                f"**FACING RULE (IMPORTANT)**: Characters must face each other, not the camera. "
+                f"Unless it's a monologue, no character should look directly at the camera. "
                 f"{style_hint}, "
                 f"{continuity_hint}"
                 f"**CRITICAL REFERENCE MATCHING (HIGHEST PRIORITY)**: "

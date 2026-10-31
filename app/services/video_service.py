@@ -55,8 +55,12 @@ class VideoService:
             print(f"[DEBUG] 模型: {model}, 声音: {sound}")
             
             # 验证模型
-            if model not in ["2.6", "3.0"]:
+            if model not in ["2.6", "3.0", "4.0"]:
                 raise HTTPException(status_code=400, detail="无效的模型选择")
+
+            # 4.0 只有有声一个选项，强制 native
+            if model == "4.0":
+                sound = "native"
             
             # 验证声音模式
             if sound not in ["off", "native"]:
@@ -68,10 +72,13 @@ class VideoService:
                     raise HTTPException(status_code=400, detail="2.6基础版仅支持无声视频")
                 if duration not in [5, 10]:
                     raise HTTPException(status_code=400, detail="2.6基础版仅支持5秒或10秒")
-            else:
+            elif model == "3.0":
                 # 3.0模型限制
                 if duration not in [5, 10, 15]:
                     raise HTTPException(status_code=400, detail="3.0增强版支持5秒、10秒或15秒")
+            else:  # 4.0
+                if duration not in [5, 10, 15, 30]:
+                    raise HTTPException(status_code=400, detail="4.0支持5秒、10秒、15秒或30秒")
             # ================================================
             
             # 内容安全审核
@@ -222,4 +229,80 @@ class VideoService:
                 return None
         else:
             print("[DEBUG] 提取的封面文件不存在或为空")
+            return None
+
+            
+    @staticmethod
+    async def extract_last_frame(video_url: str) -> Optional[str]:
+        """
+        从视频URL提取最后一帧并上传到OSS，返回图片URL。
+        用于段间衔接：段 1 的最后一帧作为段 2 的首帧。
+        若失败返回 None。
+        """
+        import subprocess
+        import tempfile
+        import os
+
+        # 1. 下载视频到临时文件
+        tmp_video = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+        tmp_video.close()
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                async with session.get(video_url) as resp:
+                    if resp.status != 200:
+                        print(f"[DEBUG] 下载视频失败: HTTP {resp.status}")
+                        return None
+                    with open(tmp_video.name, "wb") as f:
+                        f.write(await resp.read())
+        except Exception as e:
+            print(f"[DEBUG] 下载视频异常: {e}")
+            if os.path.exists(tmp_video.name):
+                os.unlink(tmp_video.name)
+            return None
+
+        # 2. 用 ffmpeg 提取最后一帧
+        tmp_frame = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+        tmp_frame.close()
+        try:
+            # -sseof -1：从结尾前 1 秒开始；-vframes 1：取 1 帧
+            cmd = [
+                "ffmpeg", "-sseof", "-1", "-i", tmp_video.name,
+                "-vframes", "1", "-q:v", "2",
+                tmp_frame.name, "-y"
+            ]
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        except Exception as e:
+            print(f"[DEBUG] ffmpeg 提取最后一帧失败: {e}")
+            if os.path.exists(tmp_frame.name):
+                os.unlink(tmp_frame.name)
+            if os.path.exists(tmp_video.name):
+                os.unlink(tmp_video.name)
+            return None
+
+        # 3. 上传最后一帧到 OSS
+        if os.path.exists(tmp_frame.name) and os.path.getsize(tmp_frame.name) > 0:
+            try:
+                with open(tmp_frame.name, "rb") as f:
+                    frame_bytes = f.read()
+                oss_url = await oss_service.upload_file(
+                    file_content=frame_bytes,
+                    file_extension="jpg",
+                    sub_folder="last_frames"
+                )
+                os.unlink(tmp_frame.name)
+                os.unlink(tmp_video.name)
+                print(f"[DEBUG] 最后一帧已上传: {oss_url}")
+                return oss_url
+            except Exception as e:
+                print(f"[DEBUG] 上传最后一帧到OSS失败: {e}")
+                if os.path.exists(tmp_frame.name):
+                    os.unlink(tmp_frame.name)
+                if os.path.exists(tmp_video.name):
+                    os.unlink(tmp_video.name)
+                return None
+        else:
+            print("[DEBUG] 提取的最后一帧不存在或为空")
+            if os.path.exists(tmp_video.name):
+                os.unlink(tmp_video.name)
             return None

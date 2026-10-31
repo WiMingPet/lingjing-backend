@@ -40,19 +40,55 @@ class CharacterGenerator:
                 ref_images = [reference_urls[ref_idx - 1]]
 
             if ref_images:
-                prompt = (
-                    f"Portrait of {appearance}, "
-                    f"**the person's face, hair, skin tone MUST match the reference image exactly**, "
-                    f"just change the setting to a neutral studio portrait, "
-                    f"{style_hint}, no text"
-                )
+                if style == "real" or not style:
+                    vibe = character.get("vibe", "confident, modern, sophisticated")
+                    outfit = character.get("outfit", "clean modern outfit, premium fabric")
+                    prompt = (
+                        f"Cinematic portrait of the person in the reference image. "
+                        f"**The face, hair, skin tone, facial features MUST match the reference image exactly.** "
+                        f"Keep the identity 100% consistent. "
+                        f"Change the setting to: {outfit}, vibe: {vibe}. "
+                        f"85mm portrait lens, shallow depth of field, "
+                        f"soft cinematic side lighting, natural skin texture, "
+                        f"professional editorial photography, magazine cover quality, "
+                        f"half-body shot, looking at camera, confident expression. "
+                        f"Clean neutral background, no text, no watermark."
+                    )
+                else:
+                    prompt = (
+                        f"Portrait of {appearance}, "
+                        f"**the person's face, hair, skin tone MUST match the reference image exactly**, "
+                        f"just change the setting to a neutral studio portrait, "
+                        f"{style_hint}, beautiful face, refined features, no text"
+                    )
             else:
-                prompt = (
-                    f"Portrait of {appearance}, "
-                    f"{style_hint}, "
-                    f"character reference sheet, front view, neutral background, "
-                    f"highly detailed, no text"
-                )
+                # ========== 真人写实：加气质/服装/模特脸/电影光 ==========
+                if style == "real" or not style:
+                    # 从 character 读气质和服装（script_generator 输出的）
+                    vibe = character.get("vibe", "confident, modern, sophisticated")
+                    outfit = character.get("outfit", "clean modern outfit, premium fabric")
+
+                    prompt = (
+                        f"Cinematic portrait of {appearance}. "
+                        f"Vibe: {vibe}. "
+                        f"Outfit: {outfit}. "
+                        f"Fashion model face, high cheekbones, clear skin, symmetrical features, well-defined jawline. "
+                        f"85mm portrait lens, shallow depth of field, bokeh background. "
+                        f"Soft cinematic side lighting, natural skin texture, subtle rim light. "
+                        f"Professional editorial photography, magazine cover quality, "
+                        f"modern Chinese urban aesthetic, high-end commercial portrait. "
+                        f"Half-body shot, looking at camera, confident expression. "
+                        f"Clean neutral background, no text, no watermark, no logo."
+                    )
+                else:
+                    # ========== 动漫/3D 风格：保持原逻辑，但加精致度 ==========
+                    prompt = (
+                        f"Portrait of {appearance}, "
+                        f"{style_hint}, "
+                        f"character reference sheet, front view, neutral background, "
+                        f"highly detailed, beautiful face, refined features, "
+                        f"professional character design, no text"
+                    )
 
             def _sync():
                 task_id = kling_service.generate_image_o1(
@@ -86,7 +122,8 @@ class CharacterGenerator:
         """
         reference_urls = reference_urls or []
 
-        main_characters = [c for c in characters if c.get("role") == "main"]
+        # 所有角色都生成定妆照（main + supporting + extra）
+        main_characters = characters
         if not main_characters:
             main_characters = characters[:3]
 

@@ -7,14 +7,27 @@ from typing import Dict, Optional, List
 from app.config import settings
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 
-def enhance_prompt(prompt: str, model: str = "2.6", sound: str = "off") -> str:
+def enhance_prompt(prompt: str, model: str = "2.6", sound: str = "off", multi_shot: bool = False) -> str:
     """
     增强提示词，提升动作精准度
     - 用户没写：不干预
     - 用户写了：只补充缺失的信息
+    - 4.0 模型：完全跳过增强（原生能力强，加词会干扰）
+    - multi_shot=True：跳过增强
+    - 短剧 prompt（15秒一镜到底开头）：跳过增强
     """
+    # ★ 4.0 原生大模型不需要任何补充
+    if model == "4.0":
+        return prompt.strip() if prompt else ""
+        
     if not prompt or not prompt.strip():
-        return ""  # 不干预，让可灵自由发挥
+        return ""
+    if multi_shot:
+        return prompt
+    if prompt.strip().startswith("15秒智能分镜"):
+        return prompt
+    if prompt.strip().startswith("15秒一镜到底"):
+        return prompt
     
     prompt = prompt.strip()
     
@@ -29,7 +42,7 @@ def enhance_prompt(prompt: str, model: str = "2.6", sound: str = "off") -> str:
             prompt += "，动作流畅自然"
     
     # ========== 2. 说话类：补充口型同步（仅3.0有声） ==========
-    if model == "3.0" and sound == "native":
+    if model in ("3.0", "4.0") and sound == "native":
         if ("说" in prompt or "唱" in prompt) and "口型" not in prompt:
             prompt += "，口型与语音同步"
     
@@ -165,7 +178,7 @@ class KlingService:
     
     def generate_image_o1(self, prompt: str, image_urls: list,
                           resolution: str = "2k", aspect_ratio: str = "1:1",
-                          n: int = 1) -> str:
+                          n: int = 1, auto_aspect: bool = True) -> str:
         """
         可灵图片O1 - 多模态图像编辑/生成
         用自然语言描述哪里要改、哪里不变，无需手动mask
@@ -177,22 +190,25 @@ class KlingService:
         url = f"{base_url}/images/omni-image"
 
         # ========== 根据原图比例动态设置 aspect_ratio ==========
-        try:
-            from PIL import Image as _PILImage
-            from io import BytesIO as _BytesIO
-            _resp = requests.get(image_urls[0], timeout=30)
-            _img = _PILImage.open(_BytesIO(_resp.content))
-            _w, _h = _img.size
-            _ratio = _w / _h
-            if _ratio > 1.2:
-                aspect_ratio = "16:9"
-            elif _ratio < 0.8:
-                aspect_ratio = "9:16"
-            else:
-                aspect_ratio = "1:1"
-            print(f"[KLING-O1] 动态比例: {aspect_ratio} (原图 {_w}x{_h})")
-        except Exception as e:
-            print(f"[KLING-O1] 计算比例失败，用默认 1:1: {e}")
+        if auto_aspect and image_urls:
+            try:
+                from PIL import Image as _PILImage
+                from io import BytesIO as _BytesIO
+                _resp = requests.get(image_urls[0], timeout=30)
+                _img = _PILImage.open(_BytesIO(_resp.content))
+                _w, _h = _img.size
+                _ratio = _w / _h
+                if _ratio > 1.2:
+                    aspect_ratio = "16:9"
+                elif _ratio < 0.8:
+                    aspect_ratio = "9:16"
+                else:
+                    aspect_ratio = "1:1"
+                print(f"[KLING-O1] 动态比例: {aspect_ratio} (原图 {_w}x{_h})")
+            except Exception as e:
+                print(f"[KLING-O1] 计算比例失败，用默认 1:1: {e}")
+        else:
+            print(f"[KLING-O1] 使用调用方传入的比例: {aspect_ratio}")
         # ====================================================
 
         payload = {
@@ -304,75 +320,115 @@ class KlingService:
         raise Exception(f"图片O1任务超时，task_id={task_id}, 最后状态={last_status}")
 
     # ========== 视频生成（图生视频）==========
-    def generate_video(self, image_url: str = None, prompt: str = "",
+    def generate_video(self, image_url: str = None, last_frame_url: str = None,
+                    prompt: str = "",
                     duration: int = 5, mode: str = "std",
                     model: str = "2.6", sound: str = "off",
-                    multi_shot: bool = False) -> str:
+                    multi_shot: bool = False,
+                    elements: list = None) -> str:
         """
         视频生成 - 支持图生视频 + 文生视频
-        - model: '2.6' 或 '3.0'
-        - sound: 'off' 或 'native'（仅3.0支持native）
-        - duration: 5, 10（2.6）；3~15（3.0）
+        - model: '2.6' / '3.0' / '4.0'
+        - sound: 'off' / 'native'（4.0 固定 native）
+        - duration: 5, 10（2.6）；5~15（3.0）；5/10/15/30（4.0）
         """
         base_url = self.api_url.rstrip('/')
         if base_url.endswith('/v1'):
             base_url = base_url[:-3]
 
-        enhanced_prompt = enhance_prompt(prompt, model=model, sound=sound)
+        enhanced_prompt = enhance_prompt(prompt, model=model, sound=sound, multi_shot=multi_shot)
         print(f"[DEBUG] 原始提示词: {prompt}")
         print(f"[DEBUG] 增强后提示词: {enhanced_prompt}")
 
         # ========== 判断：有图 → 图生视频；无图 → 文生视频 ==========
         if image_url:
             # ---------- 图生视频 ----------
-            if model == "3.0":
+            if model == "4.0":
+                url = f"{base_url}/image-to-video/kling-4.0"
+            elif model == "3.0":
                 url = f"{base_url}/image-to-video/kling-3.0"
             else:
                 url = f"{base_url}/image-to-video/kling-2.6"
 
-            payload = {
-                "contents": [
-                    {"type": "prompt", "text": enhanced_prompt},
-                    {"type": "first_frame", "url": image_url}
-                ],
-                "settings": {
-                    "resolution": "720p",
-                    "duration": duration,
-                    "audio": sound if model == "3.0" else "off",
-                },
-                "options": {
-                    "watermark_info": {"enabled": False}
-                }
-            }
+            contents = [
+                {"type": "prompt", "text": enhanced_prompt},
+                {"type": "first_frame", "url": image_url},
+            ]
+            if last_frame_url:
+                contents.append({"type": "last_frame", "url": last_frame_url})
+            if elements:
+                for idx, elem in enumerate(elements):
+                    contents.append({
+                        "type": "element",
+                        "element_id": elem["element_id"],
+                        "id": elem.get("id", f"element_{idx+1}")
+                    })
 
-            if model == "3.0":
-                payload["settings"]["multi_shot"] = multi_shot
+            if model == "4.0":
+                # 4.0：无 audio / multi_shot 字段，默认音画同步+智能分镜
+                payload = {
+                    "contents": contents,
+                    "settings": {
+                        "resolution": "720p",
+                        "duration": duration,
+                    },
+                    "options": {
+                        "watermark_info": {"enabled": False}
+                    }
+                }
+            else:
+                payload = {
+                    "contents": contents,
+                    "settings": {
+                        "resolution": "720p",
+                        "duration": duration,
+                        "audio": sound if model == "3.0" else "off",
+                    },
+                    "options": {
+                        "watermark_info": {"enabled": False}
+                    }
+                }
+                if model == "3.0":
+                    payload["settings"]["multi_shot"] = multi_shot
 
             print(f"[DEBUG] 图生视频 URL: {url}")
 
         else:
             # ---------- 文生视频 ----------
-            if model == "3.0":
+            if model == "4.0":
+                url = f"{base_url}/text-to-video/kling-4.0"
+            elif model == "3.0":
                 url = f"{base_url}/text-to-video/kling-3.0"
             else:
                 url = f"{base_url}/text-to-video/kling-2.6"
 
-            # ★ 文生视频：prompt 在顶层，不是 contents
-            payload = {
-                "prompt": enhanced_prompt,
-                "settings": {
-                    "resolution": "720p",
-                    "duration": duration,
-                    "audio": sound if model == "3.0" else "off",
-                    "aspect_ratio": "16:9",   # ★ 文生视频需要
-                },
-                "options": {
-                    "watermark_info": {"enabled": False}
+            if model == "4.0":
+                payload = {
+                    "prompt": enhanced_prompt,
+                    "settings": {
+                        "resolution": "720p",
+                        "duration": duration,
+                        "aspect_ratio": "16:9",
+                    },
+                    "options": {
+                        "watermark_info": {"enabled": False}
+                    }
                 }
-            }
-
-            if model == "3.0":
-                payload["settings"]["multi_shot"] = multi_shot
+            else:
+                payload = {
+                    "prompt": enhanced_prompt,
+                    "settings": {
+                        "resolution": "720p",
+                        "duration": duration,
+                        "audio": sound if model == "3.0" else "off",
+                        "aspect_ratio": "16:9",
+                    },
+                    "options": {
+                        "watermark_info": {"enabled": False}
+                    }
+                }
+                if model == "3.0":
+                    payload["settings"]["multi_shot"] = multi_shot
 
             print(f"[DEBUG] 文生视频 URL: {url}")
 
@@ -446,12 +502,10 @@ class KlingService:
         return formatted_data
     
     def wait_for_video_result(self, task_id: str, max_wait: int = 2400,
-                            poll_interval: int = 15) -> Dict:
+                            poll_interval: int = 10) -> Dict:
         """轮询等待视频任务完成（兼容新版 3.0 outputs 结构）"""
         import time as time_module
         start_time = time_module.time()
-
-        current_interval = poll_interval
 
         while time_module.time() - start_time < max_wait:
             try:
@@ -460,32 +514,13 @@ class KlingService:
                 print(f"[DEBUG] 视频任务状态: {task_status}")
 
                 if task_status == "succeed":
-                    video_url = ""
-
-                    # ★ 优先从新结构取：data[0].outputs[]
-                    data_list = status_data.get("data", [])
-                    if data_list and isinstance(data_list, list):
-                        outputs = data_list[0].get("outputs", [])
-                        for out in outputs:
-                            if out.get("type") == "video" and out.get("url"):
-                                video_url = out.get("url")
-                                break
-
-                    # ★ 兼容旧结构：task_result.videos[]
+                    task_result = status_data.get("task_result", {})
+                    videos = task_result.get("videos", [])
+                    video_url = videos[0].get("url", "") if videos else ""
                     if not video_url:
-                        task_result = status_data.get("task_result", {})
-                        videos = task_result.get("videos", [])
-                        if videos:
-                            video_url = videos[0].get("url", "")
+                        video_url = task_result.get("video_url", "")
 
-                    # ★ 兜底：task_result.video_url
-                    if not video_url:
-                        video_url = status_data.get("task_result", {}).get("video_url", "")
-
-                    # 统一返回
                     status_data["video_url"] = video_url
-                    if "task_result" not in status_data:
-                        status_data["task_result"] = {}
                     status_data["task_result"]["video_url"] = video_url
 
                     return status_data
@@ -495,12 +530,11 @@ class KlingService:
             except Exception as e:
                 if "parallel task" in str(e).lower() or "1303" in str(e):
                     print(f"[DEBUG] 并发限制，稍后重试...")
-                    time_module.sleep(current_interval * 2)
+                    time_module.sleep(poll_interval * 2)
                     continue
                 raise e
 
-            time_module.sleep(current_interval)
-            current_interval = min(current_interval + 5, 30)
+            time_module.sleep(poll_interval)
 
         raise Exception(f"视频任务超时，task_id: {task_id}")
 
@@ -832,6 +866,50 @@ class KlingService:
             print(f"[DEBUG] 超时后最后查询失败: {e}")
 
         raise Exception(f"口播任务超时: {task_id}")
+
+    # ========== 商品成片（降级 4.0 视频模型） ==========
+    def generate_goods_studio(self, image_urls: list, title: str, description: str = "",
+                               resolution: str = "1080p", aspect_ratio: str = "16:9",
+                               duration: int = 15) -> str:
+        """
+        商品成片 - 降级使用 4.0 图生视频模型
+        """
+        # 强约束 Prompt：明确是商品展示，要求运镜和光影
+        prompt = f"高质量电商商品展示视频。商品：{title}。"
+        if description:
+            prompt += f"卖点：{description}。"
+        prompt += "请使用专业商业广告运镜，镜头缓慢推进并环绕商品，突出材质细节和高级光影，背景干净，无文字，无水印，无杂乱元素。"
+
+        print(f"[GOODS_STUDIO] 降级使用 4.0 视频模型，首帧图: {image_urls[0]}")
+        
+        # 调用 4.0 图生视频
+        task_id = self.generate_video(
+            image_url=image_urls[0],  # 第一张图做首帧
+            prompt=prompt,
+            duration=15,              # 固定 15 秒
+            mode="std",
+            model="4.0",
+            sound="off",
+            multi_shot=True           # 开启智能分镜，多角度展示
+        )
+        
+        return task_id
+
+    def wait_for_goods_studio_result(self, task_id: str, max_wait: int = 1800,
+                                     poll_interval: int = 15) -> Dict:
+        """
+        轮询商品成片任务（复用 4.0 视频查状态逻辑）
+        """
+        print(f"[GOODS_STUDIO] 开始轮询 4.0 视频任务: {task_id}")
+        
+        # 直接调用 4.0 的轮询
+        result = self.wait_for_video_result(task_id, max_wait=max_wait, poll_interval=poll_interval)
+        
+        video_url = result.get("video_url")
+        if not video_url:
+            raise Exception("商品成片未返回 video_url")
+            
+        return {"video_url": video_url, "duration": 15}
 
     # ========== 数字人分身 ==========
     async def generate_digital_human(self, digital_human_id: Optional[int] = None, text: str = "", image_url: str = None, audio_url: str = None, prompt: str = None, name: str = None, voice: str = None) -> str:

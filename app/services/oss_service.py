@@ -86,18 +86,40 @@ class OSSService:
         sub_folder: str = "uploads",
         bucket_name: str = None
     ) -> str:
-        """从网络 URL 下载文件并上传到 OSS"""
+        """从网络 URL 下载文件并上传到 OSS（跟随 302，流式下载）"""
         import httpx
+        import tempfile
+        import os
 
-        async with httpx.AsyncClient() as client:
-            response = await client.get(file_url)
-            response.raise_for_status()
+        tmp_path = None
+        try:
+            # 流式下载到临时文件
+            fd, tmp_path = tempfile.mkstemp(suffix=f".{file_extension}")
+            os.close(fd)
+
+            async with httpx.AsyncClient(follow_redirects=True, timeout=120) as client:
+                async with client.stream("GET", file_url) as response:
+                    response.raise_for_status()
+                    with open(tmp_path, "wb") as f:
+                        async for chunk in response.aiter_bytes(chunk_size=65536):
+                            f.write(chunk)
+
+            # 读临时文件，上传
+            with open(tmp_path, "rb") as f:
+                content = f.read()
+
             return await self.upload_file(
-                response.content,
+                content,
                 file_extension,
                 sub_folder,
                 bucket_name=bucket_name,
             )
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.unlink(tmp_path)
+                except Exception:
+                    pass
     
     def delete_file(self, file_url: str) -> bool:
         """删除 OSS 中的文件"""

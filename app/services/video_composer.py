@@ -37,7 +37,7 @@ class VideoComposer:
 
         for scene in scene_dialogues:
             dialogue = scene.get("dialogue", [])
-            duration = scene.get("duration", 10)
+            duration = scene.get("duration", 15.041)  # ★ 可灵实际 15.041 秒
 
             if dialogue:
                 per_line = duration / len(dialogue)
@@ -92,7 +92,7 @@ class VideoComposer:
                     "-i", merged_path,
                     "-vf", COLOR_FILTER,
                     "-c:v", "libx264",
-                    "-c:a", "aac", 
+                    "-c:a", "aac",
                     "-preset", "fast",
                     colored_path,
                 ]
@@ -164,58 +164,71 @@ class VideoComposer:
             return float(result.stdout.strip())
         except Exception as e:
             print(f"[VIDEO_COMPOSER] 获取时长失败: {e}")
-            return 15.0
+            return 15.041
 
     @staticmethod
-    def _concat_with_xfade(tmp_dir: str, paths: list, transition_duration: float = 0.5) -> str:
-        current = paths[0]
-        current_duration = VideoComposer._get_duration(paths[0])
+    def _concat_with_xfade(tmp_dir: str, paths: list, transition_duration: float = 0.5,
+                           segment_duration: float = 15.041) -> str:
+        """一次性多路 xfade（不串行重编码），保留音频"""
+        n = len(paths)
+        if n == 1:
+            return paths[0]
 
-        for i in range(1, len(paths)):
-            next_video = paths[i]
-            next_duration = VideoComposer._get_duration(next_video)
-            output = os.path.join(tmp_dir, f"merged_{i}.mp4")
-            offset = max(0, current_duration - transition_duration)
+        inputs = []
+        for p in paths:
+            inputs.extend(["-i", p])
 
-            filter_complex = (
-                f"[0:v][1:v]xfade=transition=fade:duration={transition_duration}:offset={offset}[v];"
-                f"[0:a][1:a]acrossfade=d={transition_duration}[a]"
+        filter_parts = []
+        prev_v = "[0:v]"
+        prev_a = "[0:a]"
+        offset = segment_duration - transition_duration
+
+        for i in range(1, n):
+            out_v = f"[v{i}]"
+            out_a = f"[a{i}]"
+            filter_parts.append(
+                f"{prev_v}[{i}:v]xfade=transition=fade:duration={transition_duration}:offset={offset}{out_v}"
             )
+            filter_parts.append(
+                f"{prev_a}[{i}:a]acrossfade=d={transition_duration}{out_a}"
+            )
+            prev_v = out_v
+            prev_a = out_a
+            offset += segment_duration - transition_duration
 
+        filter_complex = ";".join(filter_parts)
+        output = os.path.join(tmp_dir, "merged_xfade.mp4")
+
+        cmd = ["ffmpeg", "-y"] + inputs + [
+            "-filter_complex", filter_complex,
+            "-map", prev_v,
+            "-map", prev_a,
+            "-c:v", "libx264",
+            "-c:a", "aac",
+            "-pix_fmt", "yuv420p",
+            "-preset", "fast",
+            output,
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+        if result.returncode != 0:
+            print(f"[VIDEO_COMPOSER] xfade 失败，回退 concat: {result.stderr[:300]}")
+            concat_file = os.path.join(tmp_dir, "concat_list.txt")
+            with open(concat_file, "w", encoding="utf-8") as f:
+                for p in paths:
+                    f.write(f"file '{p}'\n")
             cmd = [
                 "ffmpeg", "-y",
-                "-i", current,
-                "-i", next_video,
-                "-filter_complex", filter_complex,
-                "-map", "[v]",
-                "-map", "[a]",
+                "-f", "concat", "-safe", "0",
+                "-i", concat_file,
                 "-c:v", "libx264", "-c:a", "aac",
                 "-preset", "fast",
                 output,
             ]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
             if result.returncode != 0:
-                print(f"[VIDEO_COMPOSER] xfade 失败，回退 concat: {result.stderr[:300]}")
-                concat_file = os.path.join(tmp_dir, f"concat_{i}.txt")
-                with open(concat_file, "w", encoding="utf-8") as f:
-                    f.write(f"file '{current}'\n")
-                    f.write(f"file '{next_video}'\n")
-                cmd = [
-                    "ffmpeg", "-y",
-                    "-f", "concat", "-safe", "0",
-                    "-i", concat_file,
-                    "-c:v", "libx264", "-c:a", "aac",
-                    "-preset", "fast",
-                    output,
-                ]
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-                if result.returncode != 0:
-                    raise Exception(f"拼接失败: {result.stderr[:300]}")
+                raise Exception(f"拼接失败: {result.stderr[:300]}")
 
-            current = output
-            current_duration = current_duration + next_duration - transition_duration
+        return output
 
-        return current
 
 video_composer = VideoComposer()

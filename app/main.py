@@ -24,6 +24,7 @@ from app.routers import test_network
 from app.routers import link_to_video
 from app.database import Base, engine
 from app.routers import cases
+from app.routers import goods_studio
 
 # 初始化 RQ 队列
 try:
@@ -38,13 +39,13 @@ except Exception as e:
 
 # ========== 超时任务监控 ==========
 async def check_stuck_tasks():
-    """每5分钟检测一次卡在 processing 超过 30 分钟的任务，自动退款"""
+    """每5分钟检测一次卡在 processing 超过 60 分钟的任务，自动退款"""
     from app.models.task import Task
     from app.utils.refund import refund_credits
     
     db = SessionLocal()
     try:
-        threshold = datetime.utcnow() - timedelta(minutes=30)
+        threshold = datetime.utcnow() - timedelta(minutes=60)
         stuck_tasks = db.query(Task).filter(
             Task.status == "processing",
             Task.created_at < threshold,
@@ -247,6 +248,7 @@ app.include_router(merchant.router, prefix="/api")
 app.include_router(talking_agent.router, prefix="/api")
 app.include_router(short_drama.router, prefix="/api")
 app.include_router(cases.router, prefix="/api")
+app.include_router(goods_studio.router, prefix="/api/goods-studio", tags=["商品成片"])
 
 
 @app.get("/")

@@ -47,7 +47,7 @@ class ReferenceAnalyzer:
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": "qwen-vl-max",
+                    "model": "qwen3.8-omni-flash",
                     "messages": [
                         {
                             "role": "user",
@@ -62,12 +62,20 @@ class ReferenceAnalyzer:
                 timeout=60,
             )
             if resp.status_code != 200:
-                raise Exception(f"qwen-vl 错误: {resp.status_code} {resp.text[:200]}")
-            text = resp.json()["choices"][0]["message"]["content"]
+                raise Exception(f"qwen3.8-omni-flash 错误: {resp.status_code} {resp.text[:200]}")
+
+            data = resp.json()
+            choice = data["choices"][0]
+            msg = choice["message"]
+            # 优先取 content，空则取 reasoning_content
+            text = msg.get("content") or msg.get("reasoning_content") or ""
+            if not text.strip():
+                raise Exception(f"qwen3.8-omni-flash 返回空: {data}")
+
             match = re.search(r'\{[\s\S]*\}', text)
             if match:
                 return json.loads(match.group(0))
-            raise Exception("无法解析参考图分析结果")
+            raise Exception(f"无法解析参考图分析结果: {text[:200]}")
 
         try:
             info = await asyncio.to_thread(_sync)
