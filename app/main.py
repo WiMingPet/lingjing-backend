@@ -248,7 +248,7 @@ app.include_router(merchant.router, prefix="/api")
 app.include_router(talking_agent.router, prefix="/api")
 app.include_router(short_drama.router, prefix="/api")
 app.include_router(cases.router, prefix="/api")
-app.include_router(goods_studio.router, prefix="/api/goods-studio", tags=["商品成片"])
+app.include_router(goods_studio.router, prefix="/api")
 
 
 @app.get("/")
