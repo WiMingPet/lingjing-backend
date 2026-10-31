@@ -7,6 +7,7 @@ import requests
 import asyncio
 from typing import Dict
 from app.config import settings
+from typing import List
 
 
 class ScriptGenerator:
