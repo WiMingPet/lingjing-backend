@@ -4,7 +4,7 @@ from app.database import SessionLocal
 from app.models.task import Task
 from app.models.history import History
 from app.utils.refund import refund_credits
-from app.services.subtitle_service import subtitle_service
+
 
 
 def _run_async(coro):
@@ -329,22 +329,9 @@ async def _generate_short_drama_core(user_id: int, request_data: dict) -> dict:
         raise Exception("有视频生成失败")
     # ========== 分镜生成结束 ==========
 
-    # ========== 新增：用 Whisper 识别真实声音，生成精确字幕 ==========
-    print(f"[SHORT_DRAMA] 开始识别视频声音，生成字幕时间轴...")
-    final_scene_dialogues = []
-    for i, (v_url, d_dict) in enumerate(zip(video_urls, scene_dialogues)):
-        print(f"[SHORT_DRAMA] 识别段 {i+1} 的声音...")
-        # 识别出的字幕列表: [{"start": 0.5, "end": 2.3, "text": "..."}, ...]
-        subtitles = await asyncio.to_thread(subtitle_service.generate_subtitles, v_url)
-        # 覆盖原本的 dialogue，传给 video_composer
-        new_d = d_dict.copy() if d_dict else {}
-        new_d["subtitles"] = subtitles
-        final_scene_dialogues.append(new_d)
-    # ==============================================================
-
     # 4. 合成（带字幕）
     print(f"[SHORT_DRAMA] 合成 {len(video_urls)} 个分镜")
-    output_path = await video_composer.compose_videos(video_urls, final_scene_dialogues)
+    output_path = await video_composer.compose_videos(video_urls, scene_dialogues)
 
     # 5. 上传 OSS
     with open(output_path, "rb") as f:

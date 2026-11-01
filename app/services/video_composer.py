@@ -30,46 +30,39 @@ class VideoComposer:
 
     @staticmethod
     def _build_srt(scene_dialogues: list) -> str:
-        """根据分镜对话，生成 srt 字幕内容（优先读精确的 subtitles，兜底平均分配）"""
+        """根据分镜对话，生成 srt 字幕内容（按字数加权分配时间）"""
         srt_lines = []
         idx = 1
         current_time = 0.0
 
         for scene in scene_dialogues:
             duration = scene.get("duration", 30.0)
-            
-            # 优先使用 Whisper 识别出的带时间戳的 subtitles
-            subtitles = scene.get("subtitles", [])
-            if subtitles:
-                for sub in subtitles:
-                    text = sub.get("text", "")
-                    if text.strip():
-                        # 相对时间加上当前段的绝对起始时间
-                        start = current_time + sub.get("start", 0)
-                        end = current_time + sub.get("end", 0)
-                        srt_lines.append(f"{idx}")
-                        srt_lines.append(f"{VideoComposer._format_time(start)} --> {VideoComposer._format_time(end)}")
-                        srt_lines.append(text)
-                        srt_lines.append("")
-                        idx += 1
-                current_time += duration
-                continue
-
-            # 兜底：如果没有 subtitles，走旧逻辑（按 dialogue 平均分配）
             dialogue = scene.get("dialogue", [])
+
             if dialogue:
-                per_line = duration / len(dialogue)
+                # 计算总字数（排空）
+                total_chars = sum(len(d.get("text", "").strip()) for d in dialogue)
+                if total_chars == 0:
+                    total_chars = 1
+
                 for d in dialogue:
-                    start = current_time
-                    end = current_time + per_line
-                    text = d.get("text", "")
-                    if text.strip():
+                    text = d.get("text", "").strip()
+                    if text:
+                        # 该句占用时间比例 = 该句字数 / 总字数
+                        ratio = len(text) / total_chars
+                        line_duration = duration * ratio
+                        start = current_time
+                        end = current_time + line_duration
+
                         srt_lines.append(f"{idx}")
                         srt_lines.append(f"{VideoComposer._format_time(start)} --> {VideoComposer._format_time(end)}")
                         srt_lines.append(text)
                         srt_lines.append("")
                         idx += 1
-                    current_time = end
+                        current_time = end
+                    else:
+                        # 如果这句为空，时间按比例跳过
+                        ratio = 0 # 空字符串为0
             else:
                 current_time += duration
 
@@ -135,9 +128,6 @@ class VideoComposer:
 
                     # ffmpeg subtitles 滤镜路径转义
                     srt_escaped = srt_path.replace("\\", "/").replace(":", "\\:")
-                    font_dir_escaped = FONT_DIR.replace("\\", "/").replace(":", "\\:")
-
-                    # 对路径进行转义（兼容 Windows 和 Linux）
                     font_file_escaped = FONT_FILE.replace("\\", "/").replace(":", "\\:")
                     
                     style = (
