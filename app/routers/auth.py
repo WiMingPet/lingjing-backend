@@ -75,11 +75,7 @@ def verify_code(
     
     import redis
     import os
-    r = redis.Redis(
-        host=os.environ.get('REDIS_HOST', 'localhost'),
-        port=int(os.environ.get('REDIS_PORT', 6379)),
-        decode_responses=True
-    )
+    r = redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379/0"), decode_responses=True)
     
     stored_code = r.get(f"sms_code:{phone}")
     
@@ -121,11 +117,7 @@ def login(
     # 验证码登录（支持免注册）
     elif request.code:
         # 1. 验证验证码
-        r = redis.Redis(
-            host=os.environ.get('REDIS_HOST', 'localhost'),
-            port=int(os.environ.get('REDIS_PORT', 6379)),
-            decode_responses=True
-        )
+        r = redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379/0"), decode_responses=True)
         stored_code = r.get(f"sms_code:{request.phone}")
         logger.info(f"验证码登录 - 手机号: {request.phone}, 输入: {request.code}, Redis: {stored_code}")
         
@@ -198,11 +190,7 @@ def register(
     # 2. 验证短信验证码（从Redis获取）
     import redis
     import os
-    r = redis.Redis(
-        host=os.environ.get('REDIS_HOST', 'localhost'),
-        port=int(os.environ.get('REDIS_PORT', 6379)),
-        decode_responses=True
-    )
+    r = redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379/0"), decode_responses=True)
     stored_code = r.get(f"sms_code:{request.phone}")
     
     if not stored_code:
@@ -291,11 +279,7 @@ def reset_password(
     new_password = request_data.new_password
     
     # 验证验证码
-    r = redis.Redis(
-        host=os.environ.get('REDIS_HOST', 'localhost'),
-        port=int(os.environ.get('REDIS_PORT', 6379)),
-        decode_responses=True
-    )
+    r = redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379/0"), decode_responses=True)
     stored_code = r.get(f"sms_code:{phone}")
     
     if not stored_code:
