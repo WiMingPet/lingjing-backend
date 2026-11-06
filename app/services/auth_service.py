@@ -15,15 +15,12 @@ class AuthService:
 
     @staticmethod
     def _get_redis_client():
-        """获取Redis连接"""
-        host = os.environ.get('REDIS_HOST', 'localhost')
-        port = int(os.environ.get('REDIS_PORT', 6379))
+        """获取Redis连接（已修复：直接读取完整的 REDIS_URL，包含密码）"""
+        redis_url = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
+        logger.info(f"Redis连接(URL): {redis_url[:30]}...")
         
-        logger.info(f"Redis连接: host={host}, port={port}")
-        
-        return redis.Redis(
-            host=host,
-            port=port,
+        return redis.from_url(
+            redis_url,
             decode_responses=True
         )
 
